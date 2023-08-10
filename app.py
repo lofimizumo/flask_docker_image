@@ -59,7 +59,7 @@ def scale(ts, desired_increase):
 
 @app.route('/')
 def home():
-    return "Hello World!"
+    return "Please use the /predict endpoint to make predictions"
 
 
 @app.route('/predict', methods=['POST'])
