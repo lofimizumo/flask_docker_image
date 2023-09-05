@@ -7,6 +7,7 @@ COPY . /notebooks/
 # ENV CONDA_ALWAYS_YES=true
 
 # RUN mamba install -c conda-forge -c pytorch u8darts-all
+RUN pip install flask
 RUN pip install darts
 RUN pip install wandb
 

@@ -16,17 +16,17 @@ model = NHiTSModel.load_from_checkpoint(
     model_name='nh_v4', map_location='cpu', best=True)
 model.to_cpu()
 
-transformer = None  # Initialize the scaler variable
 wandb.init(mode="disabled")
 
 
-def load_scaler():
-    global transformer
-    with open('scaler.pkl', 'rb') as f:
+def load_scaler(meter_type = 'total'):
+    if meter_type == 'phase1':
+        filename = 'scaler_phase1.pkl'
+    elif meter_type == 'total':
+        filename = 'scaler_total.pkl'
+    with open(filename, 'rb') as f:
         transformer = pickle.load(f)
-
-
-load_scaler()
+        return transformer
 
 
 def create_time_series(start_time, interval, values):
@@ -78,13 +78,16 @@ def predict():
     current_day_series = current_day_series.map(lambda x: x/3000)
     one_week_ago_series = one_week_ago_series.map(lambda x: x/3000)
 
+    # Load the scaler
+    transformer = load_scaler()
+
     # Standardize the series
     current_day_series = transformer.transform(current_day_series)
     one_week_ago_series = transformer.transform(one_week_ago_series)
 
     # Make prediction using model
     prediction = model.predict(len(current_day_series), series=current_day_series, past_covariates=one_week_ago_series, mc_dropout=True,
-                               num_samples=3)
+                               num_samples=50)
 
     # Align the mean and the std of the prediction with the current day series
     mean_prev = current_day_series.mean().mean(axis=0).values()  # Calculate the difference in means
@@ -99,7 +102,7 @@ def predict():
     prediction = prediction.map(shift_by_mean_diff)
 
     # Scale the confidence range to the desired increase
-    prediction = scale(prediction, 3)
+    prediction = scale(prediction, 2)
     
     # Inverse transform the prediction and multiply by 3000
     prediction = transformer.inverse_transform(prediction)
@@ -108,8 +111,8 @@ def predict():
 
     # return only the upper and lower confidence interval, remove the last value as it is the prediction for the next timestep
 
-    confidence_upper = prediction.all_values().max(axis=2).reshape(-1)[:-1].tolist()
-    confidence_lower = prediction.all_values().min(axis=2).reshape(-1)[:-1].tolist()
+    confidence_upper = np.percentile(prediction.all_values(),95,axis=2).reshape(-1).tolist()
+    confidence_lower = np.percentile(prediction.all_values(),5,axis=2).reshape(-1).tolist()
     return jsonify({'confidence_upper': confidence_upper, 'confidence_lower': confidence_lower})
 
 
