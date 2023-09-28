@@ -93,19 +93,18 @@ def api_status_check(confirm_delay=10):
 
 class PriceAndLoadMonitor:
     def __init__(self, sn=None, test_mode=False):
-        self.sim_price_iter = self.get_sim_price_iter()
         self.sim_load_iter = self.get_sim_load_iter()
         self.sim_time_iter = self.get_sim_time_iter()
         self.api = ApiCommunicator(base_url="https://dev3.redxvpp.com/restapi")
         self.token = self.get_token()
-        self.sn = sn 
+        self.sn = sn
         # Test Mode is for testing the battery control without sending command to the actual battery
         self.test_mode = test_mode
 
     def get_realtime_price(self):
         pass
 
-    def get_sim_price_iter(self):
+    def get_sim_price(self, current_time):
         _price_test = [17.12,
                        18.48,
                        18,
@@ -155,10 +154,19 @@ class PriceAndLoadMonitor:
                        18.89,
                        19.39,
                        ]
-        return cycle(_price_test)
+        start_time = datetime.strptime('00:00', '%H:%M')
+        time_intervals = [(start_time + timedelta(minutes=30 * i)).time()
+                          for i in range(48)]
+        price_time_map = dict(zip(time_intervals, _price_test))
 
-    def get_sim_price(self):
-        return next(self.sim_price_iter)
+        # Find the correct time range for current_time
+        current_time = datetime.strptime(current_time, '%H:%M').time()
+        for t in time_intervals:
+            if current_time <= t:
+                return price_time_map[t]
+
+        # If current_time is later than the last time interval, return the price for the first interval
+        return price_time_map[time_intervals[0]]
 
     def get_sim_load_iter(self):
         _usage = [0.17,
@@ -230,8 +238,10 @@ class PriceAndLoadMonitor:
 
     def get_sim_time_iter(self):
         start_time = datetime.strptime('00:00', '%H:%M')
-        time_intervals = [(start_time + timedelta(minutes=30 * i)).time() for i in range(48)]
+        time_intervals = [(start_time + timedelta(minutes=30 * i)).time()
+                          for i in range(48)]
         return cycle(time_intervals)
+
     def get_current_time(self):
         '''
         Return the current time in the simulation in the format like 2021-10-01 21:00
@@ -240,7 +250,7 @@ class PriceAndLoadMonitor:
             return next(self.sim_time_iter).strftime("%H:%M")
         return time.strftime("%H:%M", time.localtime())
 
-    @api_status_check(confirm_delay=3)
+    @api_status_check(confirm_delay=5)
     def send_battery_command(self, command):
         if self.test_mode:
             return
@@ -253,38 +263,55 @@ class PriceAndLoadMonitor:
             'Power Off': 5,
         }
 
-        # Set Device to Charge/Discharge/Idle Mode
-
+        mode_map = {
+            'Auto': 0,
+            'Vpp': 1,
+            'Time': 2,
+        }
         from datetime import datetime, timedelta
         formatted_start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         end_time = datetime.now() + timedelta(minutes=5)
         formatted_end_time = end_time.strftime("%Y-%m-%d %H:%M:%S")
         data = {}
         command = command
+        start_time = self.get_current_time()
+        end_time = (datetime.strptime(start_time, '%H:%M') +
+                    timedelta(minutes=30)).strftime("%H:%M")
+        empty_time = '00:00'
         if command == 'Charge':
             data = {'deviceSn': self.sn,
-                    'type': command_map[command],
+                    'controlCommand': command_map[command],
+                    'operatingMode': mode_map['Time'],
+                    'chargeStart1': start_time,
+                    'chargeEnd1': end_time,
+                    'dischargeStart1': empty_time,
+                    'dischargeEnd1': empty_time,
+                    'enableGridCharge1': 1,
+                    'antiBackflowSW': 1,
+                    'chargePower1': 1500
                     }
+
         elif command == 'Discharge':
             data = {'deviceSn': self.sn,
-                    'type': command_map[command],
+                    'controlCommand': command_map[command],
+                    'operatingMode': mode_map['Time'],
+                    'dischargeStart1': start_time,
+                    'dischargeEnd1': end_time,
+                    'chargeStart1': empty_time,
+                    'chargeEnd1': empty_time,
+                    'enableGridCharge1': 1,
+                    'antiBackflowSW': 1,
+                    'dischargePower1': 2500
                     }
         elif command == 'Idle':
             data = {'deviceSn': self.sn,
-                    'type': command_map[command],
-                    }
-        elif command == 'Clear Fault':
-            data = {'deviceSn': self.sn,
-                    'type': command_map[command],
-                    }
-        elif command == 'Power Off':
-            data = {'deviceSn': self.sn,
-                    'type': command_map[command],
+                    'controlCommand': command_map[command],
+                    'operatingMode': mode_map['Time'],
                     }
 
         headers = {'token': self.token}
         response = self.api.send_request(
-            "device/control", method='POST', json=data, headers=headers)
+            "device/set_params", method='POST', json=data, headers=headers)
         print(response)
 
 
@@ -332,6 +359,6 @@ class ApiCommunicator:
 
 
 if __name__ == '__main__':
-    monitor = PriceAndLoadMonitor()
+    monitor = PriceAndLoadMonitor(sn="RX2505ACA10JOA160037")
 
-    monitor.send_battery_command('Idle')
+    monitor.send_battery_command('Charge')

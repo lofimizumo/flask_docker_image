@@ -6,6 +6,7 @@ from darts import TimeSeries
 from darts.utils.timeseries_generation import datetime_attribute_timeseries
 from pandas.tseries.offsets import DateOffset
 from battery_alloc_test import BatteryScheduler
+from threading import Thread
 import pickle
 import wandb
 
@@ -122,7 +123,7 @@ def predict():
     return jsonify({'confidence_upper': confidence_upper, 'confidence_lower': confidence_lower})
 
 
-@app.route('/batterysched/basic', methods=['POST'])
+@app.route('/start', methods=['POST'])
 def basic_scheduler():
     data = request.get_json()
     sn = data['deviceSn']
@@ -132,9 +133,12 @@ def basic_scheduler():
     scheduler = BatteryScheduler(
         scheduler_type='PeakValley', battery_sn=sn)
     schedulers[sn] = scheduler
-    scheduler.start()
+    thread = Thread(target=scheduler.start)
+    thread.daemon = True  # This will make sure the thread exits when the main program exits
+    thread.start()
+    return jsonify(status='success', message='Scheduler started'), 200
 
-@app.route('/batterysched/stop', methods=['POST'])
+@app.route('/stop', methods=['POST'])
 def stop_scheduler():
     data = request.get_json()
     sn = data['deviceSn']

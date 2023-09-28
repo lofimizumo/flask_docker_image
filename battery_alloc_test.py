@@ -39,11 +39,11 @@ class BatteryScheduler:
 
         return self.scheduler.step(**kwargs)
 
-    def start(self, interval=1800):
+    def start(self, interval=300):
         _current_price = self.get_current_price()
         _bat_stats = self.get_current_battery_stats()
         _current_usage = _bat_stats['loadP']
-        _current_soc = _bat_stats['soc']
+        _current_soc = _bat_stats['soc']/100.0
         _current_time = self.get_current_time()
         _command = self._get_battery_command(
             current_price=_current_price, current_usage=_current_usage, current_time=_current_time, current_soc=_current_soc)
@@ -54,7 +54,7 @@ class BatteryScheduler:
             interval = 0.1
         self.event = self.s.enter(interval, 1, self.start)
         try:
-            self.s.run(blocking=False)
+            self.s.run(blocking=True)
         except KeyboardInterrupt:
             print("Stopped.")
 
@@ -65,7 +65,7 @@ class BatteryScheduler:
         print("Stopped.")
 
     def get_current_price(self):
-        return self.monitor.get_sim_price()
+        return self.monitor.get_sim_price(self.get_current_time())
 
     def get_current_time(self):
         return self.monitor.get_current_time()
@@ -251,3 +251,7 @@ class AIScheduler(BaseScheduler):
         return ['price_prediction_curve']
 
 
+if __name__ == '__main__':
+    scheduler = BatteryScheduler(
+        scheduler_type='PeakValley', battery_sn='RX2505ACA10JOA160037')
+    scheduler.start()
