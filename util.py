@@ -1,0 +1,337 @@
+import threading
+from functools import wraps
+import requests
+import time
+from datetime import datetime, timedelta
+from itertools import cycle
+
+
+def api_status_check(confirm_delay=10):
+    """
+    A decorator function that checks the status of a device after executing a command.
+
+    Args:
+        confirm_delay (int): The delay (in seconds) before checking the status.
+        sn (str): The serial number of the device.
+
+    Returns:
+        function: The decorator function.
+    """
+    def _is_charging(status):
+        charging_status = ['On-Grid Charging']
+        return status in charging_status
+
+    def _is_discharging(status):
+        discharging_status = ['Off-Grid Discharging', 'On-Grid Discharging']
+        return status in discharging_status
+
+    def _is_idle(status):
+        idle_status = ['PassBy', 'Idle', 'StandBy']
+        return status in idle_status
+
+    def _is_command_expected(status, command):
+        """
+        Checks if the current status matches the expected status based on the command.
+
+        Args:
+            status (str): The current status of the device.
+            command (str): The command executed on the device.
+
+        Returns:
+            bool: True if the current status matches the expected status, False otherwise.
+        """
+        if command == 'Charge':
+            return _is_charging(status)
+        elif command == 'Discharge':
+            return _is_discharging(status)
+        elif command == 'Idle':
+            return _is_idle(status)
+        elif command == 'Clear Fault':
+            pass
+        elif command == 'Power Off':
+            pass
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            response = func(*args, **kwargs)
+            threading.Thread(target=check_status, args=(
+                confirm_delay, args)).start()
+
+            return response
+
+        def check_status(delay, args):
+            """
+            Checks the status of the device after a delay.
+
+            Args:
+                delay (int): The delay (in seconds) before checking the status.
+                args (tuple): The arguments passed to the decorated function.
+            """
+            # Wait for the specified delay
+            time.sleep(delay)
+            is_TestMode = args[0].test_mode
+            if is_TestMode:
+                return
+            sn = args[0].sn
+            expected_status = args[1]
+            api = ApiCommunicator(base_url="https://dev3.redxvpp.com/restapi")
+            token = args[0].token
+            # Send an API request to check the status
+            status_response = api.send_request('device/get_latest_data', method='POST', json={
+                'deviceSn': sn}, headers={'token': token})
+            print(f"Status: {status_response['data']['showStatus']}")
+            if _is_command_expected(status_response['data']['showStatus'], expected_status):
+                print("Status successfully changed!")
+            else:
+                wrapper(*args)
+
+        return wrapper
+
+    return decorator
+
+
+class PriceAndLoadMonitor:
+    def __init__(self, sn=None, test_mode=False):
+        self.sim_price_iter = self.get_sim_price_iter()
+        self.sim_load_iter = self.get_sim_load_iter()
+        self.sim_time_iter = self.get_sim_time_iter()
+        self.api = ApiCommunicator(base_url="https://dev3.redxvpp.com/restapi")
+        self.token = self.get_token()
+        self.sn = sn 
+        # Test Mode is for testing the battery control without sending command to the actual battery
+        self.test_mode = test_mode
+
+    def get_realtime_price(self):
+        pass
+
+    def get_sim_price_iter(self):
+        _price_test = [17.12,
+                       18.48,
+                       18,
+                       18,
+                       15.7,
+                       14.96,
+                       14.94,
+                       14.67,
+                       14.98,
+                       15.83,
+                       15.9,
+                       17.57,
+                       16.19,
+                       15.62,
+                       16.65,
+                       13.83,
+                       17.06,
+                       17.56,
+                       17.48,
+                       15.25,
+                       15.39,
+                       15.39,
+                       14.84,
+                       15.87,
+                       16.54,
+                       17.95,
+                       17.8,
+                       18.55,
+                       18.08,
+                       19.02,
+                       17.95,
+                       17.89,
+                       18.79,
+                       15.57,
+                       16.39,
+                       17.61,
+                       17.39,
+                       20.61,
+                       20.42,
+                       18.14,
+                       18.43,
+                       18.42,
+                       17.91,
+                       18.39,
+                       17.16,
+                       21.37,
+                       18.89,
+                       19.39,
+                       ]
+        return cycle(_price_test)
+
+    def get_sim_price(self):
+        return next(self.sim_price_iter)
+
+    def get_sim_load_iter(self):
+        _usage = [0.17,
+                  0.18,
+                  0.11,
+                  0.1,
+                  0.11,
+                  0.17,
+                  0.22,
+                  0.15,
+                  0.13,
+                  0.13,
+                  0.12,
+                  0.13,
+                  0.4,
+                  0.42,
+                  0.22,
+                  0.48,
+                  0.2,
+                  0.23,
+                  0.55,
+                  0.7,
+                  0.5,
+                  0.85,
+                  0.53,
+                  0.48,
+                  0.22,
+                  0.23,
+                  0.54,
+                  0.51,
+                  0.51,
+                  0.57,
+                  0.34,
+                  0.21,
+                  0.17,
+                  0.24,
+                  0.2,
+                  0.35,
+                  0.44,
+                  0.51,
+                  0.43,
+                  0.49,
+                  0.52,
+                  0.57,
+                  0.47,
+                  0.43,
+                  0.19,
+                  0.22,
+                  0.19,
+                  ]
+        return cycle(_usage)
+
+    def get_sim_load(self):
+        return next(self.sim_load_iter)
+
+    def get_token(self):
+        response = self.api.send_request("user/token", method='POST', data={
+            'user_account': 'yetao_admin', 'secret': 'a~L$o8dJ246c'}, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        return response['data']['token']
+
+    # @api_status_check(confirm_delay=3, expected_status='PassBy')
+    def get_realtime_battery_stats(self):
+        # Test Get latest summary data
+        data = {'deviceSn': self.sn}
+        headers = {'token': self.token}
+        response = self.api.send_request(
+            "device/get_latest_data", method='POST', json=data, headers=headers)
+        return response['data']
+
+    def get_sim_time_iter(self):
+        start_time = datetime.strptime('00:00', '%H:%M')
+        time_intervals = [(start_time + timedelta(minutes=30 * i)).time() for i in range(48)]
+        return cycle(time_intervals)
+    def get_current_time(self):
+        '''
+        Return the current time in the simulation in the format like 2021-10-01 21:00
+        '''
+        if self.test_mode:
+            return next(self.sim_time_iter).strftime("%H:%M")
+        return time.strftime("%H:%M", time.localtime())
+
+    @api_status_check(confirm_delay=3)
+    def send_battery_command(self, command):
+        if self.test_mode:
+            return
+
+        command_map = {
+            'Idle': 3,
+            'Charge': 2,
+            'Discharge': 1,
+            'Clear Fault': 4,
+            'Power Off': 5,
+        }
+
+        # Set Device to Charge/Discharge/Idle Mode
+
+        from datetime import datetime, timedelta
+        formatted_start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        end_time = datetime.now() + timedelta(minutes=5)
+        formatted_end_time = end_time.strftime("%Y-%m-%d %H:%M:%S")
+        data = {}
+        command = command
+        if command == 'Charge':
+            data = {'deviceSn': self.sn,
+                    'type': command_map[command],
+                    }
+        elif command == 'Discharge':
+            data = {'deviceSn': self.sn,
+                    'type': command_map[command],
+                    }
+        elif command == 'Idle':
+            data = {'deviceSn': self.sn,
+                    'type': command_map[command],
+                    }
+        elif command == 'Clear Fault':
+            data = {'deviceSn': self.sn,
+                    'type': command_map[command],
+                    }
+        elif command == 'Power Off':
+            data = {'deviceSn': self.sn,
+                    'type': command_map[command],
+                    }
+
+        headers = {'token': self.token}
+        response = self.api.send_request(
+            "device/control", method='POST', json=data, headers=headers)
+        print(response)
+
+
+class ApiCommunicator:
+    def __init__(self, base_url):
+        self.base_url = base_url
+        self.session = requests.Session()
+
+    def send_request(self, command, method="GET", data=None, json=None, headers=None, retries=3):
+        """
+        Send a request to the API.
+
+        :param command: API command/endpoint to be accessed.
+        :param method: HTTP method like GET, POST, PUT, DELETE.
+        :param data: Payload to send (if any).
+        :param headers: Additional headers to be sent.
+        :param retries: Number of retries in case of a failure.
+        :return: Response from the server.
+        """
+        url = f"{self.base_url}/{command}"
+
+        for _ in range(retries):
+            try:
+                if method == "GET":
+                    response = self.session.get(url, headers=headers)
+                elif method == "POST":
+                    response = self.session.post(
+                        url, data=data, json=json, headers=headers)
+
+                # Raises an exception for HTTP errors.
+                response.raise_for_status()
+                # Assuming JSON response. Modify as needed.
+                return response.json()
+            except requests.RequestException as e:
+                print(f"Error occurred: {e}. Retrying...")
+
+        raise ConnectionError(
+            f"Failed to connect to {url} after {retries} attempts.")
+
+    def is_cmd_succ(self, api, expected_output, command, method="GET", json=None, headers=None, retries=3):
+        raise NotImplementedError
+        if expected_output != self.send_request(command, method, data, headers, retries):
+            raise ValueError(f"Command {command} failed to execute.")
+        return True
+
+
+if __name__ == '__main__':
+    monitor = PriceAndLoadMonitor()
+
+    monitor.send_battery_command('Idle')

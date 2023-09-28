@@ -5,6 +5,7 @@ from darts.models import NHiTSModel
 from darts import TimeSeries
 from darts.utils.timeseries_generation import datetime_attribute_timeseries
 from pandas.tseries.offsets import DateOffset
+from battery_alloc_test import BatteryScheduler
 import pickle
 import wandb
 
@@ -15,11 +16,11 @@ app = Flask(__name__)
 model = NHiTSModel.load_from_checkpoint(
     model_name='nh_v4', map_location='cpu', best=True)
 model.to_cpu()
-
+schedulers = {}
 wandb.init(mode="disabled")
 
 
-def load_scaler(meter_type = 'total'):
+def load_scaler(meter_type='total'):
     if meter_type == 'phase1':
         filename = 'scaler_phase1.pkl'
     elif meter_type == 'total':
@@ -37,10 +38,11 @@ def create_time_series(start_time, interval, values):
         start=start_time, periods=len(values), freq=freq_map[interval])
     return TimeSeries.from_times_and_values(time_index, values).astype(np.float32)
 
+
 def scale(ts, desired_increase):
-    
+
     time_index = ts.time_index
-    data=ts.all_values()
+    data = ts.all_values()
     # Compute the min and max for each row
     min_per_row = np.min(data, axis=2, keepdims=True)
     max_per_row = np.max(data, axis=2, keepdims=True)
@@ -53,9 +55,11 @@ def scale(ts, desired_increase):
     adjusted_max = max_per_row + desired_increase / 2
 
     # Scale the data to the adjusted bandwidth
-    scaled_data = (data - min_per_row) / original_bandwidth * (adjusted_max - adjusted_min) + adjusted_min
+    scaled_data = (data - min_per_row) / original_bandwidth * \
+        (adjusted_max - adjusted_min) + adjusted_min
 
-    return TimeSeries.from_times_and_values(time_index,scaled_data)
+    return TimeSeries.from_times_and_values(time_index, scaled_data)
+
 
 @app.route('/')
 def home():
@@ -90,30 +94,59 @@ def predict():
                                num_samples=50)
 
     # Align the mean and the std of the prediction with the current day series
-    mean_prev = current_day_series.mean().mean(axis=0).values()  # Calculate the difference in means
+    mean_prev = current_day_series.mean().mean(
+        axis=0).values()  # Calculate the difference in means
     mean_today = prediction.mean().mean(axis=0).values()
     std_prev = current_day_series.values().std()
     std_today = prediction.values().std()
 
     def shift_by_mean_diff(value):
         return ((value - mean_today) / std_today) * std_prev + mean_prev
-    
+
     # Shift the prediction by the difference in means and std
     prediction = prediction.map(shift_by_mean_diff)
 
     # Scale the confidence range to the desired increase
     prediction = scale(prediction, 2)
-    
+
     # Inverse transform the prediction and multiply by 3000
     prediction = transformer.inverse_transform(prediction)
     prediction = prediction.map(lambda x: x*3000)
 
-
     # return only the upper and lower confidence interval, remove the last value as it is the prediction for the next timestep
 
-    confidence_upper = np.percentile(prediction.all_values(),95,axis=2).reshape(-1).tolist()
-    confidence_lower = np.percentile(prediction.all_values(),5,axis=2).reshape(-1).tolist()
+    confidence_upper = np.percentile(
+        prediction.all_values(), 95, axis=2).reshape(-1).tolist()
+    confidence_lower = np.percentile(
+        prediction.all_values(), 5, axis=2).reshape(-1).tolist()
     return jsonify({'confidence_upper': confidence_upper, 'confidence_lower': confidence_lower})
+
+
+@app.route('/batterysched/basic', methods=['POST'])
+def basic_scheduler():
+    data = request.get_json()
+    sn = data['deviceSn']
+    if sn in schedulers:
+        return jsonify(status='error', message='Scheduler already exists for this deviceSn'), 400
+    
+    scheduler = BatteryScheduler(
+        scheduler_type='PeakValley', battery_sn=sn)
+    schedulers[sn] = scheduler
+    scheduler.start()
+
+@app.route('/batterysched/stop', methods=['POST'])
+def stop_scheduler():
+    data = request.get_json()
+    sn = data['deviceSn']
+    
+    # Get the scheduler instance from the dictionary and stop it
+    scheduler = schedulers.get(sn)
+    if scheduler:
+        scheduler.stop()
+        schedulers.pop(sn)
+        return jsonify(status='success', message='Scheduler stopped'), 200
+    else:
+        return jsonify(status='error', message='Scheduler not found'), 404
 
 
 if __name__ == '__main__':
