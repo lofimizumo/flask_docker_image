@@ -1,11 +1,9 @@
 # The class for auto schedule of charging/discharging the battery
-import requests
-import pandas as pd
-import datetime
-import numpy as np
-import json
 import sched
+import datetime
 import time
+import pandas as pd
+import numpy as np
 import util
 
 

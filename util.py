@@ -1,4 +1,3 @@
-import threading
 from functools import wraps
 import requests
 import time
@@ -6,7 +5,7 @@ from datetime import datetime, timedelta
 from itertools import cycle
 
 
-def api_status_check(confirm_delay=10):
+def api_status_check(max_retries=10, delay=10):
     """
     A decorator function that checks the status of a device after executing a command.
 
@@ -54,37 +53,36 @@ def api_status_check(confirm_delay=10):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            response = func(*args, **kwargs)
-            threading.Thread(target=check_status, args=(
-                confirm_delay, args)).start()
-
+            for attempt in range(max_retries):
+                response = func(*args, **kwargs)
+                if not check_status(*args, **kwargs):
+                    print(f"Attempt {attempt + 1} failed, retrying...")
+                    time.sleep(delay)  # Sleep for some time before retrying
+                else:
+                    print("Status successfully changed!")
+                    return response
+            print("Max retry limit reached! Stopping further attempts.")
             return response
 
-        def check_status(delay, args):
-            """
-            Checks the status of the device after a delay.
-
-            Args:
-                delay (int): The delay (in seconds) before checking the status.
-                args (tuple): The arguments passed to the decorated function.
-            """
-            # Wait for the specified delay
-            time.sleep(delay)
-            is_TestMode = args[0].test_mode
+        def check_status(args, kwargs):
+            is_TestMode = args.test_mode
             if is_TestMode:
                 return
-            sn = args[0].sn
-            expected_status = args[1]
+
+            sn = args.sn
+            expected_status = kwargs
             api = ApiCommunicator(base_url="https://dev3.redxvpp.com/restapi")
-            token = args[0].token
+            token = args.token
+
             # Send an API request to check the status
             status_response = api.send_request('device/get_latest_data', method='POST', json={
                 'deviceSn': sn}, headers={'token': token})
             print(f"Status: {status_response['data']['showStatus']}")
+
             if _is_command_expected(status_response['data']['showStatus'], expected_status):
-                print("Status successfully changed!")
+                return True
             else:
-                wrapper(*args)
+                return False
 
         return wrapper
 
@@ -227,7 +225,6 @@ class PriceAndLoadMonitor:
             'user_account': 'yetao_admin', 'secret': 'a~L$o8dJ246c'}, headers={'Content-Type': 'application/x-www-form-urlencoded'})
         return response['data']['token']
 
-    # @api_status_check(confirm_delay=3, expected_status='PassBy')
     def get_realtime_battery_stats(self):
         # Test Get latest summary data
         data = {'deviceSn': self.sn}
@@ -250,7 +247,7 @@ class PriceAndLoadMonitor:
             return next(self.sim_time_iter).strftime("%H:%M")
         return time.strftime("%H:%M", time.localtime())
 
-    @api_status_check(confirm_delay=5)
+    @api_status_check(max_retries=10, delay=10)
     def send_battery_command(self, command):
         if self.test_mode:
             return
