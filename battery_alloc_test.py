@@ -2,7 +2,6 @@
 import sched
 import datetime
 import time
-import pandas as pd
 import numpy as np
 import util
 
@@ -193,11 +192,7 @@ class PeakValleyScheduler(BaseScheduler):
         buy_price, sell_price = np.percentile(
             self.price_history, [self.BuyPct, self.SellPct])
 
-        # chec if current_time is pandas timestamp
-        if isinstance(current_time, pd.Timestamp):
-            current_timenum = current_time.time()
-        else:
-            current_timenum = datetime.datetime.strptime(
+        current_timenum = datetime.datetime.strptime(
                 current_time, '%H:%M').time()
 
         command = ['Idle', 0]  # No action by default
