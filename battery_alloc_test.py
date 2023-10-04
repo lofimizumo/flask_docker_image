@@ -36,7 +36,7 @@ class BatteryScheduler:
 
         return self.scheduler.step(**kwargs)
 
-    def start(self, interval=300):
+    def _start(self, interval=300):
         _current_price = self.get_current_price()
         _bat_stats = self.get_current_battery_stats()
         _current_usage = _bat_stats['loadP']
@@ -50,7 +50,10 @@ class BatteryScheduler:
         if self.test_mode:
             interval = 0.1
         self.event = self.s.enter(interval, 1, self.start)
+    
+    def start(self):
         try:
+            self._start()
             self.s.run(blocking=True)
         except KeyboardInterrupt:
             print("Stopped.")

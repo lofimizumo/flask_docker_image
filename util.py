@@ -245,7 +245,8 @@ class PriceAndLoadMonitor:
         '''
         if self.test_mode:
             return next(self.sim_time_iter).strftime("%H:%M")
-        return time.strftime("%H:%M", time.localtime())
+        gold_coast_time = time.gmtime(time.time() + 3600 * 10)
+        return time.strftime("%H:%M", gold_coast_time)
 
     @api_status_check(max_retries=10, delay=10)
     def send_battery_command(self, command):
@@ -296,7 +297,6 @@ class PriceAndLoadMonitor:
                     'dischargeEnd1': end_time,
                     'chargeStart1': empty_time,
                     'chargeEnd1': empty_time,
-                    'enableGridCharge1': 1,
                     'antiBackflowSW': 1,
                     'dischargePower1': 2500
                     }
@@ -354,8 +354,3 @@ class ApiCommunicator:
             raise ValueError(f"Command {command} failed to execute.")
         return True
 
-
-if __name__ == '__main__':
-    monitor = PriceAndLoadMonitor(sn="RX2505ACA10JOA160037")
-
-    monitor.send_battery_command('Charge')
