@@ -298,13 +298,18 @@ class PriceAndLoadMonitor:
                     'chargeStart1': empty_time,
                     'chargeEnd1': empty_time,
                     'antiBackflowSW': 1,
-                    'dischargePower1': 2500
+                    'dischargePower1': 2500,
+                    'dischargeSOC1': 10
+
                     }
         elif command == 'Idle':
             data = {'deviceSn': self.sn,
                     'controlCommand': command_map[command],
                     'operatingMode': mode_map['Time'],
-                    }
+                    'dischargeStart1': empty_time,
+                    'dischargeEnd1': empty_time,
+                    'chargeStart1': empty_time,
+                    'chargeEnd1': empty_time, }
 
         headers = {'token': self.token}
         response = self.api.send_request(
@@ -353,4 +358,3 @@ class ApiCommunicator:
         if expected_output != self.send_request(command, method, data, headers, retries):
             raise ValueError(f"Command {command} failed to execute.")
         return True
-
