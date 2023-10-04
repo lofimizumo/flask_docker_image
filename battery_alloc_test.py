@@ -78,6 +78,8 @@ class BatteryScheduler:
         pass
 
     def send_battery_command(self, command):
+        if command != 'Idle':
+            self.monitor.send_battery_command('Idle')
         self.monitor.send_battery_command(command)
 
 
