@@ -67,7 +67,7 @@ def api_status_check(max_retries=10, delay=10):
         def check_status(args, kwargs):
             is_TestMode = args.test_mode
             if is_TestMode:
-                return
+                return True
 
             sn = args.sn
             expected_status = kwargs
