@@ -36,7 +36,7 @@ class BatteryScheduler:
 
         return self.scheduler.step(**kwargs)
 
-    def _start(self, interval=300):
+    def _start(self, interval=1800):
         _current_price = self.get_current_price()
         _bat_stats = self.get_current_battery_stats()
         _current_usage = _bat_stats['loadP']
@@ -250,4 +250,4 @@ class AIScheduler(BaseScheduler):
 if __name__ == '__main__':
     scheduler = BatteryScheduler(
         scheduler_type='PeakValley', battery_sn='RX2505ACA10JOA160037')
-    scheduler.start()
+    scheduler.stop()

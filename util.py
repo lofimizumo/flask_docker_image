@@ -248,7 +248,7 @@ class PriceAndLoadMonitor:
         gold_coast_time = time.gmtime(time.time() + 3600 * 10)
         return time.strftime("%H:%M", gold_coast_time)
 
-    @api_status_check(max_retries=10, delay=10)
+    @api_status_check(max_retries=3, delay=60)
     def send_battery_command(self, command):
         if self.test_mode:
             return
@@ -299,8 +299,8 @@ class PriceAndLoadMonitor:
                     'chargeEnd1': empty_time,
                     'antiBackflowSW': 1,
                     'dischargePower1': 2500,
-                    'dischargeSOC1': 10
-
+                    'dischargeSOC1': 10,
+                    'dischargePowerLimit1': 0
                     }
         elif command == 'Idle':
             data = {'deviceSn': self.sn,
