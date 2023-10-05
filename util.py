@@ -314,7 +314,7 @@ class PriceAndLoadMonitor:
         headers = {'token': self.token}
         response = self.api.send_request(
             "device/set_params", method='POST', json=data, headers=headers)
-        print(response)
+        print(f'Send command {command} to battery {self.sn}, response: {response}')
 
 
 class ApiCommunicator:

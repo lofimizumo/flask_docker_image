@@ -16,6 +16,7 @@ class BatteryScheduler:
             sn=battery_sn, test_mode=test_mode)
         self.test_mode = test_mode
         self.event = None
+        self.is_runing = False
 
     def _set_scheduler(self, scheduler_type):
         if scheduler_type == 'PeakValley':
@@ -37,6 +38,8 @@ class BatteryScheduler:
         return self.scheduler.step(**kwargs)
 
     def _start(self, interval=1800):
+        if not self.is_runing:
+            return
         _current_price = self.get_current_price()
         _bat_stats = self.get_current_battery_stats()
         _current_usage = _bat_stats['loadP']
@@ -49,19 +52,18 @@ class BatteryScheduler:
         self.send_battery_command(_command)
         if self.test_mode:
             interval = 0.1
-        self.event = self.s.enter(interval, 1, self.start)
+        self.event = self.s.enter(interval, 1, self._start)
     
     def start(self):
+        self.is_runing = True
         try:
             self._start()
-            self.s.run(blocking=True)
+            self.s.run()
         except KeyboardInterrupt:
             print("Stopped.")
 
     def stop(self):
-        if self.event:
-            self.s.cancel(self.event)
-            self.event = None
+        self.is_runing = False
         print("Stopped.")
 
     def get_current_price(self):
