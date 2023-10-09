@@ -104,7 +104,8 @@ class PeakValleyScheduler(BaseScheduler):
     def __init__(self, batnum=1):
         # Constants and Initializations
         self.BatNum = batnum
-        self.BatCap = self.BatNum * 5
+        self.BatMaxCapacity = 5
+        self.BatCap = self.BatNum * self.BatMaxCapacity
         self.BatChgMax = self.BatNum * 1.5
         self.BatDisMax = self.BatNum * 2.5
         self.BatSocMin = 0.1
@@ -187,7 +188,6 @@ class PeakValleyScheduler(BaseScheduler):
     def step(self, current_price, current_time, current_usage, current_soc):
         # Update battery state
         self.bat_cap = current_soc * self.BatCap
-        self.soc = current_soc
 
         self.price_history.append(current_price)
         if len(self.price_history) > self.LookBackBars:
@@ -207,10 +207,8 @@ class PeakValleyScheduler(BaseScheduler):
             chg_delta = self.BatChgMax * self.HrMin
             temp_chg = chg_delta + self.bat_cap
 
-            if temp_chg <= self.BatCap:
-                self.bat_cap = temp_chg  # charge battery
-                self.soc = self.bat_cap / self.BatCap
-                command = ['Charge', self.BatChgMax]
+            self.bat_cap = min(temp_chg, self.BatMaxCapacity)
+            command = ['Charge', self.BatChgMax]
 
         elif self._is_discharging_period(current_timenum) and (current_price >= sell_price or current_price > self.SpikeLevel):
             # Discharging logic
@@ -221,7 +219,6 @@ class PeakValleyScheduler(BaseScheduler):
 
             if temp_dischg >= self.BatCap * self.BatSocMin:
                 self.bat_cap = temp_dischg  # discharge battery
-                self.soc = self.bat_cap / self.BatCap
                 _value = -self.BatDisMax if self.SellBack else - \
                     min(current_usage, self.BatDisMax)
                 command = ['Discharge', _value]
@@ -251,5 +248,5 @@ class AIScheduler(BaseScheduler):
 
 if __name__ == '__main__':
     scheduler = BatteryScheduler(
-        scheduler_type='PeakValley', battery_sn='RX2505ACA10JOA160037')
-    scheduler.stop()
+        scheduler_type='PeakValley', battery_sn='RX2505ACA10JOA160037',test_mode=True)
+    scheduler.start()
