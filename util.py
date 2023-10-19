@@ -2,6 +2,7 @@ from functools import wraps
 import requests
 import time
 from datetime import datetime, timedelta
+import pytz
 from itertools import cycle
 
 
@@ -69,7 +70,7 @@ def api_status_check(max_retries=10, delay=10):
             if is_TestMode:
                 return True
 
-            sn = args.sn
+            sn = kwargs['sn'] 
             expected_status = kwargs
             api = ApiCommunicator(base_url="https://dev3.redxvpp.com/restapi")
             token = args.token
@@ -90,12 +91,12 @@ def api_status_check(max_retries=10, delay=10):
 
 
 class PriceAndLoadMonitor:
-    def __init__(self, sn=None, test_mode=False):
+    def __init__(self,  test_mode=False):
         self.sim_load_iter = self.get_sim_load_iter()
         self.sim_time_iter = self.get_sim_time_iter()
-        self.api = ApiCommunicator(base_url="https://dev3.redxvpp.com/restapi")
+        # self.api = ApiCommunicator(base_url="https://dev3.redxvpp.com/restapi")
+        self.api = ApiCommunicator(base_url="https://redxpower.com/restapi")
         self.token = self.get_token()
-        self.sn = sn
         # Test Mode is for testing the battery control without sending command to the actual battery
         self.test_mode = test_mode
 
@@ -222,16 +223,28 @@ class PriceAndLoadMonitor:
 
     def get_token(self):
         response = self.api.send_request("user/token", method='POST', data={
-            'user_account': 'yetao_admin', 'secret': 'a~L$o8dJ246c'}, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+            'user_account': 'yetao_admin', 'secret': 'tpass%#%'}, headers={'Content-Type': 'application/x-www-form-urlencoded'})
         return response['data']['token']
 
-    def get_realtime_battery_stats(self):
+    def get_realtime_battery_stats(self, sn):
         # Test Get latest summary data
-        data = {'deviceSn': self.sn}
+        data = {'deviceSn': sn}
         headers = {'token': self.token}
         response = self.api.send_request(
             "device/get_latest_data", method='POST', json=data, headers=headers)
         return response['data']
+    
+    def get_project_demand(self, grid_ID=1, phase=2):
+        '''
+        Currently we have only one project, shawsbay, so we hard code the gridID as 1.
+        '''
+        date_today = datetime.now(tz=pytz.timezone('Australia/Brisbane')).strftime("%Y_%m_%d")
+        data = {'date': date_today, 'gridID': grid_ID, 'phase': phase}
+        headers = {'token': self.token}
+        response = self.api.send_request(
+            "grid/get_prediction_v2", method='POST', json=data, headers=headers)
+        prediction_average = [(x['predictionLower'] + x['predictionUpper'])/2 for x in response['data']]
+        return prediction_average
 
     def get_sim_time_iter(self):
         start_time = datetime.strptime('00:00', '%H:%M')
@@ -249,7 +262,7 @@ class PriceAndLoadMonitor:
         return time.strftime("%H:%M", gold_coast_time)
 
     @api_status_check(max_retries=3, delay=60)
-    def send_battery_command(self, command):
+    def send_battery_command(self, command, sn=None):
         if self.test_mode:
             return
 
@@ -277,7 +290,7 @@ class PriceAndLoadMonitor:
                     timedelta(minutes=30)).strftime("%H:%M")
         empty_time = '00:00'
         if command == 'Charge':
-            data = {'deviceSn': self.sn,
+            data = {'deviceSn': sn,
                     'controlCommand': command_map[command],
                     'operatingMode': mode_map['Time'],
                     'chargeStart1': start_time,
@@ -290,7 +303,7 @@ class PriceAndLoadMonitor:
                     }
 
         elif command == 'Discharge':
-            data = {'deviceSn': self.sn,
+            data = {'deviceSn': sn,
                     'controlCommand': command_map[command],
                     'operatingMode': mode_map['Time'],
                     'dischargeStart1': start_time,
@@ -303,7 +316,7 @@ class PriceAndLoadMonitor:
                     'dischargePowerLimit1': 0
                     }
         elif command == 'Idle':
-            data = {'deviceSn': self.sn,
+            data = {'deviceSn': sn,
                     'controlCommand': command_map[command],
                     'operatingMode': mode_map['Time'],
                     'dischargeStart1': empty_time,
@@ -314,7 +327,7 @@ class PriceAndLoadMonitor:
         headers = {'token': self.token}
         response = self.api.send_request(
             "device/set_params", method='POST', json=data, headers=headers)
-        print(f'Send command {command} to battery {self.sn}, response: {response}')
+        print(f'Send command {command} to battery {sn}, response: {response}')
 
 
 class ApiCommunicator:

@@ -11,18 +11,19 @@ class BatteryScheduler:
     def __init__(self, scheduler_type='PeakValley', battery_sn=None, test_mode=False):
         self.s = sched.scheduler(time.time, time.sleep)
         self.scheduler = None
-        self._set_scheduler(scheduler_type)
-        self.monitor = util.PriceAndLoadMonitor(
-            sn=battery_sn, test_mode=test_mode)
+        self.monitor = util.PriceAndLoadMonitor(test_mode=test_mode)
         self.test_mode = test_mode
         self.event = None
         self.is_runing = False
+        self.sn_list = battery_sn if type(battery_sn) == list else [
+            battery_sn]
+        self._set_scheduler(scheduler_type)
 
     def _set_scheduler(self, scheduler_type):
         if scheduler_type == 'PeakValley':
             self.scheduler = PeakValleyScheduler()
         elif scheduler_type == 'AIScheduler':
-            self.scheduler = AIScheduler()
+            self.scheduler = AIScheduler(sn_list=self.sn_list)
         else:
             raise ValueError(f"Unknown scheduler type: {scheduler_type}")
 
@@ -40,20 +41,27 @@ class BatteryScheduler:
     def _start(self, interval=1800):
         if not self.is_runing:
             return
-        _current_price = self.get_current_price()
-        _bat_stats = self.get_current_battery_stats()
-        _current_usage = _bat_stats['loadP']
-        _current_soc = _bat_stats['soc']/100.0
-        _current_time = self.get_current_time()
-        _command = self._get_battery_command(
-            current_price=_current_price, current_usage=_current_usage, current_time=_current_time, current_soc=_current_soc)
+
+        if type(self.scheduler) == AIScheduler:
+            _command = self._get_battery_command()
+            for sn in self.sn_list:
+                self.send_battery_command(_command, sn)
+        elif type(self.scheduler) == PeakValleyScheduler:
+            for sn in self.sn_list:
+                _current_price = self.get_current_price()
+                _bat_stats = self.get_current_battery_stats(sn)
+                _current_usage = _bat_stats['loadP']
+                _current_soc = _bat_stats['soc']/100.0
+                _current_time = self.get_current_time()
+                _command = self._get_battery_command(
+                    current_price=_current_price, current_usage=_current_usage, current_time=_current_time, current_soc=_current_soc)
+                self.send_battery_command(_command, sn)
         print(
             f"Current price: {_current_price}, current usage: {_current_usage}, current time: {_current_time}, current soc: {_current_soc}, command: {_command}")
-        self.send_battery_command(_command)
         if self.test_mode:
             interval = 0.1
         self.event = self.s.enter(interval, 1, self._start)
-    
+
     def start(self):
         self.is_runing = True
         try:
@@ -72,15 +80,15 @@ class BatteryScheduler:
     def get_current_time(self):
         return self.monitor.get_current_time()
 
-    def get_current_battery_stats(self):
-        return self.monitor.get_realtime_battery_stats()
+    def get_current_battery_stats(self, sn):
+        return self.monitor.get_realtime_battery_stats(sn)
 
     def update_battery_state(self, **kwargs):
         # Placeholder for potential updates to the scheduler's internal state
         pass
 
-    def send_battery_command(self, command):
-        self.monitor.send_battery_command(command)
+    def send_battery_command(self, command, sn):
+        self.monitor.send_battery_command(command, sn)
 
 
 class BaseScheduler:
@@ -198,7 +206,7 @@ class PeakValleyScheduler(BaseScheduler):
             self.price_history, [self.BuyPct, self.SellPct])
 
         current_timenum = datetime.datetime.strptime(
-                current_time, '%H:%M').time()
+            current_time, '%H:%M').time()
 
         command = ['Idle', 0]  # No action by default
 
@@ -237,16 +245,157 @@ class PeakValleyScheduler(BaseScheduler):
 
 class AIScheduler(BaseScheduler):
 
-    def step(self, price_prediction_curve):
-        # Implementation specific to AIScheduler
-        # ... (compute the command based on the provided data)
+    def __init__(self, sn_list):
+        self.battery_capacity_kwh = 5
+        self.num_batteries = 5
+        self.price_weight = 1
+        self.min_discharge_rate_kw = 0.5
+        self.max_discharge_rate_kw = 2.5
+        self.api = util.ApiCommunicator(
+            'https://da2e586eae72a40e5bde4ead0fe77b2f0.clg07azjl.paperspacegradient.com/')
+        self.battery_sn_list = sn_list
+        self.battery_monitors = {sn: util.PriceAndLoadMonitor(
+            test_mode=False) for sn in sn_list}
+        self.schedule = None
+
+    def _get_demand_and_price(self):
+        # we don't need to get each battery's demand, just use the get_project_demand() method to get the total demand instead.
+        # take the first battery monitor from the list
+        demand = self.battery_monitors[self.battery_sn_list[0]].get_project_demand(
+        )
+        price = [1 for _ in range(len(demand))]
+        return np.array(demand, dtype=np.float64), np.array(price, dtype=np.float64)
+
+    def generate_schedule(self, consumption, price, batterie_capacity_kwh, num_batteries, price_weight=1):
+        import optuna
+        from scipy.ndimage import gaussian_filter1d
+
+        def greedy_battery_discharge(consumption, price, batteries, price_weight=1):
+            num_hours = len(consumption)
+            net_consumption = consumption.copy()
+            battery_discharges = [[0] * num_hours for _ in batteries]
+
+            for _, (capacity, duration) in enumerate(batteries):
+                best_avg = float('-inf')
+                best_start = 0
+
+                # Step 1: Find the window with the highest rolling average
+                for start in range(0, num_hours - duration + 1):
+                    weight_adjusted_array = [i*j*price_weight for i, j in zip(
+                        net_consumption[start:start+duration], price[start:start+duration])]
+                    avg = sum(weight_adjusted_array) / duration
+                    if avg > best_avg:
+                        best_avg = avg
+                        best_start = start
+
+                # Step 3: Place the battery's discharge
+                discharge_rate = capacity / duration
+                for h in range(best_start, best_start + duration):
+                    discharged = min(discharge_rate, net_consumption[h])
+                    battery_discharges[_][h] = discharged
+                    net_consumption[h] -= discharged
+
+            return net_consumption, battery_discharges
+
+        def greedy_battery_charge(consumption, price, batteries, price_weight=1):
+            num_hours = len(consumption)
+            net_consumption = consumption.copy()
+            battery_charges = [[0] * num_hours for _ in batteries]
+
+            for _, (capacity, duration) in enumerate(batteries):
+                best_avg = float('inf')
+                best_start = 0
+
+                charge_rate = capacity / duration
+                # Step 1: Find the window with the lowest rolling average
+                for start in range(0, num_hours - duration + 1):
+                    weight_adjusted_array = [
+                        charge_rate*i for i in price[start:start+duration]]
+                    avg = sum(weight_adjusted_array) / duration
+                    if avg < best_avg:
+                        best_avg = avg
+                        best_start = start
+
+                # Step 3: Place the battery's charge
+                for h in range(best_start, best_start + duration):
+                    charged = min(charge_rate, net_consumption[h])
+                    battery_charges[_][h] = charged
+                    net_consumption[h] += charged
+
+            return net_consumption, battery_charges
+
+        def objective(trial):
+            max_discharge_length = self.battery_capacity_kwh / \
+                self.min_discharge_rate_kw * len(consumption) / 24
+            min_discharge_length = self.battery_capacity_kwh / \
+                self.max_discharge_rate_kw * len(consumption) / 24
+            durations = [trial.suggest_int(
+                f'duration_{i}', min_discharge_length, max_discharge_length, step=int((max_discharge_length-min_discharge_length)/10)) for i in range(num_batteries)]
+            batteries = [(batterie_capacity_kwh, duration)
+                         for duration in durations]
+            net_consumption, _ = greedy_battery_discharge(
+                consumption, price, batteries, price_weight)
+            avg_consumption = sum(net_consumption) / len(net_consumption)
+            variance = sum((x - avg_consumption) **
+                           2 for x in net_consumption) / len(net_consumption)
+            return variance
+
+        def smooth_demand(data, sigma):
+            """Expand peaks using Gaussian blur."""
+            return gaussian_filter1d(data, sigma)
+
+        consumption = smooth_demand(consumption, sigma=6)
+        study = optuna.create_study(direction='minimize')
+        study.optimize(objective, n_trials=100)
+        best_durations = [
+            study.best_params[f"duration_{i}"] for i in range(num_batteries)]
+        discharging_capacity = [[batterie_capacity_kwh, duration]
+                                for duration in best_durations]
+        # charging_needs = [[30000, 24] for x in range(num_batteries)]
+
+        net_consumption, battery_discharges = greedy_battery_discharge(
+            consumption, price, discharging_capacity)
+        # _, battery_charges = greedy_battery_charge(consumption,price, charging_needs)
+
+        def _get_charging_window(battery_charge_schedule):
+            p_left = 0
+            p_right = 0
+            durations = []
+            while p_right < len(battery_charge_schedule)-1:
+                p_right += 1
+                if battery_charge_schedule[p_right] == 0 or p_right == len(battery_charge_schedule)-1:
+                    if p_right - p_left > 1:
+                        durations.append((p_left+1, p_right-p_left-1))
+                    p_left = p_right
+            return durations
+
+        for i, b in enumerate(battery_discharges):
+            print(f'Battery {i+1} discharging window:',
+                  _get_charging_window(b))
+
+        discharge_schedules = [_get_charging_window(
+            i) for i in battery_discharges]
+        flat_discharge_schedules = [
+            item for sublist in discharge_schedules for item in sublist]
+        # charge_schedules = [_get_charging_window(i) for i in battery_charges]
+
+    def _get_command_from_schedule(self, current_time):
+        return 'Idle'
+
+    def step(self):
+        if self.schedule is None:
+            demand, price = self._get_demand_and_price()
+            self.schedule = self.generate_schedule(
+                demand, price, self.battery_capacity_kwh, self.num_batteries, self.price_weight)
+        else:
+            pass
         raise NotImplementedError
 
     def required_data(self):
-        return ['price_prediction_curve']
+        return []
 
 
 if __name__ == '__main__':
     scheduler = BatteryScheduler(
-        scheduler_type='PeakValley', battery_sn='RX2505ACA10JOA160037',test_mode=True)
+        scheduler_type='AIScheduler', battery_sn='RX2505ACA10JOA160037', test_mode=True)
     scheduler.start()
