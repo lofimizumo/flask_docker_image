@@ -43,9 +43,10 @@ class BatteryScheduler:
             return
 
         if type(self.scheduler) == AIScheduler:
-            _command = self._get_battery_command()
+            schedule = self._get_battery_command()
             for sn in self.sn_list:
-                self.send_battery_command(_command, sn)
+                json = schedule[sn]
+                self.send_battery_command(json=json, sn=sn)
         elif type(self.scheduler) == PeakValleyScheduler:
             for sn in self.sn_list:
                 _current_price = self.get_current_price()
@@ -55,7 +56,7 @@ class BatteryScheduler:
                 _current_time = self.get_current_time()
                 _command = self._get_battery_command(
                     current_price=_current_price, current_usage=_current_usage, current_time=_current_time, current_soc=_current_soc)
-                self.send_battery_command(_command, sn)
+                self.send_battery_command(command=_command, sn=sn)
         print(
             f"Current price: {_current_price}, current usage: {_current_usage}, current time: {_current_time}, current soc: {_current_soc}, command: {_command}")
         if self.test_mode:
@@ -87,8 +88,8 @@ class BatteryScheduler:
         # Placeholder for potential updates to the scheduler's internal state
         pass
 
-    def send_battery_command(self, command, sn):
-        self.monitor.send_battery_command(command, sn)
+    def send_battery_command(self, command=None, json=None, sn=None):
+        self.monitor.send_battery_command(command, json, sn)
 
 
 class BaseScheduler:
@@ -266,7 +267,15 @@ class AIScheduler(BaseScheduler):
         price = [1 for _ in range(len(demand))]
         return np.array(demand, dtype=np.float64), np.array(price, dtype=np.float64)
 
-    def generate_schedule(self, consumption, price, batterie_capacity_kwh, num_batteries, price_weight=1):
+    def _get_battery_status(self):
+        battery_status = {}
+        for sn in self.battery_sn_list:
+            battery_status[sn] = self.battery_monitors[sn].get_realtime_battery_stats(
+                sn)
+        
+        return battery_status
+
+    def generate_schedule(self, consumption, price, batterie_capacity_kwh, num_batteries, stats, price_weight=1):
         import optuna
         from scipy.ndimage import gaussian_filter1d
 
@@ -373,11 +382,153 @@ class AIScheduler(BaseScheduler):
             print(f'Battery {i+1} discharging window:',
                   _get_charging_window(b))
 
+        def split_single_schedule(schedule, num_windows):
+            start = schedule[0]
+            duration = schedule[1]
+            segments = [(round(i*duration/num_windows+start), round((i+1)*duration/num_windows+start) -
+                        round(i*duration/num_windows+start)) for i in range(num_windows)]
+            return segments
+
+        def split_schedules(schedules, num_windows, task_type='discharge'):
+            ret = []
+            for schedule in schedules:
+                ret.extend(split_single_schedule(schedule, num_windows))
+            ret = [(task_type, i[0], i[1]) for i in ret]
+            return ret
+
         discharge_schedules = [_get_charging_window(
             i) for i in battery_discharges]
         flat_discharge_schedules = [
             item for sublist in discharge_schedules for item in sublist]
         # charge_schedules = [_get_charging_window(i) for i in battery_charges]
+
+        discharge_sched_split = split_schedules(
+            flat_discharge_schedules, 1, 'discharge')
+        # charge_sched_split = split_schedules(flat_charge_schedules, 1, 'charge')
+
+        # Use hardcoded schedules for charging windows.
+        charge_sched_split = [('charge', 75, 24),
+                              ('charge', 75, 24),
+                              ('charge', 75, 24),
+                              ('charge', 75, 24),
+                              ('charge', 75, 24)]
+        all_schedules = sorted(discharge_sched_split +
+                               charge_sched_split, key=lambda x: x[1])
+
+        class Battery:
+            def __init__(self, capacity, battery_id):
+                self.id = battery_id
+                self.capacity = 30000
+                self.current_charge = capacity  # Set initial charge to full capacity
+                self.fully_charged_rounds = 0
+                self.fully_discharged_rounds = 0
+                self.available_at = 0  # The time when the battery is available again
+
+            def is_depleted(self):
+                return self.fully_discharged_rounds >= 2 and self.fully_charged_rounds >= 2
+
+            def can_discharge(self, current_time):
+                return self.current_charge > 0 and not self.is_depleted() and self.available_at <= current_time
+
+            def can_charge(self, current_time):
+                return self.current_charge < self.capacity and not self.is_depleted() and self.available_at <= current_time
+
+            def discharge(self, duration, current_time):
+                if self.can_discharge(current_time):
+                    self.current_charge = 0
+                    self.fully_discharged_rounds += 1
+                    self.available_at = current_time + duration
+
+            def charge(self, duration, current_time):
+                if self.can_charge(current_time):
+                    self.current_charge = self.capacity
+                    self.fully_charged_rounds += 1
+                    self.available_at = current_time + duration
+
+        class BatteryManager:
+            def __init__(self, tasks, battery_init_status, battery_capacity_kwh=5, time_unit=5):
+                self.tasks = sorted(tasks, key=lambda x: x[1])
+                self.batteries = [
+                    Battery(power_level, i) for i, power_level in enumerate(battery_init_status)]
+                self.output = []
+                self.battery_capacity_kwh = battery_capacity_kwh
+
+            def allocate_battery(self, task_time, task_type, task_duration):
+                for battery in self.batteries:
+                    if task_type == "discharge" and battery.can_discharge(task_time):
+                        battery.discharge(task_duration, task_time)
+                        self.output.append(
+                            (battery.id, task_time, task_type, task_duration))
+                        return True
+                    elif task_type == "charge" and battery.can_charge(task_time):
+                        battery.charge(task_duration, task_time)
+                        self.output.append(
+                            (battery.id, task_time, task_type, task_duration))
+                        return True
+                return False
+
+            def manage_tasks(self):
+                for task_type, task_time, task_duration in self.tasks:
+                    print(
+                        f'try to allocate a battery for: (task_type: {task_type}, task_time: {task_time}, task_duration: {task_duration}))')
+                    if not self.allocate_battery(task_time, task_type, task_duration):
+                        print(
+                            f'task {task_time} {task_type} {task_duration} failed to allocate battery')
+                def unit_to_time(unit):
+                    total_minutes = unit * 5
+                    hour = total_minutes // 60
+                    minute = total_minutes % 60
+                    return "{:02d}:{:02d}".format(hour, minute)
+
+                command_map = {
+                    'Idle': 3,
+                    'Charge': 2,
+                    'Discharge': 1,
+                    'Clear Fault': 4,
+                    'Power Off': 5,
+                }
+
+                mode_map = {
+                    'Auto': 0,
+                    'Vpp': 1,
+                    'Time': 2,
+                }
+
+                schedules = []
+                for sn, task_time, task_type, task_duration in self.output:
+                    power = batterie_capacity_kwh * 1000 * \
+                        60 / (time_unit * task_duration)
+                    start_time = unit_to_time(task_time)
+                    end_time = unit_to_time(task_time + task_duration)
+
+                    data = {
+                        'deviceSn': sn,
+                        'controlCommand': command_map[task_type],
+                        'operatingMode': mode_map['Time'],
+                        'dischargeStart1': start_time if task_type == 'discharge' else "00:00",
+                        'dischargeEnd1': end_time if task_type == 'discharge' else "00:00",
+                        'chargeStart1': start_time if task_type == 'charge' else "00:00",
+                        'chargeEnd1': end_time if task_type == 'charge' else "00:00",
+                        'antiBackflowSW': 1,
+                        'dischargePower1': power,
+                        'dischargeSOC1': 10,
+                        'dischargePowerLimit1': 0,
+                        'chargePower1': power,
+                        'enableGridCharge1': 1
+                    }
+                    schedules.append(data)
+
+                return schedules
+
+
+        tasks = all_schedules
+
+        time_unit = 24*60/len(consumption)
+        battery_init_status = [np.random.randint(
+            1000, 30000) for _ in range(15)]
+        battery_manager = BatteryManager(tasks, battery_init_status)
+        json_schedule = battery_manager.manage_tasks()
+        return json_schedule 
 
     def _get_command_from_schedule(self, current_time):
         return 'Idle'
@@ -385,11 +536,11 @@ class AIScheduler(BaseScheduler):
     def step(self):
         if self.schedule is None:
             demand, price = self._get_demand_and_price()
+            stats = self._get_battery_status()
             self.schedule = self.generate_schedule(
-                demand, price, self.battery_capacity_kwh, self.num_batteries, self.price_weight)
+                demand, price, self.battery_capacity_kwh, self.num_batteries, stats, self.price_weight)
         else:
-            pass
-        raise NotImplementedError
+            return self.schedule 
 
     def required_data(self):
         return []

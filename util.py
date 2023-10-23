@@ -70,7 +70,7 @@ def api_status_check(max_retries=10, delay=10):
             if is_TestMode:
                 return True
 
-            sn = kwargs['sn'] 
+            sn = kwargs['sn']
             expected_status = kwargs
             api = ApiCommunicator(base_url="https://dev3.redxvpp.com/restapi")
             token = args.token
@@ -233,17 +233,19 @@ class PriceAndLoadMonitor:
         response = self.api.send_request(
             "device/get_latest_data", method='POST', json=data, headers=headers)
         return response['data']
-    
+
     def get_project_demand(self, grid_ID=1, phase=2):
         '''
         Currently we have only one project, shawsbay, so we hard code the gridID as 1.
         '''
-        date_today = datetime.now(tz=pytz.timezone('Australia/Brisbane')).strftime("%Y_%m_%d")
+        date_today = datetime.now(tz=pytz.timezone(
+            'Australia/Brisbane')).strftime("%Y_%m_%d")
         data = {'date': date_today, 'gridID': grid_ID, 'phase': phase}
         headers = {'token': self.token}
         response = self.api.send_request(
             "grid/get_prediction_v2", method='POST', json=data, headers=headers)
-        prediction_average = [(x['predictionLower'] + x['predictionUpper'])/2 for x in response['data']]
+        prediction_average = [
+            (int(x['predictionLower']) + int(x['predictionUpper']))/2 for x in response['data']]
         return prediction_average
 
     def get_sim_time_iter(self):
@@ -262,10 +264,10 @@ class PriceAndLoadMonitor:
         return time.strftime("%H:%M", gold_coast_time)
 
     @api_status_check(max_retries=3, delay=60)
-    def send_battery_command(self, command, sn=None):
+    def send_battery_command(self, command=None, json=None, sn=None):
         if self.test_mode:
             return
-
+        
         command_map = {
             'Idle': 3,
             'Charge': 2,
@@ -279,50 +281,54 @@ class PriceAndLoadMonitor:
             'Vpp': 1,
             'Time': 2,
         }
-        from datetime import datetime, timedelta
-        formatted_start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        end_time = datetime.now() + timedelta(minutes=5)
-        formatted_end_time = end_time.strftime("%Y-%m-%d %H:%M:%S")
-        data = {}
-        command = command
-        start_time = self.get_current_time()
-        end_time = (datetime.strptime(start_time, '%H:%M') +
-                    timedelta(minutes=30)).strftime("%H:%M")
-        empty_time = '00:00'
-        if command == 'Charge':
-            data = {'deviceSn': sn,
-                    'controlCommand': command_map[command],
-                    'operatingMode': mode_map['Time'],
-                    'chargeStart1': start_time,
-                    'chargeEnd1': end_time,
-                    'dischargeStart1': empty_time,
-                    'dischargeEnd1': empty_time,
-                    'enableGridCharge1': 1,
-                    'antiBackflowSW': 1,
-                    'chargePower1': 1500
-                    }
+        
+        if command:
+            from datetime import datetime, timedelta
+            formatted_start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            end_time = datetime.now() + timedelta(minutes=5)
+            formatted_end_time = end_time.strftime("%Y-%m-%d %H:%M:%S")
+            data = {}
+            command = command
+            start_time = self.get_current_time()
+            end_time = (datetime.strptime(start_time, '%H:%M') +
+                        timedelta(minutes=30)).strftime("%H:%M")
+            empty_time = '00:00'
+            if command == 'Charge':
+                data = {'deviceSn': sn,
+                        'controlCommand': command_map[command],
+                        'operatingMode': mode_map['Time'],
+                        'chargeStart1': start_time,
+                        'chargeEnd1': end_time,
+                        'dischargeStart1': empty_time,
+                        'dischargeEnd1': empty_time,
+                        'enableGridCharge1': 1,
+                        'antiBackflowSW': 1,
+                        'chargePower1': 1500
+                        }
 
-        elif command == 'Discharge':
-            data = {'deviceSn': sn,
-                    'controlCommand': command_map[command],
-                    'operatingMode': mode_map['Time'],
-                    'dischargeStart1': start_time,
-                    'dischargeEnd1': end_time,
-                    'chargeStart1': empty_time,
-                    'chargeEnd1': empty_time,
-                    'antiBackflowSW': 1,
-                    'dischargePower1': 2500,
-                    'dischargeSOC1': 10,
-                    'dischargePowerLimit1': 0
-                    }
-        elif command == 'Idle':
-            data = {'deviceSn': sn,
-                    'controlCommand': command_map[command],
-                    'operatingMode': mode_map['Time'],
-                    'dischargeStart1': empty_time,
-                    'dischargeEnd1': empty_time,
-                    'chargeStart1': empty_time,
-                    'chargeEnd1': empty_time, }
+            elif command == 'Discharge':
+                data = {'deviceSn': sn,
+                        'controlCommand': command_map[command],
+                        'operatingMode': mode_map['Time'],
+                        'dischargeStart1': start_time,
+                        'dischargeEnd1': end_time,
+                        'chargeStart1': empty_time,
+                        'chargeEnd1': empty_time,
+                        'antiBackflowSW': 1,
+                        'dischargePower1': 2500,
+                        'dischargeSOC1': 10,
+                        'dischargePowerLimit1': 0
+                        }
+            elif command == 'Idle':
+                data = {'deviceSn': sn,
+                        'controlCommand': command_map[command],
+                        'operatingMode': mode_map['Time'],
+                        'dischargeStart1': empty_time,
+                        'dischargeEnd1': empty_time,
+                        'chargeStart1': empty_time,
+                        'chargeEnd1': empty_time, }                
+        if json:
+            data = json
 
         headers = {'token': self.token}
         response = self.api.send_request(
