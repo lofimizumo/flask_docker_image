@@ -56,7 +56,7 @@ def api_status_check(max_retries=10, delay=10):
         def wrapper(*args, **kwargs):
             for attempt in range(max_retries):
                 response = func(*args, **kwargs)
-                if not check_status(*args, **kwargs):
+                if not check_response(response):
                     print(f"Attempt {attempt + 1} failed, retrying...")
                     time.sleep(delay)  # Sleep for some time before retrying
                 else:
@@ -65,15 +65,20 @@ def api_status_check(max_retries=10, delay=10):
             print("Max retry limit reached! Stopping further attempts.")
             return response
 
+        def check_response(response):
+            if response['errorCode'] != 0:
+                raise ValueError(
+                    f"Command failed to execute. Response: {response}")
+            return True
         def check_status(args, kwargs):
-            is_TestMode = args.test_mode
+            is_TestMode = args[0].test_mode
             if is_TestMode:
                 return True
 
             sn = kwargs['sn']
             expected_status = kwargs
             api = ApiCommunicator(base_url="https://dev3.redxvpp.com/restapi")
-            token = args.token
+            token = args[0].token
 
             # Send an API request to check the status
             status_response = api.send_request('device/get_latest_data', method='POST', json={
@@ -91,12 +96,17 @@ def api_status_check(max_retries=10, delay=10):
 
 
 class PriceAndLoadMonitor:
-    def __init__(self,  test_mode=False):
+    def __init__(self,  test_mode=False, api_version='dev3'):
         self.sim_load_iter = self.get_sim_load_iter()
         self.sim_time_iter = self.get_sim_time_iter()
-        # self.api = ApiCommunicator(base_url="https://dev3.redxvpp.com/restapi")
-        self.api = ApiCommunicator(base_url="https://redxpower.com/restapi")
-        self.token = self.get_token()
+        self.api = None
+        if api_version == 'dev3':
+            self.api = ApiCommunicator(
+                base_url="https://dev3.redxvpp.com/restapi")
+        else:
+            self.api = ApiCommunicator(
+                base_url="https://redxpower.com/restapi")
+        self.token = self.get_token(api_version=api_version)
         # Test Mode is for testing the battery control without sending command to the actual battery
         self.test_mode = test_mode
 
@@ -221,9 +231,13 @@ class PriceAndLoadMonitor:
     def get_sim_load(self):
         return next(self.sim_load_iter)
 
-    def get_token(self):
-        response = self.api.send_request("user/token", method='POST', data={
-            'user_account': 'yetao_admin', 'secret': 'tpass%#%'}, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+    def get_token(self, api_version='dev3'):
+        if api_version == 'redx':
+            response = self.api.send_request("user/token", method='POST', data={
+                'user_account': 'yetao_admin', 'secret': 'tpass%#%'}, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        else:
+            response = self.api.send_request("user/token", method='POST', data={
+                'user_account': 'yetao_admin', 'secret': 'a~L$o8dJ246c'}, headers={'Content-Type': 'application/x-www-form-urlencoded'})
         return response['data']['token']
 
     def get_realtime_battery_stats(self, sn):
@@ -267,7 +281,7 @@ class PriceAndLoadMonitor:
     def send_battery_command(self, command=None, json=None, sn=None):
         if self.test_mode:
             return
-        
+
         command_map = {
             'Idle': 3,
             'Charge': 2,
@@ -281,7 +295,7 @@ class PriceAndLoadMonitor:
             'Vpp': 1,
             'Time': 2,
         }
-        
+
         if command:
             from datetime import datetime, timedelta
             formatted_start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -326,7 +340,7 @@ class PriceAndLoadMonitor:
                         'dischargeStart1': empty_time,
                         'dischargeEnd1': empty_time,
                         'chargeStart1': empty_time,
-                        'chargeEnd1': empty_time, }                
+                        'chargeEnd1': empty_time, }
         if json:
             data = json
 
@@ -334,6 +348,7 @@ class PriceAndLoadMonitor:
         response = self.api.send_request(
             "device/set_params", method='POST', json=data, headers=headers)
         print(f'Send command {command} to battery {sn}, response: {response}')
+        return response
 
 
 class ApiCommunicator:
@@ -360,7 +375,7 @@ class ApiCommunicator:
                     response = self.session.get(url, headers=headers)
                 elif method == "POST":
                     response = self.session.post(
-                        url, data=data, json=json, headers=headers)
+                        url, data=data, json=json, headers=headers, timeout=300)
 
                 # Raises an exception for HTTP errors.
                 response.raise_for_status()

@@ -8,10 +8,11 @@ import util
 
 class BatteryScheduler:
 
-    def __init__(self, scheduler_type='PeakValley', battery_sn=None, test_mode=False):
+    def __init__(self, scheduler_type='PeakValley', battery_sn=None, test_mode=False, api_version='dev3'):
         self.s = sched.scheduler(time.time, time.sleep)
         self.scheduler = None
-        self.monitor = util.PriceAndLoadMonitor(test_mode=test_mode)
+        self.monitor = util.PriceAndLoadMonitor(
+            test_mode=test_mode, api_version=api_version)
         self.test_mode = test_mode
         self.event = None
         self.is_runing = False
@@ -89,7 +90,7 @@ class BatteryScheduler:
         pass
 
     def send_battery_command(self, command=None, json=None, sn=None):
-        self.monitor.send_battery_command(command, json, sn)
+        self.monitor.send_battery_command(command=command, json=json, sn=sn)
 
 
 class BaseScheduler:
@@ -247,7 +248,7 @@ class PeakValleyScheduler(BaseScheduler):
 class AIScheduler(BaseScheduler):
 
     def __init__(self, sn_list):
-        self.battery_capacity_kwh = 5
+        self.battery_max_capacity_kwh = 5
         self.num_batteries = 5
         self.price_weight = 1
         self.min_discharge_rate_kw = 0.5
@@ -272,7 +273,7 @@ class AIScheduler(BaseScheduler):
         for sn in self.battery_sn_list:
             battery_status[sn] = self.battery_monitors[sn].get_realtime_battery_stats(
                 sn)
-        
+
         return battery_status
 
     def generate_schedule(self, consumption, price, batterie_capacity_kwh, num_batteries, stats, price_weight=1):
@@ -334,9 +335,9 @@ class AIScheduler(BaseScheduler):
             return net_consumption, battery_charges
 
         def objective(trial):
-            max_discharge_length = self.battery_capacity_kwh / \
+            max_discharge_length = self.battery_max_capacity_kwh / \
                 self.min_discharge_rate_kw * len(consumption) / 24
-            min_discharge_length = self.battery_capacity_kwh / \
+            min_discharge_length = self.battery_max_capacity_kwh / \
                 self.max_discharge_rate_kw * len(consumption) / 24
             durations = [trial.suggest_int(
                 f'duration_{i}', min_discharge_length, max_discharge_length, step=int((max_discharge_length-min_discharge_length)/10)) for i in range(num_batteries)]
@@ -389,7 +390,7 @@ class AIScheduler(BaseScheduler):
                         round(i*duration/num_windows+start)) for i in range(num_windows)]
             return segments
 
-        def split_schedules(schedules, num_windows, task_type='discharge'):
+        def split_schedules(schedules, num_windows, task_type='Discharge'):
             ret = []
             for schedule in schedules:
                 ret.extend(split_single_schedule(schedule, num_windows))
@@ -403,22 +404,22 @@ class AIScheduler(BaseScheduler):
         # charge_schedules = [_get_charging_window(i) for i in battery_charges]
 
         discharge_sched_split = split_schedules(
-            flat_discharge_schedules, 1, 'discharge')
+            flat_discharge_schedules, 1, 'Discharge')
         # charge_sched_split = split_schedules(flat_charge_schedules, 1, 'charge')
 
         # Use hardcoded schedules for charging windows.
-        charge_sched_split = [('charge', 75, 24),
-                              ('charge', 75, 24),
-                              ('charge', 75, 24),
-                              ('charge', 75, 24),
-                              ('charge', 75, 24)]
+        charge_sched_split = [('Charge', 75, 64),
+                              ('Charge', 85, 64),
+                              ('Charge', 55, 64),
+                              ('Charge', 95, 64),
+                              ('Charge', 78, 64)]
         all_schedules = sorted(discharge_sched_split +
                                charge_sched_split, key=lambda x: x[1])
 
         class Battery:
-            def __init__(self, capacity, battery_id):
-                self.id = battery_id
-                self.capacity = 30000
+            def __init__(self, capacity, sn):
+                self.sn = sn
+                self.capacity = capacity
                 self.current_charge = capacity  # Set initial charge to full capacity
                 self.fully_charged_rounds = 0
                 self.fully_discharged_rounds = 0
@@ -445,25 +446,26 @@ class AIScheduler(BaseScheduler):
                     self.fully_charged_rounds += 1
                     self.available_at = current_time + duration
 
-        class BatteryManager:
-            def __init__(self, tasks, battery_init_status, battery_capacity_kwh=5, time_unit=5):
+        class ProjectBatteryManager:
+            def __init__(self, tasks, battery_init_status, battery_max_capacity_kwh=5, sample_interval=5):
                 self.tasks = sorted(tasks, key=lambda x: x[1])
                 self.batteries = [
-                    Battery(power_level, i) for i, power_level in enumerate(battery_init_status)]
+                    Battery(x[1]['soc']/100*battery_max_capacity_kwh*1000, x[0]) for x in battery_init_status.items()]
                 self.output = []
-                self.battery_capacity_kwh = battery_capacity_kwh
+                self.battery_max_capacity_kwh = battery_max_capacity_kwh
+                self.sample_interval = sample_interval
 
             def allocate_battery(self, task_time, task_type, task_duration):
                 for battery in self.batteries:
-                    if task_type == "discharge" and battery.can_discharge(task_time):
+                    if task_type == "Discharge" and battery.can_discharge(task_time):
                         battery.discharge(task_duration, task_time)
                         self.output.append(
-                            (battery.id, task_time, task_type, task_duration))
+                            (battery.sn, task_time, task_type, task_duration))
                         return True
-                    elif task_type == "charge" and battery.can_charge(task_time):
+                    elif task_type == "Charge" and battery.can_charge(task_time):
                         battery.charge(task_duration, task_time)
                         self.output.append(
-                            (battery.id, task_time, task_type, task_duration))
+                            (battery.sn, task_time, task_type, task_duration))
                         return True
                 return False
 
@@ -474,8 +476,9 @@ class AIScheduler(BaseScheduler):
                     if not self.allocate_battery(task_time, task_type, task_duration):
                         print(
                             f'task {task_time} {task_type} {task_duration} failed to allocate battery')
-                def unit_to_time(unit):
-                    total_minutes = unit * 5
+
+                def unit_to_time(unit, sample_interval):
+                    total_minutes = int(unit * sample_interval)
                     hour = total_minutes // 60
                     minute = total_minutes % 60
                     return "{:02d}:{:02d}".format(hour, minute)
@@ -494,21 +497,22 @@ class AIScheduler(BaseScheduler):
                     'Time': 2,
                 }
 
-                schedules = []
+                schedules = {} 
                 for sn, task_time, task_type, task_duration in self.output:
-                    power = batterie_capacity_kwh * 1000 * \
-                        60 / (time_unit * task_duration)
-                    start_time = unit_to_time(task_time)
-                    end_time = unit_to_time(task_time + task_duration)
+                    power = int(batterie_capacity_kwh * 1000 * \
+                        60 / (self.sample_interval * task_duration))
+                    start_time = unit_to_time(task_time, self.sample_interval)
+                    end_time = unit_to_time(
+                        task_time + task_duration, self.sample_interval)
 
                     data = {
                         'deviceSn': sn,
                         'controlCommand': command_map[task_type],
                         'operatingMode': mode_map['Time'],
-                        'dischargeStart1': start_time if task_type == 'discharge' else "00:00",
-                        'dischargeEnd1': end_time if task_type == 'discharge' else "00:00",
-                        'chargeStart1': start_time if task_type == 'charge' else "00:00",
-                        'chargeEnd1': end_time if task_type == 'charge' else "00:00",
+                        'dischargeStart1': start_time if task_type == 'Discharge' else "00:00",
+                        'dischargeEnd1': end_time if task_type == 'Discharge' else "00:00",
+                        'chargeStart1': start_time if task_type == 'Charge' else "00:00",
+                        'chargeEnd1': end_time if task_type == 'Charge' else "00:00",
                         'antiBackflowSW': 1,
                         'dischargePower1': power,
                         'dischargeSOC1': 10,
@@ -516,19 +520,16 @@ class AIScheduler(BaseScheduler):
                         'chargePower1': power,
                         'enableGridCharge1': 1
                     }
-                    schedules.append(data)
-
+                    schedules[sn] = data
                 return schedules
-
 
         tasks = all_schedules
 
-        time_unit = 24*60/len(consumption)
-        battery_init_status = [np.random.randint(
-            1000, 30000) for _ in range(15)]
-        battery_manager = BatteryManager(tasks, battery_init_status)
+        sample_interval = 24*60/len(consumption)
+        battery_manager = ProjectBatteryManager(
+            tasks, stats, self.battery_max_capacity_kwh, sample_interval)
         json_schedule = battery_manager.manage_tasks()
-        return json_schedule 
+        return json_schedule
 
     def _get_command_from_schedule(self, current_time):
         return 'Idle'
@@ -538,9 +539,8 @@ class AIScheduler(BaseScheduler):
             demand, price = self._get_demand_and_price()
             stats = self._get_battery_status()
             self.schedule = self.generate_schedule(
-                demand, price, self.battery_capacity_kwh, self.num_batteries, stats, self.price_weight)
-        else:
-            return self.schedule 
+                demand, price, self.battery_max_capacity_kwh, self.num_batteries, stats, self.price_weight)
+        return self.schedule
 
     def required_data(self):
         return []
@@ -548,5 +548,5 @@ class AIScheduler(BaseScheduler):
 
 if __name__ == '__main__':
     scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler', battery_sn='RX2505ACA10JOA160037', test_mode=True)
+        scheduler_type='AIScheduler', battery_sn='RX2505ACA10JOA160037', test_mode=False, api_version='dev3')
     scheduler.start()
