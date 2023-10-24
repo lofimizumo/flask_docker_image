@@ -375,7 +375,7 @@ class ApiCommunicator:
                     response = self.session.get(url, headers=headers)
                 elif method == "POST":
                     response = self.session.post(
-                        url, data=data, json=json, headers=headers, timeout=300)
+                        url, data=data, json=json, headers=headers, timeout=None)
 
                 # Raises an exception for HTTP errors.
                 response.raise_for_status()
