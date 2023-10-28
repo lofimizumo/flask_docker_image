@@ -544,18 +544,13 @@ class AIScheduler(BaseScheduler):
 
                     data = {
                         'deviceSn': sn,
-                        'controlCommand': command_map[task_type],
                         'operatingMode': mode_map['Time'],
                         'dischargeStart1': start_time if task_type == 'Discharge' else "00:00",
                         'dischargeEnd1': end_time if task_type == 'Discharge' else "00:00",
-                        'chargeStart1': start_time if task_type == 'Charge' else "00:00",
-                        'chargeEnd1': end_time if task_type == 'Charge' else "00:00",
-                        'antiBackflowSW': 1,
+                        # 'chargeStart1': start_time if task_type == 'Charge' else "00:00",
+                        # 'chargeEnd1': end_time if task_type == 'Charge' else "00:00",
                         'dischargePower1': power,
-                        'dischargeSOC1': 10,
-                        'dischargePowerLimit1': 0,
-                        'chargePower1': power,
-                        'enableGridCharge1': 1
+                        # 'chargePower1': power,
                     }
                     schedules[sn] = data
                 return schedules
@@ -567,7 +562,7 @@ class AIScheduler(BaseScheduler):
             tasks, stats, self.battery_max_capacity_kwh, sample_interval)
         json_schedule = battery_manager.manage_tasks()
 
-        self.plot(consumption, price, battery_discharges, net_consumption)
+        # self.plot(consumption, price, battery_discharges, net_consumption)
         return json_schedule
 
     def _get_command_from_schedule(self, current_time):
