@@ -262,6 +262,7 @@ class AIScheduler(BaseScheduler):
         self.battery_monitors = {sn: util.PriceAndLoadMonitor(
             test_mode=False) for sn in sn_list}
         self.schedule = None
+        self.last_scheduled_date = None
 
     def _get_demand_and_price(self):
         # we don't need to get each battery's demand, just use the get_project_demand() method to get the total demand instead.
@@ -698,6 +699,9 @@ class AIScheduler(BaseScheduler):
         # plot_charge_windows(hours, consumption, battery_charges, net_consumption)
 
     def step(self):
+        current_date = datetime.datetime.now().date()
+        if self.last_scheduled_date is not None and current_date > self.last_scheduled_date:
+            self.schedule = None
         if self.schedule is None:
             demand, price = self._get_demand_and_price()
             stats = self._get_battery_status()
@@ -711,5 +715,5 @@ class AIScheduler(BaseScheduler):
 
 if __name__ == '__main__':
     scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10JOA160037','RX2505ACA10JOA160037','RX2505ACA10JOA160037','RX2505ACA10JOA160037','RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
+        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
     scheduler.start()
