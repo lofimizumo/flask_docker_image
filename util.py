@@ -111,7 +111,11 @@ class PriceAndLoadMonitor:
         self.test_mode = test_mode
 
     def get_realtime_price(self):
-        pass
+        url = 'https://api.amber.com.au/v1/sites/01HDN4PXKQ1MR29SWJPHBQE8M8/prices/current?next=0&previous=0&resolution=30'
+        header = {'accept': 'application/json','Authorization': 'Bearer psk_2d5030fe84a68769b6f48ab73bd48ebf'}
+        r = requests.get(url, headers=header)
+        prices = [x['perKwh'] for x in r.json()]
+        return prices[0]
 
     def get_sim_price(self, current_time):
         _price_test = [17.12,

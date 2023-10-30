@@ -80,7 +80,8 @@ class BatteryScheduler:
         print("Stopped.")
 
     def get_current_price(self):
-        return self.monitor.get_sim_price(self.get_current_time())
+        # return self.monitor.get_sim_price(self.get_current_time())
+        return self.monitor.get_realtime_price()
 
     def get_current_time(self):
         return self.monitor.get_current_time()
@@ -710,5 +711,5 @@ class AIScheduler(BaseScheduler):
 
 if __name__ == '__main__':
     scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
+        scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=True, api_version='dev3')
     scheduler.start()
