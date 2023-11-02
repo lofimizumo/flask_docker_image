@@ -49,8 +49,8 @@ class BatteryScheduler:
                 json = schedule[sn]
                 self.send_battery_command(json=json, sn=sn)
                 print(f'Schedule sent to battery: {sn}')
-                print(
-                    f'scheduled charging time: {json["chargeStart1"]} - {json["chargeEnd1"]}, scheduled discharging time: {json["dischargeStart1"]} - {json["dischargeEnd1"]}')
+                # print(
+                    # f'scheduled charging time: {json["chargeStart1"]} - {json["chargeEnd1"]}, scheduled discharging time: {json["dischargeStart1"]} - {json["dischargeEnd1"]}')
         elif type(self.scheduler) == PeakValleyScheduler:
             for sn in self.sn_list:
                 _current_price = self.get_current_price()
@@ -304,7 +304,22 @@ class AIScheduler(BaseScheduler):
         price = get_price_array(shoulder_period, peak_period,
                                 shoulder_price, off_peak_price, peak_price, interval)
         return np.array(demand, dtype=np.float64), np.array(price, dtype=np.float64)
-
+    def _get_solar(self, interval=5/60, test_mode=False):
+        if test_mode:
+            def gaussian_mixture(interval=0.5):
+                gaus_x = np.arange(0, 24, interval)
+                mu1 = 10.35
+                mu2 = 13.65
+                sigma = 1.67
+                gaus_y1 = np.exp(-0.5 * ((gaus_x - mu1) / sigma)
+                                 ** 2) / (sigma * np.sqrt(2 * np.pi))
+                gaus_y2 = np.exp(-0.5 * ((gaus_x - mu2) / sigma)
+                                 ** 2) / (sigma * np.sqrt(2 * np.pi))
+                gaus_y = (gaus_y1 + gaus_y2) / np.max(gaus_y1 + gaus_y2)
+                return gaus_x, gaus_y
+            max_solar = 5000
+            _, gaus_y = gaussian_mixture(interval)
+            return gaus_y*max_solar
     def _get_battery_status(self):
         battery_status = {}
         for sn in self.battery_sn_list:
@@ -326,7 +341,7 @@ class AIScheduler(BaseScheduler):
                 best_avg = float('-inf')
                 best_start = 0
 
-                # Step 1: Find the window with the highest rolling average
+                # Find the window with the highest rolling average
                 for start in range(0, num_hours - duration + 1):
                     weight_adjusted_array = [i*j*price_weight for i, j in zip(
                         net_consumption[start:start+duration], price[start:start+duration])]
@@ -335,7 +350,7 @@ class AIScheduler(BaseScheduler):
                         best_avg = avg
                         best_start = start
 
-                # Step 3: Place the battery's discharge
+                # Place the battery's discharge
                 capacity = 12*1000 * capacity
                 discharge_rate = capacity / duration
                 for h in range(best_start, best_start + duration):
@@ -344,35 +359,45 @@ class AIScheduler(BaseScheduler):
                     net_consumption[h] -= discharged
 
             return net_consumption, battery_discharges
-
-        def greedy_battery_charge(consumption, price, batteries, price_weight=1):
+        def greedy_battery_charge_with_mask(consumption, price, solar, batteries, engaged_slots, price_weight=1):
+            charge_rate = 1000
             num_hours = len(consumption)
             net_consumption = consumption.copy()
             battery_charges = [[0] * num_hours for _ in batteries]
 
-            for _, (capacity, duration) in enumerate(batteries):
+            np_price = np.array(price)
+            solar = np.array(solar)
+            consumption = np.array(consumption)
+
+            surplus_solar = np.clip(solar - consumption, 0, None)
+
+            power_from_grid = np.clip(charge_rate - surplus_solar, 0, None)
+
+            charging_cost = power_from_grid * np_price
+
+            for battery_idx, (capacity, duration) in enumerate(batteries):
                 best_avg = float('inf')
                 best_start = 0
 
-                charge_rate = capacity / duration
-                # Step 1: Find the window with the lowest rolling average
                 for start in range(0, num_hours - duration + 1):
-                    weight_adjusted_array = [
-                        charge_rate*i for i in price[start:start+duration]]
-                    avg = sum(weight_adjusted_array) / duration
-                    if avg < best_avg:
-                        best_avg = avg
-                        best_start = start
+                    # check if all slots in this window are available
+                    if all(engaged_slots[start:start+duration]):
+                        period_cost = charging_cost[start:start+duration]
+                        avg = sum(period_cost) / duration
+                        if avg < best_avg:
+                            best_avg = avg
+                            best_start = start
 
-                # Step 3: Place the battery's charge
+                total_capacity_kWh = 12 * 1000 * capacity
+                charge_per_hour = total_capacity_kWh / duration
+
                 for h in range(best_start, best_start + duration):
-                    charged = min(charge_rate, net_consumption[h])
-                    battery_charges[_][h] = charged
-                    net_consumption[h] += charged
+                    battery_charges[battery_idx][h] = charge_per_hour
+                    net_consumption[h] += charge_per_hour
 
             return net_consumption, battery_charges
 
-        def objective(trial):
+        def objective_discharging(trial):
             max_discharge_length = self.battery_max_capacity_kwh / \
                 self.min_discharge_rate_kw * len(consumption) / 24
             min_discharge_length = self.battery_max_capacity_kwh / \
@@ -392,18 +417,25 @@ class AIScheduler(BaseScheduler):
             """Expand peaks using Gaussian blur."""
             return gaussian_filter1d(data, sigma)
 
+        # 1. Discharging
         consumption = smooth_demand(consumption, sigma=6)
         study = optuna.create_study(direction='minimize')
-        study.optimize(objective, n_trials=100)
+        study.optimize(objective_discharging, n_trials=100)
         best_durations = [
             study.best_params[f"duration_{i}"] for i in range(num_batteries)]
         discharging_capacity = [[batterie_capacity_kwh, duration]
                                 for duration in best_durations]
-        # charging_needs = [[30000, 24] for x in range(num_batteries)]
-
         net_consumption, battery_discharges = greedy_battery_discharge(
             consumption, price, discharging_capacity)
-        # _, battery_charges = greedy_battery_charge(consumption,price, charging_needs)
+
+        # 2. Charging
+        # charge power set to 1000W, the interval is 5 minutes, so the charge duration is 60
+        charge_duration = 60
+        charging_needs = [[batterie_capacity_kwh, charge_duration]
+                          for x in range(num_batteries)]
+        masks = [all(mask[i] == 0 for mask in battery_discharges) for i in range(len(battery_discharges[0]))]
+        _, battery_charges = greedy_battery_charge_with_mask(
+            consumption, price, self._get_solar(test_mode=True), charging_needs, masks)
 
         def _get_charging_window(battery_charge_schedule):
             p_left = 0
@@ -437,28 +469,25 @@ class AIScheduler(BaseScheduler):
 
         discharge_schedules = [_get_charging_window(
             i) for i in battery_discharges]
+        charge_schedules = [_get_charging_window(i) for i in battery_charges]
         flat_discharge_schedules = [
             item for sublist in discharge_schedules for item in sublist]
-        # charge_schedules = [_get_charging_window(i) for i in battery_charges]
+        flat_charge_schedules = [
+            item for sublist in charge_schedules for item in sublist]
 
         discharge_sched_split = split_schedules(
             flat_discharge_schedules, 1, 'Discharge')
-        # charge_sched_split = split_schedules(flat_charge_schedules, 1, 'charge')
+        charge_sched_split = split_schedules(flat_charge_schedules, 1, 'Charge')
 
         # Use hardcoded schedules for charging windows.
-        charge_sched_split = [('Charge', 75, 64),
-                              ('Charge', 85, 64),
-                              ('Charge', 55, 64),
-                              ('Charge', 95, 64),
-                              ('Charge', 78, 64)]
         all_schedules = sorted(discharge_sched_split +
                                charge_sched_split, key=lambda x: x[1])
-
+        
         class Battery:
-            def __init__(self, capacity, sn):
+            def __init__(self, soc ,max_capacity, sn):
                 self.sn = sn
-                self.capacity = capacity
-                self.current_charge = capacity  # Set initial charge to full capacity
+                self.capacity = max_capacity*1000 
+                self.current_charge = soc  # Set initial charge to full capacity
                 self.fully_charged_rounds = 0
                 self.fully_discharged_rounds = 0
                 self.available_at = 0  # The time when the battery is available again
@@ -488,7 +517,7 @@ class AIScheduler(BaseScheduler):
             def __init__(self, tasks, battery_init_status, battery_max_capacity_kwh=5, sample_interval=5):
                 self.tasks = sorted(tasks, key=lambda x: x[1])
                 self.batteries = [
-                    Battery(x[1]['soc']/100*battery_max_capacity_kwh*1000, x[0]) for x in battery_init_status.items()]
+                    Battery(x[1]['soc']/100*battery_max_capacity_kwh*1000, battery_max_capacity_kwh, x[0]) for x in battery_init_status.items()]
                 self.output = []
                 self.battery_max_capacity_kwh = battery_max_capacity_kwh
                 self.sample_interval = sample_interval
@@ -542,18 +571,25 @@ class AIScheduler(BaseScheduler):
                     start_time = unit_to_time(task_time, self.sample_interval)
                     end_time = unit_to_time(
                         task_time + task_duration, self.sample_interval)
-
-                    data = {
-                        'deviceSn': sn,
-                        'operatingMode': mode_map['Time'],
-                        'dischargeStart1': start_time if task_type == 'Discharge' else "00:00",
-                        'dischargeEnd1': end_time if task_type == 'Discharge' else "00:00",
-                        # 'chargeStart1': start_time if task_type == 'Charge' else "00:00",
-                        # 'chargeEnd1': end_time if task_type == 'Charge' else "00:00",
-                        'dischargePower1': power,
-                        # 'chargePower1': power,
-                    }
-                    schedules[sn] = data
+                    
+                    if task_type == 'Discharge':
+                        data = {
+                            'deviceSn': sn,
+                            'operatingMode': mode_map['Time'],
+                            'dischargeStart1': start_time if task_type == 'Discharge' else "00:00",
+                            'dischargeEnd1': end_time if task_type == 'Discharge' else "00:00",
+                            'dischargePower1': power,
+                        }
+                        schedules[sn] = data | schedules.get(sn, {})
+                    elif task_type == 'Charge':
+                        data = {
+                            'deviceSn': sn,
+                            'operatingMode': mode_map['Time'],
+                            'chargeStart1': start_time if task_type == 'Charge' else "00:00",
+                            'chargeEnd1': end_time if task_type == 'Charge' else "00:00",
+                            'chargePower1': power,
+                        }
+                        schedules[sn] = data | schedules.get(sn, {})
                 return schedules
 
         tasks = all_schedules
@@ -701,6 +737,9 @@ class AIScheduler(BaseScheduler):
         if self.schedule is None:
             demand, price = self._get_demand_and_price()
             stats = self._get_battery_status()
+            with open('demand_price.pkl', 'wb') as f:
+                import pickle
+                pickle.dump((demand, price), f)
             self.schedule = self.generate_schedule(
                 demand, price, self.battery_max_capacity_kwh, self.num_batteries, stats, self.price_weight)
         return self.schedule
@@ -711,5 +750,5 @@ class AIScheduler(BaseScheduler):
 
 if __name__ == '__main__':
     scheduler = BatteryScheduler(
-        scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=True, api_version='dev3')
+        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
     scheduler.start()
