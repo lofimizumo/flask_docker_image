@@ -18,13 +18,13 @@ class BatteryScheduler:
         self.is_runing = False
         self.sn_list = battery_sn if type(battery_sn) == list else [
             battery_sn]
-        self._set_scheduler(scheduler_type)
+        self._set_scheduler(scheduler_type, api_version)
 
-    def _set_scheduler(self, scheduler_type):
+    def _set_scheduler(self, scheduler_type, api_version):
         if scheduler_type == 'PeakValley':
             self.scheduler = PeakValleyScheduler()
         elif scheduler_type == 'AIScheduler':
-            self.scheduler = AIScheduler(sn_list=self.sn_list)
+            self.scheduler = AIScheduler(sn_list=self.sn_list, api_version=api_version)
         else:
             raise ValueError(f"Unknown scheduler type: {scheduler_type}")
 
@@ -251,7 +251,7 @@ class PeakValleyScheduler(BaseScheduler):
 
 class AIScheduler(BaseScheduler):
 
-    def __init__(self, sn_list):
+    def __init__(self, sn_list, api_version='redx'):
         self.battery_max_capacity_kwh = 5
         self.num_batteries = len(sn_list)
         self.price_weight = 1
@@ -261,7 +261,7 @@ class AIScheduler(BaseScheduler):
             'https://da2e586eae72a40e5bde4ead0fe77b2f0.clg07azjl.paperspacegradient.com/')
         self.battery_sn_list = sn_list
         self.battery_monitors = {sn: util.PriceAndLoadMonitor(
-            test_mode=False) for sn in sn_list}
+            test_mode=False, api_version=api_version) for sn in sn_list}
         self.schedule = None
         self.last_scheduled_date = None
 
@@ -429,8 +429,8 @@ class AIScheduler(BaseScheduler):
             consumption, price, discharging_capacity)
 
         # 2. Charging
-        # charge power set to 1000W, the interval is 5 minutes, so the charge duration is 60
-        charge_duration = 60
+        # charge power set to 670W, the interval is 5 minutes, so the charge duration is 90
+        charge_duration = 90
         charging_needs = [[batterie_capacity_kwh, charge_duration]
                           for x in range(num_batteries)]
         masks = [all(mask[i] == 0 for mask in battery_discharges) for i in range(len(battery_discharges[0]))]
@@ -499,7 +499,7 @@ class AIScheduler(BaseScheduler):
                 return self.current_charge > 0 and not self.is_depleted() and self.available_at <= current_time
 
             def can_charge(self, current_time):
-                return self.current_charge < self.capacity and not self.is_depleted() and self.available_at <= current_time
+                return not self.is_depleted() and self.available_at <= current_time
 
             def discharge(self, duration, current_time):
                 if self.can_discharge(current_time):
@@ -749,6 +749,8 @@ class AIScheduler(BaseScheduler):
 
 
 if __name__ == '__main__':
+    # scheduler = BatteryScheduler(
+        # scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011','RX2505ACA10J0A170035','RX2505ACA10J0A170033','RX2505ACA10J0A160007','RX2505ACA10J0A180010'], test_mode=False, api_version='redx')
     scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
+        scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
     scheduler.start()
