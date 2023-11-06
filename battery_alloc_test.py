@@ -742,6 +742,7 @@ class AIScheduler(BaseScheduler):
                 pickle.dump((demand, price), f)
             self.schedule = self.generate_schedule(
                 demand, price, self.battery_max_capacity_kwh, self.num_batteries, stats, self.price_weight)
+            self.last_scheduled_date = current_date
         return self.schedule
 
     def required_data(self):
