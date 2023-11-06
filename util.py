@@ -319,9 +319,7 @@ class PriceAndLoadMonitor:
                         'chargeEnd1': end_time,
                         'dischargeStart1': empty_time,
                         'dischargeEnd1': empty_time,
-                        'enableGridCharge1': 1,
-                        'antiBackflowSW': 1,
-                        'chargePower1': 1500
+                        'chargePower1': 800
                         }
 
             elif command == 'Discharge':
@@ -334,8 +332,6 @@ class PriceAndLoadMonitor:
                         'chargeEnd1': empty_time,
                         'antiBackflowSW': 1,
                         'dischargePower1': 2500,
-                        'dischargeSOC1': 10,
-                        'dischargePowerLimit1': 0
                         }
             elif command == 'Idle':
                 data = {'deviceSn': sn,
