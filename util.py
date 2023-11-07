@@ -278,8 +278,11 @@ class PriceAndLoadMonitor:
         '''
         if self.test_mode:
             return next(self.sim_time_iter).strftime("%H:%M")
-        gold_coast_time = time.gmtime(time.time() + 3600 * 10)
-        return time.strftime("%H:%M", gold_coast_time)
+        gold_coast_time = datetime.now(tz=pytz.timezone(
+        'Australia/Brisbane')).strftime("%H:%M")
+        return gold_coast_time
+        # gold_coast_time = time.gmtime(time.time() + 3600 * 10)
+        # return time.strftime("%H:%M", gold_coast_time)
 
     @api_status_check(max_retries=3, delay=60)
     def send_battery_command(self, command=None, json=None, sn=None):

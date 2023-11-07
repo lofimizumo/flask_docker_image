@@ -737,9 +737,6 @@ class AIScheduler(BaseScheduler):
         if self.schedule is None:
             demand, price = self._get_demand_and_price()
             stats = self._get_battery_status()
-            with open('demand_price.pkl', 'wb') as f:
-                import pickle
-                pickle.dump((demand, price), f)
             self.schedule = self.generate_schedule(
                 demand, price, self.battery_max_capacity_kwh, self.num_batteries, stats, self.price_weight)
             self.last_scheduled_date = current_date
