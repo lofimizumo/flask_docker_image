@@ -11,7 +11,6 @@ RUN pip install numpy==1.25.1
 RUN pip install flask
 RUN pip install pytz
 RUN pip install requests
-RUN pip install pytz
 
 # The code to run when container is started
 COPY . .
