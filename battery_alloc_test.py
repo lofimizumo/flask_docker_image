@@ -24,7 +24,8 @@ class BatteryScheduler:
         if scheduler_type == 'PeakValley':
             self.scheduler = PeakValleyScheduler()
         elif scheduler_type == 'AIScheduler':
-            self.scheduler = AIScheduler(sn_list=self.sn_list, api_version=api_version)
+            self.scheduler = AIScheduler(
+                sn_list=self.sn_list, api_version=api_version)
         else:
             raise ValueError(f"Unknown scheduler type: {scheduler_type}")
 
@@ -45,12 +46,13 @@ class BatteryScheduler:
 
         if type(self.scheduler) == AIScheduler:
             schedule = self._get_battery_command()
+            # schedule = self.daytime_hotfix(schedule)
             for sn in self.sn_list:
                 json = schedule[sn]
                 self.send_battery_command(json=json, sn=sn)
                 print(f'Schedule sent to battery: {sn}')
                 # print(
-                    # f'scheduled charging time: {json["chargeStart1"]} - {json["chargeEnd1"]}, scheduled discharging time: {json["dischargeStart1"]} - {json["dischargeEnd1"]}')
+                # f'scheduled charging time: {json["chargeStart1"]} - {json["chargeEnd1"]}, scheduled discharging time: {json["dischargeStart1"]} - {json["dischargeEnd1"]}')
         elif type(self.scheduler) == PeakValleyScheduler:
             for sn in self.sn_list:
                 _current_price = self.get_current_price()
@@ -79,12 +81,34 @@ class BatteryScheduler:
         self.is_runing = False
         print("Stopped.")
 
+    def daytime_hotfix(self, schedule):
+        '''
+        Delay the discharging timer by 30 minutes when the load is low
+        '''
+        threshold = 2000
+        phase2_status = self.get_phase2_status()
+        load_phase2 = phase2_status['loadP']
+        if load_phase2 < threshold:
+            for sn in self.sn_list:
+                current_time = self.get_current_time()
+                # check if current_time is within the range of dischargeStart1 and dischargeEnd1
+                if schedule[sn]['dischargeStart1'] <= current_time <= schedule[sn]['dischargeEnd1']:
+                    # delay the dischargeStart by 30mins
+                    schedule[sn]['dischargeStart1'] = datetime.datetime.strptime(
+                        schedule[sn]['dischargeStart1'], '%H:%M') + datetime.timedelta(minutes=30)
+                    print(
+                        f'Delayed dischargeStart for Device: {sn} by 30mins due to low loadP')
+        return schedule
+
     def get_current_price(self):
         # return self.monitor.get_sim_price(self.get_current_time())
         return self.monitor.get_realtime_price()
 
     def get_current_time(self):
         return self.monitor.get_current_time()
+
+    def get_phase2_status(self):
+        return self.monitor.get_phase2_status()
 
     def get_current_battery_stats(self, sn):
         return self.monitor.get_realtime_battery_stats(sn)
@@ -304,6 +328,7 @@ class AIScheduler(BaseScheduler):
         price = get_price_array(shoulder_period, peak_period,
                                 shoulder_price, off_peak_price, peak_price, interval)
         return np.array(demand, dtype=np.float64), np.array(price, dtype=np.float64)
+
     def _get_solar(self, interval=5/60, test_mode=False):
         if test_mode:
             def gaussian_mixture(interval=0.5):
@@ -320,6 +345,7 @@ class AIScheduler(BaseScheduler):
             max_solar = 5000
             _, gaus_y = gaussian_mixture(interval)
             return gaus_y*max_solar
+
     def _get_battery_status(self):
         battery_status = {}
         for sn in self.battery_sn_list:
@@ -359,6 +385,7 @@ class AIScheduler(BaseScheduler):
                     net_consumption[h] -= discharged
 
             return net_consumption, battery_discharges
+
         def greedy_battery_charge_with_mask(consumption, price, solar, batteries, engaged_slots, price_weight=1):
             charge_rate = 1000
             num_hours = len(consumption)
@@ -433,7 +460,8 @@ class AIScheduler(BaseScheduler):
         charge_duration = 90
         charging_needs = [[batterie_capacity_kwh, charge_duration]
                           for x in range(num_batteries)]
-        masks = [all(mask[i] == 0 for mask in battery_discharges) for i in range(len(battery_discharges[0]))]
+        masks = [all(mask[i] == 0 for mask in battery_discharges)
+                 for i in range(len(battery_discharges[0]))]
         _, battery_charges = greedy_battery_charge_with_mask(
             consumption, price, self._get_solar(test_mode=True), charging_needs, masks)
 
@@ -477,16 +505,17 @@ class AIScheduler(BaseScheduler):
 
         discharge_sched_split = split_schedules(
             flat_discharge_schedules, 1, 'Discharge')
-        charge_sched_split = split_schedules(flat_charge_schedules, 1, 'Charge')
+        charge_sched_split = split_schedules(
+            flat_charge_schedules, 1, 'Charge')
 
         # Use hardcoded schedules for charging windows.
         all_schedules = sorted(discharge_sched_split +
                                charge_sched_split, key=lambda x: x[1])
-        
+
         class Battery:
-            def __init__(self, soc ,max_capacity, sn):
+            def __init__(self, soc, max_capacity, sn):
                 self.sn = sn
-                self.capacity = max_capacity*1000 
+                self.capacity = max_capacity*1000
                 self.current_charge = soc  # Set initial charge to full capacity
                 self.fully_charged_rounds = 0
                 self.fully_discharged_rounds = 0
@@ -571,7 +600,7 @@ class AIScheduler(BaseScheduler):
                     start_time = unit_to_time(task_time, self.sample_interval)
                     end_time = unit_to_time(
                         task_time + task_duration, self.sample_interval)
-                    
+
                     if task_type == 'Discharge':
                         data = {
                             'deviceSn': sn,
@@ -631,13 +660,16 @@ class AIScheduler(BaseScheduler):
             times = [time_string(i * 5) for i in range(288)]
 
             # Plot original consumption
-            sns.lineplot(x=times, y=consumption, marker='o', label='Original Consumption')
+            sns.lineplot(x=times, y=consumption, marker='o',
+                         label='Original Consumption')
 
             # Plot net consumption after battery discharge
-            sns.lineplot(x=times, y=net_consumption, linestyle='--', label='Net Consumption')
+            sns.lineplot(x=times, y=net_consumption,
+                         linestyle='--', label='Net Consumption')
 
             # Plot the weighted consumption
-            sns.lineplot(x=times, y=weight_adjusted_array, linestyle='dashdot', label='Weighted Consumption')
+            sns.lineplot(x=times, y=weight_adjusted_array,
+                         linestyle='dashdot', label='Weighted Consumption')
 
             # Plot the constant discharge rates for each battery as rectangles
             palette = sns.color_palette(n_colors=15)
@@ -654,12 +686,12 @@ class AIScheduler(BaseScheduler):
                         start = net_consumption[j] + height_tracker[j]
                         end = start + rate
                         plt.fill_between([times[j], times[j+1]], [start, start], [end, end], color=palette[i],
-                                        alpha=0.5, label=label if i not in legend_added else "")
+                                         alpha=0.5, label=label if i not in legend_added else "")
                         legend_added.add(i)
 
                         # Update the height tracker for the next battery
                         height_tracker[j] += rate
-            
+
             # Define a soft color palette for the periods
             soft_yellow = "#FFFACD"  # lemon chiffon
             soft_red = "#FFC1C1"  # rosy brown
@@ -671,26 +703,26 @@ class AIScheduler(BaseScheduler):
             for i, period in enumerate(shoulder_period):
                 start = times[time_to_minutes(period[0]) // 5]
                 end = times[time_to_minutes(period[1]) // 5]
-                plt.axvspan(start, end, color=soft_yellow, alpha=0.6, edgecolor='yellow', linestyle='dotted', linewidth=1.5, label='Shoulder Period' if i == 0 else "")
+                plt.axvspan(start, end, color=soft_yellow, alpha=0.6, edgecolor='yellow',
+                            linestyle='dotted', linewidth=1.5, label='Shoulder Period' if i == 0 else "")
 
             # Add the shaded regions with dotted frame for peak period
             for i, period in enumerate(peak_period):
                 start = times[time_to_minutes(period[0]) // 5]
                 end = times[time_to_minutes(period[1]) // 5]
-                plt.axvspan(start, end, color=soft_red, alpha=0.6, edgecolor='red', linestyle='dotted', linewidth=1.5, label='Peak Period' if i == 0 else "")
-
-            
+                plt.axvspan(start, end, color=soft_red, alpha=0.6, edgecolor='red',
+                            linestyle='dotted', linewidth=1.5, label='Peak Period' if i == 0 else "")
 
             plt.xlabel('Time')
             plt.ylabel('Consumption/Discharge Rate')
             plt.title('Energy Consumption and Battery Discharge')
             tick_spacing = 12
-            plt.xticks([times[i] for i in range(0, len(times), tick_spacing)], rotation=45)
-    
+            plt.xticks([times[i]
+                       for i in range(0, len(times), tick_spacing)], rotation=45)
+
             plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
             plt.tight_layout()
             plt.show()
-
 
         def plot_charge_windows(hours, consumption, battery_charges, net_consumption):
             net_consumption = np.array(net_consumption)
@@ -747,8 +779,8 @@ class AIScheduler(BaseScheduler):
 
 
 if __name__ == '__main__':
-    # scheduler = BatteryScheduler(
-        # scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011','RX2505ACA10J0A170035','RX2505ACA10J0A170033','RX2505ACA10J0A160007','RX2505ACA10J0A180010'], test_mode=False, api_version='redx')
     scheduler = BatteryScheduler(
-        scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
+        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx')
+    # scheduler = BatteryScheduler(
+    # scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
     scheduler.start()
