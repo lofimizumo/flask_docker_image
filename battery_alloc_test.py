@@ -49,6 +49,7 @@ class BatteryScheduler:
             # schedule = self.daytime_hotfix(schedule)
             for sn in self.sn_list:
                 json = schedule[sn]
+
                 self.send_battery_command(json=json, sn=sn)
                 print(f'Schedule sent to battery: {sn}')
                 # print(
@@ -610,13 +611,17 @@ class AIScheduler(BaseScheduler):
                             'dischargePower1': power,
                         }
                         schedules[sn] = data | schedules.get(sn, {})
+                    # todo: Now using fixed time schedule, change back to start_time and end_time later.
                     elif task_type == 'Charge':
                         data = {
                             'deviceSn': sn,
                             'operatingMode': mode_map['Time'],
-                            'chargeStart1': start_time if task_type == 'Charge' else "00:00",
-                            'chargeEnd1': end_time if task_type == 'Charge' else "00:00",
-                            'chargePower1': power,
+                            # 'chargeStart1': start_time if task_type == 'Charge' else "00:00",
+                            # 'chargeEnd1': end_time if task_type == 'Charge' else "00:00",
+                            # 'chargePower1': power,
+                            'chargeStart1': "09:00",
+                            'chargeEnd1':  "15:00",
+                            'chargePower1': "800",
                         }
                         schedules[sn] = data | schedules.get(sn, {})
                 return schedules
@@ -780,7 +785,7 @@ class AIScheduler(BaseScheduler):
 
 if __name__ == '__main__':
     scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx')
+        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011','RX2505ACA10J0A170035','RX2505ACA10J0A170033','RX2505ACA10J0A160007','RX2505ACA10J0A180010'], test_mode=False, api_version='redx')
     # scheduler = BatteryScheduler(
-    # scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
+        # scheduler_type='PeakValley'/, battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
     scheduler.start()
