@@ -4,6 +4,7 @@ import time
 from datetime import datetime, timedelta
 import pytz
 from itertools import cycle
+import logging
 
 
 def api_status_check(max_retries=10, delay=10):
@@ -347,10 +348,17 @@ class PriceAndLoadMonitor:
         if json:
             data = json
 
-        headers = {'token': self.token}
-        response = self.api.send_request(
-            "device/set_params", method='POST', json=data, headers=headers)
-        print(f'Send command {command} to battery {sn}, response: {response}')
+        try:
+            headers = {'token': self.token}
+            response = self.api.send_request(
+                "device/set_params", method='POST', json=data, headers=headers)
+            print(f'Send command {command} to battery {sn}, response: {response}')
+        except ConnectionError as e:
+            logging.error(f"Connection error occurred: {e}")
+            response = None 
+        except Exception as e:
+            logging.error(f"An unexpected error occurred: {e}")
+            response = None 
         return response
 
 

@@ -4,6 +4,7 @@ import datetime
 import time
 import numpy as np
 import util
+from solar_prediction import WeatherInfoFetcher
 
 
 class BatteryScheduler:
@@ -331,21 +332,34 @@ class AIScheduler(BaseScheduler):
         return np.array(demand, dtype=np.float64), np.array(price, dtype=np.float64)
 
     def _get_solar(self, interval=5/60, test_mode=False):
+        def gaussian_mixture(interval=0.5):
+            gaus_x = np.arange(0, 24, interval)
+            mu1 = 10.35
+            mu2 = 13.65
+            sigma = 1.67
+            gaus_y1 = np.exp(-0.5 * ((gaus_x - mu1) / sigma)
+                             ** 2) / (sigma * np.sqrt(2 * np.pi))
+            gaus_y2 = np.exp(-0.5 * ((gaus_x - mu2) / sigma)
+                             ** 2) / (sigma * np.sqrt(2 * np.pi))
+            gaus_y = (gaus_y1 + gaus_y2) / np.max(gaus_y1 + gaus_y2)
+            return gaus_x, gaus_y
         if test_mode:
-            def gaussian_mixture(interval=0.5):
-                gaus_x = np.arange(0, 24, interval)
-                mu1 = 10.35
-                mu2 = 13.65
-                sigma = 1.67
-                gaus_y1 = np.exp(-0.5 * ((gaus_x - mu1) / sigma)
-                                 ** 2) / (sigma * np.sqrt(2 * np.pi))
-                gaus_y2 = np.exp(-0.5 * ((gaus_x - mu2) / sigma)
-                                 ** 2) / (sigma * np.sqrt(2 * np.pi))
-                gaus_y = (gaus_y1 + gaus_y2) / np.max(gaus_y1 + gaus_y2)
-                return gaus_x, gaus_y
             max_solar = 5000
-            _, gaus_y = gaussian_mixture(interval)
-            return gaus_y*max_solar
+        else:
+            try:
+                weather_fetcher = WeatherInfoFetcher('Shaws Bay')
+                rain_info = weather_fetcher.get_rain_cloud_forecast_24h(
+                    weather_fetcher.get_response())
+                
+                # test only, delete this line
+                rain_info = {'clouds': 30, 'rain': 0}
+                max_solar = (1-(rain_info['clouds']+rain_info['rain'])/(2*100))*5000
+            except Exception as e:
+                print(e)
+                max_solar = 5000
+
+        _, gaus_y = gaussian_mixture(interval)
+        return gaus_y*max_solar
 
     def _get_battery_status(self):
         battery_status = {}
@@ -397,13 +411,11 @@ class AIScheduler(BaseScheduler):
             solar = np.array(solar)
             consumption = np.array(consumption)
 
-            surplus_solar = np.clip(solar - consumption, 0, None)
-
-            power_from_grid = np.clip(charge_rate - surplus_solar, 0, None)
-
-            charging_cost = power_from_grid * np_price
 
             for battery_idx, (capacity, duration) in enumerate(batteries):
+                surplus_solar = np.clip(solar - net_consumption, 0, None)
+                power_from_grid = np.clip(charge_rate - surplus_solar, 0, None)
+                charging_cost = power_from_grid * np_price
                 best_avg = float('inf')
                 best_start = 0
 
@@ -445,6 +457,33 @@ class AIScheduler(BaseScheduler):
             """Expand peaks using Gaussian blur."""
             return gaussian_filter1d(data, sigma)
 
+        # 0. Preprocessing Consumption Data
+        # Because the consumption is taking the battery charging energy into the total consumption
+        # If we want to have the pure consumption data, we need to subtract the charging energy from the total consumption
+        # The charging energy is estimated at 670W*4h = 2.68kWh
+        # the subtraction is only applied on time from 8:00 to 15:00
+
+        def preprocess_consumption(consumption: list) -> list:
+            # 1. Remove the energy consumption by charging the battery
+            samples_per_hour = len(consumption)/24
+            charging_power_per_hour = 2100
+
+            start_time = 8  # 8:00 AM
+            end_time = 15   # 3:00 PM
+            start_index = int(start_time * samples_per_hour)
+            end_index = int(end_time * samples_per_hour)
+
+            preprocessed_consumption = consumption[:]
+
+            for i in range(start_index, end_index):
+                preprocessed_consumption[i] -= charging_power_per_hour
+
+            # 2. Clip the negative consumption prediction
+            preprocessed_consumption = [max(0, i) for i in preprocessed_consumption]
+            return preprocessed_consumption
+
+        consumption = preprocess_consumption(consumption)
+
         # 1. Discharging
         consumption = smooth_demand(consumption, sigma=6)
         study = optuna.create_study(direction='minimize')
@@ -458,13 +497,13 @@ class AIScheduler(BaseScheduler):
 
         # 2. Charging
         # charge power set to 670W, the interval is 5 minutes, so the charge duration is 90
-        charge_duration = 90
+        charge_duration = 70
         charging_needs = [[batterie_capacity_kwh, charge_duration]
                           for x in range(num_batteries)]
         masks = [all(mask[i] == 0 for mask in battery_discharges)
                  for i in range(len(battery_discharges[0]))]
         _, battery_charges = greedy_battery_charge_with_mask(
-            consumption, price, self._get_solar(test_mode=True), charging_needs, masks)
+            consumption, price, self._get_solar(), charging_needs, masks)
 
         def _get_charging_window(battery_charge_schedule):
             p_left = 0
@@ -524,12 +563,18 @@ class AIScheduler(BaseScheduler):
 
             def is_depleted(self):
                 return self.fully_discharged_rounds >= 2 and self.fully_charged_rounds >= 2
+            
+            def is_charged(self):
+                return self.fully_charged_rounds >= 1
+            
+            def is_discharged(self):
+                return self.fully_discharged_rounds >= 1
 
             def can_discharge(self, current_time):
-                return self.current_charge > 0 and not self.is_depleted() and self.available_at <= current_time
+                return self.current_charge > 0 and not self.is_discharged() and self.available_at <= current_time
 
             def can_charge(self, current_time):
-                return not self.is_depleted() and self.available_at <= current_time
+                return not self.is_charged() and self.available_at <= current_time
 
             def discharge(self, duration, current_time):
                 if self.can_discharge(current_time):
@@ -568,8 +613,8 @@ class AIScheduler(BaseScheduler):
 
             def manage_tasks(self):
                 for task_type, task_time, task_duration in self.tasks:
-                    print(
-                        f'try to allocate a battery for: (task_type: {task_type}, task_time: {task_time}, task_duration: {task_duration}))')
+                    # print(
+                        # f'try to allocate a battery for: (task_type: {task_type}, task_time: {task_time}, task_duration: {task_duration}))')
                     if not self.allocate_battery(task_time, task_type, task_duration):
                         print(
                             f'task {task_time} {task_type} {task_duration} failed to allocate battery')
@@ -616,12 +661,12 @@ class AIScheduler(BaseScheduler):
                         data = {
                             'deviceSn': sn,
                             'operatingMode': mode_map['Time'],
-                            # 'chargeStart1': start_time if task_type == 'Charge' else "00:00",
-                            # 'chargeEnd1': end_time if task_type == 'Charge' else "00:00",
-                            # 'chargePower1': power,
-                            'chargeStart1': "09:00",
-                            'chargeEnd1':  "15:00",
-                            'chargePower1': "800",
+                            'chargeStart1': start_time if task_type == 'Charge' else "00:00",
+                            'chargeEnd1': end_time if task_type == 'Charge' else "00:00",
+                            'chargePower1': power,
+                            # 'chargeStart1': "09:00",
+                            # 'chargeEnd1':  "15:00",
+                            # 'chargePower1': "800",
                         }
                         schedules[sn] = data | schedules.get(sn, {})
                 return schedules
@@ -785,7 +830,7 @@ class AIScheduler(BaseScheduler):
 
 if __name__ == '__main__':
     scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011','RX2505ACA10J0A170035','RX2505ACA10J0A170033','RX2505ACA10J0A160007','RX2505ACA10J0A180010'], test_mode=False, api_version='redx')
+        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx')
     # scheduler = BatteryScheduler(
-        # scheduler_type='PeakValley'/, battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
+    # scheduler_type='PeakValley'/, battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
     scheduler.start()
