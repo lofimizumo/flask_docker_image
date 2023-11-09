@@ -7,6 +7,7 @@ from threading import Thread
 app = Flask(__name__)
 
 schedulers = {}
+scheduler_shawsbay = None
 
 
 @app.route('/')
@@ -43,6 +44,23 @@ def stop_scheduler():
     else:
         return jsonify(status='error', message='Scheduler not found'), 404
 
+@app.route('/start_shawsbay', methods=['POST'])
+def ai_scheduler():
+    data = request.get_json()
+    
+    scheduler = BatteryScheduler(
+        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx')
+    thread = Thread(target=scheduler.start)
+    thread.daemon = True  # This will make sure the thread exits when the main program exits
+    thread.start()
+    return jsonify(status='success', message='Shawsbay Scheduler started'), 200
 
+@app.route('/stop', methods=['POST'])
+def stop_scheduler():
+    if scheduler_shawsbay:
+        scheduler_shawsbay.stop()
+        return jsonify(status='success', message='Scheduler stopped'), 200
+    else:
+        return jsonify(status='error', message='Shawsbay Scheduler is not running'), 404
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
