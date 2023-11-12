@@ -252,6 +252,16 @@ class PriceAndLoadMonitor:
         response = self.api.send_request(
             "device/get_latest_data", method='POST', json=data, headers=headers)
         return response['data']
+    
+    def get_project_stats(self, grid_ID=1, phase=2):
+        '''
+        Currently we have only one project, shawsbay, so we hard code the gridID as 1.
+        '''
+        data = {'gridId': grid_ID}
+        headers = {'token': self.token}
+        response = self.api.send_request(
+            "grid/get_meter_reading", method='POST', json=data, headers=headers)
+        return response['data'][f'phase{phase}']
 
     def get_project_demand(self, grid_ID=1, phase=2):
         '''

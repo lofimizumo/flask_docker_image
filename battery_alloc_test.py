@@ -4,6 +4,8 @@ import datetime
 import time
 import numpy as np
 import util
+import pytz
+import logging
 from solar_prediction import WeatherInfoFetcher
 
 
@@ -47,13 +49,16 @@ class BatteryScheduler:
 
         if type(self.scheduler) == AIScheduler:
             schedule = self._get_battery_command()
-            # schedule = self.daytime_hotfix(schedule)
+            schedule = self.daytime_hotfix(schedule)
             for sn in self.sn_list:
                 json = schedule[sn]
 
                 self.send_battery_command(json=json, sn=sn)
-                print(f'Schedule sent to battery: {sn}')
-                # print(
+                current_gold_coast_time = datetime.now(
+                    tz=pytz.timezone('Australia/Brisbane')).strftime("%H:%M")
+                logging.info(
+                    f'Schedule sent to battery: {sn} at {current_gold_coast_time}')
+                # logging.info(
                 # f'scheduled charging time: {json["chargeStart1"]} - {json["chargeEnd1"]}, scheduled discharging time: {json["dischargeStart1"]} - {json["dischargeEnd1"]}')
         elif type(self.scheduler) == PeakValleyScheduler:
             for sn in self.sn_list:
@@ -65,7 +70,7 @@ class BatteryScheduler:
                 _command = self._get_battery_command(
                     current_price=_current_price, current_usage=_current_usage, current_time=_current_time, current_soc=_current_soc)
                 self.send_battery_command(command=_command, sn=sn)
-            print(
+            logging.info(
                 f"Current price: {_current_price}, current usage: {_current_usage}, current time: {_current_time}, current soc: {_current_soc}, command: {_command}")
         if self.test_mode:
             interval = 0.1
@@ -77,28 +82,39 @@ class BatteryScheduler:
             self._start()
             self.s.run()
         except KeyboardInterrupt:
-            print("Stopped.")
+            logging.info("Stopped.")
 
     def stop(self):
         self.is_runing = False
-        print("Stopped.")
+        logging.info("Stopped.")
 
     def daytime_hotfix(self, schedule):
         '''
         Delay the discharging timer by 30 minutes when the load is low
         '''
-        threshold = 2000
-        phase2_status = self.get_phase2_status()
-        load_phase2 = phase2_status['loadP']
-        if load_phase2 < threshold:
+        threshold = 1000
+        try:
+            load = self.get_project_status()
+        except Exception as e:
+            load = 2000
+        if load < threshold:
             for sn in self.sn_list:
                 current_time = self.get_current_time()
-                # check if current_time is within the range of dischargeStart1 and dischargeEnd1
-                if schedule[sn]['dischargeStart1'] <= current_time <= schedule[sn]['dischargeEnd1']:
-                    # delay the dischargeStart by 30mins
-                    schedule[sn]['dischargeStart1'] = datetime.datetime.strptime(
+                start_time = schedule[sn]['dischargeStart1']
+                end_time = schedule[sn]['dischargeEnd1']
+                # convert the string time to compare them
+                current_time = datetime.datetime.strptime(
+                    current_time, '%H:%M')
+                start_time = datetime.datetime.strptime(
+                    start_time, '%H:%M')
+                end_time = datetime.datetime.strptime(
+                    end_time, '%H:%M')
+                if current_time >= start_time and current_time <= end_time:
+                    adjusted_start_time = datetime.datetime.strptime(
                         schedule[sn]['dischargeStart1'], '%H:%M') + datetime.timedelta(minutes=30)
-                    print(
+                    schedule[sn]['dischargeStart1'] = adjusted_start_time.strftime(
+                        '%H:%M')
+                    logging.info(
                         f'Delayed dischargeStart for Device: {sn} by 30mins due to low loadP')
         return schedule
 
@@ -109,8 +125,8 @@ class BatteryScheduler:
     def get_current_time(self):
         return self.monitor.get_current_time()
 
-    def get_phase2_status(self):
-        return self.monitor.get_phase2_status()
+    def get_project_status(self, project_id=1, phase=2):
+        return self.monitor.get_project_stats(project_id, phase)
 
     def get_current_battery_stats(self, sn):
         return self.monitor.get_realtime_battery_stats(sn)
@@ -350,12 +366,13 @@ class AIScheduler(BaseScheduler):
                 weather_fetcher = WeatherInfoFetcher('Shaws Bay')
                 rain_info = weather_fetcher.get_rain_cloud_forecast_24h(
                     weather_fetcher.get_response())
-                
-                # test only, delete this line
-                rain_info = {'clouds': 30, 'rain': 0}
-                max_solar = (1-(rain_info['clouds']+rain_info['rain'])/(2*100))*5000
+                # here we give clouds more weight than rain based on the assumption that clouds have a bigger impact on solar generation
+                max_solar = (
+                    1-(1.4*rain_info['clouds']+0.6*rain_info['rain'])/(2*100))*5000
+                logging.info(
+                    f'Weather forecast: rain: {rain_info["rain"]}, clouds: {rain_info["clouds"]}, max_solar: {max_solar}')
             except Exception as e:
-                print(e)
+                logging.error(e)
                 max_solar = 5000
 
         _, gaus_y = gaussian_mixture(interval)
@@ -410,7 +427,6 @@ class AIScheduler(BaseScheduler):
             np_price = np.array(price)
             solar = np.array(solar)
             consumption = np.array(consumption)
-
 
             for battery_idx, (capacity, duration) in enumerate(batteries):
                 surplus_solar = np.clip(solar - net_consumption, 0, None)
@@ -479,7 +495,8 @@ class AIScheduler(BaseScheduler):
                 preprocessed_consumption[i] -= charging_power_per_hour
 
             # 2. Clip the negative consumption prediction
-            preprocessed_consumption = [max(0, i) for i in preprocessed_consumption]
+            preprocessed_consumption = [max(0, i)
+                                        for i in preprocessed_consumption]
             return preprocessed_consumption
 
         consumption = preprocess_consumption(consumption)
@@ -518,7 +535,7 @@ class AIScheduler(BaseScheduler):
             return durations
 
         for i, b in enumerate(battery_discharges):
-            print(f'Battery {i+1} discharging window:',
+            logging.info(f'Battery {i+1} discharging window:',
                   _get_charging_window(b))
 
         def split_single_schedule(schedule, num_windows):
@@ -563,10 +580,10 @@ class AIScheduler(BaseScheduler):
 
             def is_depleted(self):
                 return self.fully_discharged_rounds >= 2 and self.fully_charged_rounds >= 2
-            
+
             def is_charged(self):
                 return self.fully_charged_rounds >= 1
-            
+
             def is_discharged(self):
                 return self.fully_discharged_rounds >= 1
 
@@ -613,10 +630,10 @@ class AIScheduler(BaseScheduler):
 
             def manage_tasks(self):
                 for task_type, task_time, task_duration in self.tasks:
-                    # print(
-                        # f'try to allocate a battery for: (task_type: {task_type}, task_time: {task_time}, task_duration: {task_duration}))')
+                    # logging.info(
+                    # f'try to allocate a battery for: (task_type: {task_type}, task_time: {task_time}, task_duration: {task_duration}))')
                     if not self.allocate_battery(task_time, task_type, task_duration):
-                        print(
+                        logging.info(
                             f'task {task_time} {task_type} {task_duration} failed to allocate battery')
 
                 def unit_to_time(unit, sample_interval):

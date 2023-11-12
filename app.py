@@ -46,16 +46,15 @@ def stop_scheduler():
 
 @app.route('/start_shawsbay', methods=['POST'])
 def ai_scheduler():
-    data = request.get_json()
-    
-    scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx')
-    thread = Thread(target=scheduler.start)
+    shawsbay_phase2_devices = ['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'] 
+    scheduler_shawsbay = BatteryScheduler(
+        scheduler_type='AIScheduler', battery_sn= shawsbay_phase2_devices, test_mode=False, api_version='redx')
+    thread = Thread(target=scheduler_shawsbay.start)
     thread.daemon = True  # This will make sure the thread exits when the main program exits
     thread.start()
     return jsonify(status='success', message='Shawsbay Scheduler started'), 200
 
-@app.route('/stop', methods=['POST'])
+@app.route('/stop_shawsbay', methods=['POST'])
 def stop_scheduler():
     if scheduler_shawsbay:
         scheduler_shawsbay.stop()
