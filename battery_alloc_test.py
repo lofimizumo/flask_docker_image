@@ -8,7 +8,7 @@ import pytz
 import logging
 from solar_prediction import WeatherInfoFetcher
 
-
+logging.basicConfig(level=logging.INFO)
 class BatteryScheduler:
 
     def __init__(self, scheduler_type='PeakValley', battery_sn=None, test_mode=False, api_version='dev3'):
@@ -58,8 +58,6 @@ class BatteryScheduler:
                     tz=pytz.timezone('Australia/Brisbane')).strftime("%H:%M")
                 logging.info(
                     f'Schedule sent to battery: {sn} at {current_gold_coast_time}')
-                # logging.info(
-                # f'scheduled charging time: {json["chargeStart1"]} - {json["chargeEnd1"]}, scheduled discharging time: {json["dischargeStart1"]} - {json["dischargeEnd1"]}')
         elif type(self.scheduler) == PeakValleyScheduler:
             for sn in self.sn_list:
                 _current_price = self.get_current_price()
@@ -83,6 +81,9 @@ class BatteryScheduler:
             self.s.run()
         except KeyboardInterrupt:
             logging.info("Stopped.")
+        except Exception as e:
+            logging.error(e)
+            self._start()
 
     def stop(self):
         self.is_runing = False

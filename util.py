@@ -67,9 +67,10 @@ def api_status_check(max_retries=10, delay=10):
             return response
 
         def check_response(response):
-            if response['errorCode'] != 0:
-                raise ValueError(
-                    f"Command failed to execute. Response: {response}")
+            if response is None or not isinstance(response, dict):
+                raise ValueError("Invalid response: None or not a dictionary.")
+            if 'errorCode' not in response or response['errorCode'] != 0:
+                raise ValueError(f"Command failed to execute. Response: {response}")
             return True
         def check_status(args, kwargs):
             is_TestMode = args[0].test_mode
