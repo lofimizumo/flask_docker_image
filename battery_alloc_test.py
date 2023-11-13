@@ -94,7 +94,6 @@ class BatteryScheduler:
             logging.info("Stopped.")
         except Exception as e:
             logging.error(f"Error in start: {e}")
-            self.start()
 
     def stop(self):
         self.is_runing = False
