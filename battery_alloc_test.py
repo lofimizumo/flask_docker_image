@@ -1,6 +1,6 @@
 # The class for auto schedule of charging/discharging the battery
 import sched
-import datetime
+from datetime import datetime, timedelta
 import time
 import numpy as np
 import util
