@@ -31,7 +31,7 @@ def basic_scheduler():
     return jsonify(status='success', message='Scheduler started'), 200
 
 @app.route('/stop', methods=['POST'])
-def stop_scheduler():
+def stop_basic_scheduler():
     data = request.get_json()
     sn = data['deviceSn']
     
@@ -55,7 +55,7 @@ def ai_scheduler():
     return jsonify(status='success', message='Shawsbay Scheduler started'), 200
 
 @app.route('/stop_shawsbay', methods=['POST'])
-def stop_scheduler():
+def stop_ai_scheduler():
     if scheduler_shawsbay:
         scheduler_shawsbay.stop()
         return jsonify(status='success', message='Scheduler stopped'), 200

@@ -7,6 +7,8 @@ COPY . /notebooks/
 # ENV CONDA_ALWAYS_YES=true
 RUN apk update
 RUN apk --no-cache add linux-headers gcc g++
+RUN pip install optuna
+RUN pip install scipy
 RUN pip install numpy==1.25.1
 RUN pip install flask
 RUN pip install pytz
