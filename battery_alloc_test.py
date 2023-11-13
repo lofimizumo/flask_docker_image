@@ -9,6 +9,8 @@ import logging
 from solar_prediction import WeatherInfoFetcher
 
 logging.basicConfig(level=logging.INFO)
+
+
 class BatteryScheduler:
 
     def __init__(self, scheduler_type='PeakValley', battery_sn=None, test_mode=False, api_version='dev3'):
@@ -44,46 +46,55 @@ class BatteryScheduler:
         return self.scheduler.step(**kwargs)
 
     def _start(self, interval=1800):
-        if not self.is_runing:
+        if not self.is_running:
             return
 
-        if type(self.scheduler) == AIScheduler:
-            schedule = self._get_battery_command()
-            schedule = self.daytime_hotfix(schedule)
-            for sn in self.sn_list:
-                json = schedule[sn]
+        try:
+            if isinstance(self.scheduler, AIScheduler):
+                self._process_ai_scheduler()
+            elif isinstance(self.scheduler, PeakValleyScheduler):
+                self._process_peak_valley_scheduler()
+            if self.test_mode:
+                interval = 0.1
+            self.event = self.s.enter(interval, 1, self._start)
+        except Exception as e:
+            logging.error(f"An error occurred in _start: {e}")
+            self.event = self.s.enter(interval, 1, self._start)
 
-                self.send_battery_command(json=json, sn=sn)
-                current_gold_coast_time = datetime.now(
-                    tz=pytz.timezone('Australia/Brisbane')).strftime("%H:%M")
-                logging.info(
-                    f'Schedule sent to battery: {sn} at {current_gold_coast_time}')
-        elif type(self.scheduler) == PeakValleyScheduler:
-            for sn in self.sn_list:
-                _current_price = self.get_current_price()
-                _bat_stats = self.get_current_battery_stats(sn)
-                _current_usage = _bat_stats['loadP']
-                _current_soc = _bat_stats['soc']/100.0
-                _current_time = self.get_current_time()
-                _command = self._get_battery_command(
-                    current_price=_current_price, current_usage=_current_usage, current_time=_current_time, current_soc=_current_soc)
-                self.send_battery_command(command=_command, sn=sn)
-            logging.info(
-                f"Current price: {_current_price}, current usage: {_current_usage}, current time: {_current_time}, current soc: {_current_soc}, command: {_command}")
-        if self.test_mode:
-            interval = 0.1
-        self.event = self.s.enter(interval, 1, self._start)
+    def _process_ai_scheduler(self):
+        schedule = self._get_battery_command()
+        schedule = self.daytime_hotfix(schedule)
+        for sn in self.sn_list:
+            json = schedule[sn]
+            self.send_battery_command(json=json, sn=sn)
+            current_time = datetime.now(tz=pytz.timezone(
+                'Australia/Brisbane')).strftime("%H:%M")
+            logging.info(f'Schedule sent to battery: {sn} at {current_time}')
+
+    def _process_peak_valley_scheduler(self):
+        for sn in self.sn_list:
+            current_price = self.get_current_price()
+            bat_stats = self.get_current_battery_stats(sn)
+            current_usage = bat_stats['loadP']
+            current_soc = bat_stats['soc'] / 100.0
+            current_time = self.get_current_time()
+            command = self._get_battery_command(
+                current_price=current_price, current_usage=current_usage,
+                current_time=current_time, current_soc=current_soc)
+            self.send_battery_command(command=command, sn=sn)
+        logging.info(f"Current price: {current_price}, current usage: {current_usage}, "
+                     f"current time: {current_time}, current soc: {current_soc}, command: {command}")
 
     def start(self):
-        self.is_runing = True
+        self.is_running = True
         try:
             self._start()
             self.s.run()
         except KeyboardInterrupt:
             logging.info("Stopped.")
         except Exception as e:
-            logging.error(e)
-            self._start()
+            logging.error(f"Error in start: {e}")
+            self.start()
 
     def stop(self):
         self.is_runing = False
@@ -124,10 +135,13 @@ class BatteryScheduler:
                 continue
             adjusted_start_time = current_time + timedelta(minutes=30)
             if adjusted_start_time >= end_time:
-                logging.warning(f'Cannot delay dischargeStart for Device: {sn} as it overlaps with dischargeEnd.')
+                logging.warning(
+                    f'Cannot delay dischargeStart for Device: {sn} as it overlaps with dischargeEnd.')
                 continue
-            schedule[sn]['dischargeStart1'] = adjusted_start_time.strftime('%H:%M')
-            logging.info(f'Delayed dischargeStart for Device: {sn} by 30 mins due to low load.')
+            schedule[sn]['dischargeStart1'] = adjusted_start_time.strftime(
+                '%H:%M')
+            logging.info(
+                f'Delayed dischargeStart for Device: {sn} by 30 mins due to low load.')
 
         return schedule
 
@@ -549,7 +563,7 @@ class AIScheduler(BaseScheduler):
 
         for i, b in enumerate(battery_discharges):
             logging.info(f'Battery {i+1} discharging window:',
-                  _get_charging_window(b))
+                         _get_charging_window(b))
 
         def split_single_schedule(schedule, num_windows):
             start = schedule[0]
