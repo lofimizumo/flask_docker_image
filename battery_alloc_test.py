@@ -111,7 +111,7 @@ class BatteryScheduler:
                     end_time, '%H:%M')
                 if current_time >= start_time and current_time <= end_time:
                     adjusted_start_time = datetime.strptime(
-                        schedule[sn]['dischargeStart1'], '%H:%M') + datetime.timedelta(minutes=30)
+                        schedule[sn]['dischargeStart1'], '%H:%M') + timedelta(minutes=30)
                     schedule[sn]['dischargeStart1'] = adjusted_start_time.strftime(
                         '%H:%M')
                     logging.info(
