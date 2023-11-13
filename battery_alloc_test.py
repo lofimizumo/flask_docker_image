@@ -91,32 +91,44 @@ class BatteryScheduler:
 
     def daytime_hotfix(self, schedule):
         '''
-        Delay the discharging timer by 30 minutes when the load is low
+        Delay the discharging timer by 30 minutes when the load is low.
+
+        Args:
+            schedule (dict): A dictionary containing the discharge schedule.
+
+        Returns:
+            dict: The updated schedule with adjusted discharge times.
         '''
         threshold = 1000
         try:
             load = self.get_project_status()
         except Exception as e:
-            load = 2000
-        if load < threshold:
-            for sn in self.sn_list:
-                current_time = self.get_current_time()
-                start_time = schedule[sn]['dischargeStart1']
-                end_time = schedule[sn]['dischargeEnd1']
-                # convert the string time to compare them
-                current_time = datetime.strptime(
-                    current_time, '%H:%M')
-                start_time = datetime.strptime(
-                    start_time, '%H:%M')
-                end_time = datetime.strptime(
-                    end_time, '%H:%M')
-                if current_time >= start_time and current_time <= end_time:
-                    adjusted_start_time = datetime.strptime(
-                        schedule[sn]['dischargeStart1'], '%H:%M') + timedelta(minutes=30)
-                    schedule[sn]['dischargeStart1'] = adjusted_start_time.strftime(
-                        '%H:%M')
-                    logging.info(
-                        f'Delayed dischargeStart for Device: {sn} by 30mins due to low loadP')
+            logging.error(f"Error getting project status: {e}")
+            load = 2000  # Fallback load value
+
+        if load >= threshold:
+            return schedule
+
+        for sn in self.sn_list:
+            current_time = self.get_current_time()
+            start_time = schedule[sn]['dischargeStart1']
+            end_time = schedule[sn]['dischargeEnd1']
+            try:
+                current_time = datetime.strptime(current_time, '%H:%M')
+                start_time = datetime.strptime(start_time, '%H:%M')
+                end_time = datetime.strptime(end_time, '%H:%M')
+            except ValueError as e:
+                logging.error(f"Time conversion error for Device: {sn}: {e}")
+                continue
+            if not (start_time <= current_time <= end_time):
+                continue
+            adjusted_start_time = current_time + timedelta(minutes=30)
+            if adjusted_start_time >= end_time:
+                logging.warning(f'Cannot delay dischargeStart for Device: {sn} as it overlaps with dischargeEnd.')
+                continue
+            schedule[sn]['dischargeStart1'] = adjusted_start_time.strftime('%H:%M')
+            logging.info(f'Delayed dischargeStart for Device: {sn} by 30 mins due to low load.')
+
         return schedule
 
     def get_current_price(self):
