@@ -103,14 +103,14 @@ class BatteryScheduler:
                 start_time = schedule[sn]['dischargeStart1']
                 end_time = schedule[sn]['dischargeEnd1']
                 # convert the string time to compare them
-                current_time = datetime.datetime.strptime(
+                current_time = datetime.strptime(
                     current_time, '%H:%M')
-                start_time = datetime.datetime.strptime(
+                start_time = datetime.strptime(
                     start_time, '%H:%M')
-                end_time = datetime.datetime.strptime(
+                end_time = datetime.strptime(
                     end_time, '%H:%M')
                 if current_time >= start_time and current_time <= end_time:
-                    adjusted_start_time = datetime.datetime.strptime(
+                    adjusted_start_time = datetime.strptime(
                         schedule[sn]['dischargeStart1'], '%H:%M') + datetime.timedelta(minutes=30)
                     schedule[sn]['dischargeStart1'] = adjusted_start_time.strftime(
                         '%H:%M')
@@ -232,13 +232,13 @@ class PeakValleyScheduler(BaseScheduler):
         self.bat_cap = self.soc * self.BatCap
 
         # Convert start and end times to datetime.time
-        self.t_chg_start1 = datetime.datetime.strptime(
+        self.t_chg_start1 = datetime.strptime(
             self.ChgStart1, '%H:%M').time()
-        self.t_chg_end1 = datetime.datetime.strptime(
+        self.t_chg_end1 = datetime.strptime(
             self.ChgEnd1, '%H:%M').time()
-        self.t_dis_start2 = datetime.datetime.strptime(
+        self.t_dis_start2 = datetime.strptime(
             self.DisChgStart2, '%H:%M').time()
-        self.t_dis_end2 = datetime.datetime.strptime(
+        self.t_dis_end2 = datetime.strptime(
             self.DisChgEnd2, '%H:%M').time()
 
     def step(self, current_price, current_time, current_usage, current_soc):
@@ -253,7 +253,7 @@ class PeakValleyScheduler(BaseScheduler):
         buy_price, sell_price = np.percentile(
             self.price_history, [self.BuyPct, self.SellPct])
 
-        current_timenum = datetime.datetime.strptime(
+        current_timenum = datetime.strptime(
             current_time, '%H:%M').time()
 
         command = ['Idle', 0]  # No action by default
@@ -830,7 +830,7 @@ class AIScheduler(BaseScheduler):
         # plot_charge_windows(hours, consumption, battery_charges, net_consumption)
 
     def step(self):
-        current_date = datetime.datetime.now().date()
+        current_date = datetime.now().date()
         if self.last_scheduled_date is not None and current_date > self.last_scheduled_date:
             self.schedule = None
         if self.schedule is None:
