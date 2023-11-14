@@ -321,14 +321,13 @@ class PriceAndLoadMonitor:
             'Time': 2,
         }
 
+        # command is only used for peakvalley model, json is used for AI model
         if command:
             from datetime import datetime, timedelta
             formatted_start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            end_time = datetime.now() + timedelta(minutes=5)
-            formatted_end_time = end_time.strftime("%Y-%m-%d %H:%M:%S")
             data = {}
             command = command
-            start_time = self.get_current_time()
+            start_time = self.get_current_time(time_zone='Australia/Brisbane')
             end_time = (datetime.strptime(start_time, '%H:%M') +
                         timedelta(minutes=30)).strftime("%H:%M")
             empty_time = '00:00'
