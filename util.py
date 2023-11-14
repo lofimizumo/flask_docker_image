@@ -262,7 +262,7 @@ class PriceAndLoadMonitor:
     def get_realtime_battery_stats(self, sn):
         # Test Get latest summary data
         data = {'deviceSn': sn}
-        headers = {'token': self.get_token(api_version=api_version)}
+        headers = {'token': self.get_token()}
         response = self.api.send_request(
             "device/get_latest_data", method='POST', json=data, headers=headers)
         return response['data']
@@ -272,7 +272,7 @@ class PriceAndLoadMonitor:
         Currently we have only one project, shawsbay, so we hard code the gridID as 1.
         '''
         data = {'gridId': grid_ID}
-        headers = {'token': self.get_token(api_version=api_version)}
+        headers = {'token': self.get_token()}
         response = self.api.send_request(
             "grid/get_meter_reading", method='POST', json=data, headers=headers)
         return response['data'][f'phase{phase}']
@@ -284,7 +284,7 @@ class PriceAndLoadMonitor:
         date_today = datetime.now(tz=pytz.timezone(
             'Australia/Sydney')).strftime("%Y_%m_%d")
         data = {'date': date_today, 'gridID': grid_ID, 'phase': phase}
-        headers = {'token': self.get_token(api_version=api_version)}
+        headers = {'token': self.get_token()}
         response = self.api.send_request(
             "grid/get_prediction_v2", method='POST', json=data, headers=headers)
         prediction_average = [
@@ -369,7 +369,7 @@ class PriceAndLoadMonitor:
             data = json
 
         try:
-            headers = {'token': self.get_token(api_version=api_version)}
+            headers = {'token': self.get_token()}
             response = self.api.send_request(
                 "device/set_params", method='POST', json=data, headers=headers)
             print(f'Send command {command} to battery {sn}, response: {response}')
