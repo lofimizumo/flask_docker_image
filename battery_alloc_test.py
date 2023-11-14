@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 
 class BatteryScheduler:
 
-    def __init__(self, scheduler_type='PeakValley', battery_sn=None, test_mode=False, api_version='dev3'):
+    def __init__(self, scheduler_type='PeakValley', battery_sn=None, test_mode=False, api_version='dev3',pv_sn=None):
         self.s = sched.scheduler(time.time, time.sleep)
         self.scheduler = None
         self.monitor = util.PriceAndLoadMonitor(
@@ -21,17 +21,20 @@ class BatteryScheduler:
         self.test_mode = test_mode
         self.event = None
         self.is_runing = False
+        self.pv_sn = pv_sn
         self.sn_list = battery_sn if type(battery_sn) == list else [
             battery_sn]
-        self._set_scheduler(scheduler_type, api_version)
+        self.last_schedule = {}
+        self.last_scheduled_date = None
+        self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
-    def _set_scheduler(self, scheduler_type, api_version):
+    def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
         if scheduler_type == 'PeakValley':
             self.scheduler = PeakValleyScheduler()
             self.scheduler.init_price_history(self.monitor.get_price_history())
         elif scheduler_type == 'AIScheduler':
             self.scheduler = AIScheduler(
-                sn_list=self.sn_list, api_version=api_version)
+                sn_list=self.sn_list, api_version=api_version, pv_sn=pv_sn)
         else:
             raise ValueError(f"Unknown scheduler type: {scheduler_type}")
 
@@ -52,6 +55,7 @@ class BatteryScheduler:
 
         try:
             if isinstance(self.scheduler, AIScheduler):
+                interval = 180
                 self._process_ai_scheduler()
             elif isinstance(self.scheduler, PeakValleyScheduler):
                 self._process_peak_valley_scheduler()
@@ -63,14 +67,27 @@ class BatteryScheduler:
             self.event = self.s.enter(interval, 1, self._start)
 
     def _process_ai_scheduler(self):
-        schedule = self._get_battery_command()
-        schedule = self.daytime_hotfix(schedule)
+        current_day = datetime.now().day
+        if self.last_scheduled_date != current_day:
+            self.last_schedule = self._get_battery_command()
+            self.last_scheduled_date = current_day
+
+        schedule = self.daytime_hotfix_discharging(self.last_schedule)
+        schedule = self.daytime_hotfix_charging(schedule)
+
         for sn in self.sn_list:
-            json = schedule[sn]
-            self.send_battery_command(json=json, sn=sn)
-            current_time = datetime.now(tz=pytz.timezone(
-                'Australia/Brisbane')).strftime("%H:%M")
-            logging.info(f'Schedule sent to battery: {sn} at {current_time}')
+            battery_schedule = schedule.get(sn, None)
+            if not battery_schedule:
+                continue
+            try:
+                self.send_battery_command(json=battery_schedule, sn=sn)
+                current_time = self.get_current_time() 
+                logging.info(f'Schedule sent to battery: {sn} at {current_time}')
+            except Exception as e:
+                logging.error(f"Error sending battery command: {e}")
+                continue
+
+        self.last_schedule = schedule
 
     def _process_peak_valley_scheduler(self):
         for sn in self.sn_list:
@@ -101,7 +118,38 @@ class BatteryScheduler:
         self.is_runing = False
         logging.info("Stopped.")
 
-    def daytime_hotfix(self, schedule):
+    def daytime_hotfix_charging(self, schedule):
+        """
+        If we see extra exporting solar power available, we increase the charging power to absorb it.
+
+        Args:
+            schedule (dict): A dictionary containing the discharge schedule.
+
+        Returns:
+            dict: The updated schedule with adjusted discharge times.
+        """
+        try:
+            load = self.get_project_status()
+        except Exception as e:
+            logging.error(f"Error getting project status or battery stats: {e}")
+            return schedule  
+
+        surplus_power = max(0, 0 - load)  
+        max_charging_power = 1500
+        if surplus_power <= 0:
+            return schedule  
+
+        for sn in self.sn_list:
+            current_charging_power = schedule.get(sn, {}).get('chargePower1', 0)
+            adjusted_charging_power = min(max_charging_power, current_charging_power + surplus_power)
+            surplus_power -= (adjusted_charging_power - current_charging_power)
+            surplus_power = max(0, surplus_power)  # Avoid negative surplus
+
+            if sn in schedule:
+                schedule[sn]['chargePower1'] = adjusted_charging_power
+
+        return schedule
+    def daytime_hotfix_discharging(self, schedule):
         '''
         Delay the discharging timer by 30 minutes when the load is low.
 
@@ -322,7 +370,7 @@ class PeakValleyScheduler(BaseScheduler):
 
 class AIScheduler(BaseScheduler):
 
-    def __init__(self, sn_list, api_version='redx'):
+    def __init__(self, sn_list, pv_sn, api_version='redx'):
         self.battery_max_capacity_kwh = 5
         self.num_batteries = len(sn_list)
         self.price_weight = 1
@@ -331,6 +379,7 @@ class AIScheduler(BaseScheduler):
         self.api = util.ApiCommunicator(
             'https://da2e586eae72a40e5bde4ead0fe77b2f0.clg07azjl.paperspacegradient.com/')
         self.battery_sn_list = sn_list
+        self.pv_sn = pv_sn
         self.battery_monitors = {sn: util.PriceAndLoadMonitor(
             test_mode=False, api_version=api_version) for sn in sn_list}
         self.schedule = None
@@ -857,14 +906,14 @@ class AIScheduler(BaseScheduler):
 
     def step(self):
         current_date = datetime.now().date()
-        if self.last_scheduled_date is not None and current_date > self.last_scheduled_date:
-            self.schedule = None
-        if self.schedule is None:
+        # Check if it's a new day or there's no existing schedule
+        if self.last_scheduled_date is None or current_date > self.last_scheduled_date:
             demand, price = self._get_demand_and_price()
             stats = self._get_battery_status()
             self.schedule = self.generate_schedule(
                 demand, price, self.battery_max_capacity_kwh, self.num_batteries, stats, self.price_weight)
             self.last_scheduled_date = current_date
+
         return self.schedule
 
     def required_data(self):
@@ -872,7 +921,7 @@ class AIScheduler(BaseScheduler):
 
 
 if __name__ == '__main__':
-    # scheduler = BatteryScheduler(
-        # scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx')
-    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
+    scheduler = BatteryScheduler(
+        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx', pv_sn='RX2505ACA10J0A170033')
+    # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
     scheduler.start()

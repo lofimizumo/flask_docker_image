@@ -278,7 +278,7 @@ class PriceAndLoadMonitor:
         Currently we have only one project, shawsbay, so we hard code the gridID as 1.
         '''
         date_today = datetime.now(tz=pytz.timezone(
-            'Australia/Brisbane')).strftime("%Y_%m_%d")
+            'Australia/Sydney')).strftime("%Y_%m_%d")
         data = {'date': date_today, 'gridID': grid_ID, 'phase': phase}
         headers = {'token': self.token}
         response = self.api.send_request(
@@ -300,7 +300,7 @@ class PriceAndLoadMonitor:
         if self.test_mode:
             return next(self.sim_time_iter).strftime("%H:%M")
         gold_coast_time = datetime.now(tz=pytz.timezone(
-        'Australia/Brisbane')).strftime("%H:%M")
+        'Australia/Sydney')).strftime("%H:%M")
         return gold_coast_time
         # gold_coast_time = time.gmtime(time.time() + 3600 * 10)
         # return time.strftime("%H:%M", gold_coast_time)
