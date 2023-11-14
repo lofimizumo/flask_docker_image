@@ -119,6 +119,15 @@ class PriceAndLoadMonitor:
         prices = [x['perKwh'] for x in r.json()]
         return prices[0]
 
+    def get_price_history(self):
+        api_key = 'psk_2d5030fe84a68769b6f48ab73bd48ebf'
+        fetcher = AmberFetcher(api_key)
+        yesterday_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        day_before_yesterday_date = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
+        response = fetcher.get_prices(day_before_yesterday_date, yesterday_date, resolution=30)
+        prices = [x[1] for x in response]
+        return prices
+
     def get_sim_price(self, current_time):
         _price_test = [17.12,
                        18.48,
@@ -414,3 +423,24 @@ class ApiCommunicator:
         if expected_output != self.send_request(command, method, data, headers, retries):
             raise ValueError(f"Command {command} failed to execute.")
         return True
+
+class AmberFetcher:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.base_url = f"https://api.amber.com.au/v1"
+        self.site_id = None 
+    def get_site(self):
+        header = {'Authorization': f'Bearer {self.api_key}','accept': 'application/json'}
+        response = requests.get(f"{self.base_url}/sites", headers=header)
+        return response.json()[0]['id']
+    
+    def get_prices(self, start_date, end_date, resolution=30):
+        if not self.site_id:
+            self.site_id = self.get_site()
+        header = {'Authorization': f'Bearer {self.api_key}','accept': 'application/json'}
+        url = f"{self.base_url}/sites/{self.site_id}/prices?startDate={start_date}&endDate={end_date}&resolution={resolution}"
+        response = requests.get(url, headers=header)
+        data = response.json()
+        data = list(filter(lambda x: x['channelType'] == 'general', data))
+        prices = [(x['nemTime'], x['perKwh']) for x in data]
+        return prices

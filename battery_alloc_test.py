@@ -28,6 +28,7 @@ class BatteryScheduler:
     def _set_scheduler(self, scheduler_type, api_version):
         if scheduler_type == 'PeakValley':
             self.scheduler = PeakValleyScheduler()
+            self.scheduler.init_price_history(self.monitor.get_price_history())
         elif scheduler_type == 'AIScheduler':
             self.scheduler = AIScheduler(
                 sn_list=self.sn_list, api_version=api_version)
@@ -78,9 +79,10 @@ class BatteryScheduler:
             current_usage = bat_stats['loadP']
             current_soc = bat_stats['soc'] / 100.0
             current_time = self.get_current_time()
+            current_pv = bat_stats['ppv']
             command = self._get_battery_command(
                 current_price=current_price, current_usage=current_usage,
-                current_time=current_time, current_soc=current_soc)
+                current_time=current_time, current_soc=current_soc, current_pv=current_pv)
             self.send_battery_command(command=command, sn=sn)
         logging.info(f"Current price: {current_price}, current usage: {current_usage}, "
                      f"current time: {current_time}, current soc: {current_soc}, command: {command}")
@@ -196,64 +198,21 @@ class PeakValleyScheduler(BaseScheduler):
         self.SpikeLevel = 300
         self.SolarCharge = 0
         self.SellBack = 0
-        self.BuyPct = 50
-        self.SellPct = 75
-        self.LookBackBars = 1 * 48
-        self.ChgStart1 = '8:00'
+        self.BuyPct = 30
+        self.SellPct = 80
+        self.LookBackBars = 2 * 48
+        self.ChgStart1 = '5:00'
         self.ChgEnd1 = '16:00'
         self.DisChgStart2 = '16:05'
         self.DisChgEnd2 = '23:55'
+        self.DisChgStart1 = '0:00'
+        self.DisChgEnd1 = '5:00'
+        
+        self.date = None
 
         # Initial data containers and setup
-        self.price_history = [17.12,
-                              18.48,
-                              18,
-                              18,
-                              15.7,
-                              14.96,
-                              14.94,
-                              14.67,
-                              14.98,
-                              15.83,
-                              15.9,
-                              17.57,
-                              16.19,
-                              15.62,
-                              16.65,
-                              13.83,
-                              17.06,
-                              17.56,
-                              17.48,
-                              15.25,
-                              15.39,
-                              15.39,
-                              14.84,
-                              15.87,
-                              16.54,
-                              17.95,
-                              17.8,
-                              18.55,
-                              18.08,
-                              19.02,
-                              17.95,
-                              17.89,
-                              18.79,
-                              15.57,
-                              16.39,
-                              17.61,
-                              17.39,
-                              20.61,
-                              20.42,
-                              18.14,
-                              18.43,
-                              18.42,
-                              17.91,
-                              18.39,
-                              17.16,
-                              21.37,
-                              18.89,
-                              19.39,
-                              ]
+        self.price_history = None
+        self.solar = None
         self.soc = self.BatSocMin
         self.bat_cap = self.soc * self.BatCap
 
@@ -266,8 +225,52 @@ class PeakValleyScheduler(BaseScheduler):
             self.DisChgStart2, '%H:%M').time()
         self.t_dis_end2 = datetime.strptime(
             self.DisChgEnd2, '%H:%M').time()
+        self.t_dis_start1 = datetime.strptime(
+            self.DisChgStart1, '%H:%M').time()
+        self.t_dis_end1 = datetime.strptime(
+            self.DisChgEnd1, '%H:%M').time()
+    
+    def init_price_history(self, price_history):
+        self.price_history = price_history
+    
 
-    def step(self, current_price, current_time, current_usage, current_soc):
+    def _get_solar(self, interval=0.5, test_mode=False):
+        def gaussian_mixture(interval=0.5):
+            gaus_x = np.arange(0, 24, interval)
+            mu1 = 10.35
+            mu2 = 13.65
+            sigma = 1.67
+            gaus_y1 = np.exp(-0.5 * ((gaus_x - mu1) / sigma)
+                             ** 2) / (sigma * np.sqrt(2 * np.pi))
+            gaus_y2 = np.exp(-0.5 * ((gaus_x - mu2) / sigma)
+                             ** 2) / (sigma * np.sqrt(2 * np.pi))
+            gaus_y = (gaus_y1 + gaus_y2) / np.max(gaus_y1 + gaus_y2)
+            return gaus_x, gaus_y
+        if test_mode:
+            max_solar = 5000
+        else:
+            try:
+                weather_fetcher = WeatherInfoFetcher('Shaws Bay')
+                rain_info = weather_fetcher.get_rain_cloud_forecast_24h(
+                    weather_fetcher.get_response())
+                # here we give clouds more weight than rain based on the assumption that clouds have a bigger impact on solar generation
+                max_solar = (
+                    1-(1.4*rain_info['clouds']+0.6*rain_info['rain'])/(2*100))*5000
+                logging.info(
+                    f'Weather forecast: rain: {rain_info["rain"]}, clouds: {rain_info["clouds"]}, max_solar: {max_solar}')
+            except Exception as e:
+                logging.error(e)
+                max_solar = 5000
+
+        _, gaus_y = gaussian_mixture(interval)
+        return gaus_y*max_solar
+
+    def step(self, current_price, current_time, current_usage, current_soc, current_pv):
+        # Update solar data each day
+        if self.date != datetime.now().day or self.solar is None:
+            self.solar = self._get_solar()
+            self.date = datetime.now().day
+
         # Update battery state
         self.bat_cap = current_soc * self.BatCap
 
@@ -284,7 +287,7 @@ class PeakValleyScheduler(BaseScheduler):
 
         command = ['Idle', 0]  # No action by default
 
-        if self._is_charging_period(current_timenum) and current_price <= buy_price:
+        if self._is_charging_period(current_timenum) and (current_price <= buy_price or current_pv > current_usage):
             # Charging logic
             chg_delta = self.BatChgMax * self.HrMin
             temp_chg = chg_delta + self.bat_cap
@@ -292,7 +295,7 @@ class PeakValleyScheduler(BaseScheduler):
             self.bat_cap = min(temp_chg, self.BatMaxCapacity)
             command = ['Charge', self.BatChgMax]
 
-        elif self._is_discharging_period(current_timenum) and (current_price >= sell_price or current_price > self.SpikeLevel):
+        elif self._is_discharging_period(current_timenum) and (current_price >= sell_price or current_price > self.SpikeLevel) and current_pv < current_usage:
             # Discharging logic
             dischg_delta = self.BatDisMax * \
                 self.HrMin if self.SellBack else min(
@@ -311,10 +314,10 @@ class PeakValleyScheduler(BaseScheduler):
         return t >= self.t_chg_start1 and t <= self.t_chg_end1
 
     def _is_discharging_period(self, t):
-        return (t >= self.t_dis_start2 and t <= self.t_dis_end2)
+        return (t >= self.t_dis_start2 and t <= self.t_dis_end2) or (t >= self.t_dis_start1 and t <= self.t_dis_end1)
 
     def required_data(self):
-        return ['current_price', 'current_time', 'current_usage']
+        return ['current_price', 'current_time', 'current_usage', 'current_soc', 'current_pv']
 
 
 class AIScheduler(BaseScheduler):
@@ -560,9 +563,6 @@ class AIScheduler(BaseScheduler):
                     p_left = p_right
             return durations
 
-        for i, b in enumerate(battery_discharges):
-            logging.info(f'Battery {i+1} discharging window:',
-                         _get_charging_window(b))
 
         def split_single_schedule(schedule, num_windows):
             start = schedule[0]
@@ -872,8 +872,7 @@ class AIScheduler(BaseScheduler):
 
 
 if __name__ == '__main__':
-    scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx')
     # scheduler = BatteryScheduler(
-    # scheduler_type='PeakValley'/, battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
+        # scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx')
+    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
     scheduler.start()

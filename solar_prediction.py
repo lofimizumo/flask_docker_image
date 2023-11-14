@@ -1,5 +1,7 @@
 from typing import TypedDict, Optional
+from datetime import datetime, time
 import requests
+import pytz
 
 class WeatherData(TypedDict, total=False):
     list: 'CurrentWeatherData'
@@ -38,10 +40,20 @@ class WeatherInfoFetcher:
         Safely retrieves rain information from weather data.
         """
         def _is_time_between_8_and_16(timestamp: int) -> bool:
-            from datetime import datetime, time
-            time_of_day = datetime.fromtimestamp(timestamp).time()
-            start_time = time(8, 0)
-            end_time = time(16, 0)
+            sydney_timezone = pytz.timezone('Australia/Sydney')
+            day_today = datetime.now(tz=sydney_timezone).day
+            time_of_day = datetime.fromtimestamp(timestamp, tz=sydney_timezone)
+
+            year = time_of_day.year
+            month = time_of_day.month
+            day = time_of_day.day
+
+            if day_today != day:
+                return False
+
+            start_time = datetime(year, month, day, 8, 0, 0, tzinfo=sydney_timezone)
+            end_time = datetime(year, month, day, 16, 0, 0, tzinfo=sydney_timezone)
+
             return start_time <= time_of_day <= end_time
 
         weather_24hours = weather_data.get('list')[:24]
@@ -78,3 +90,10 @@ class WeatherInfoFetcher:
             'rain': average_rain,
             'clouds': average_clouds
         }
+
+if __name__ == "__main__":
+    location = "Shaws Bay"
+    weather_info_fetcher = WeatherInfoFetcher(location)
+    weather_data = weather_info_fetcher.get_response()
+    rain_cloud_forecast_24h = weather_info_fetcher.get_rain_cloud_forecast_24h(weather_data)
+    print(rain_cloud_forecast_24h)
