@@ -95,7 +95,7 @@ class BatteryScheduler:
             bat_stats = self.get_current_battery_stats(sn)
             current_usage = bat_stats['loadP']
             current_soc = bat_stats['soc'] / 100.0
-            current_time = self.get_current_time()
+            current_time = self.get_current_time(time_zone='Australia/Brisbane')
             current_pv = bat_stats['ppv']
             command = self._get_battery_command(
                 current_price=current_price, current_usage=current_usage,
@@ -195,11 +195,10 @@ class BatteryScheduler:
         return schedule
 
     def get_current_price(self):
-        # return self.monitor.get_sim_price(self.get_current_time())
         return self.monitor.get_realtime_price()
 
-    def get_current_time(self):
-        return self.monitor.get_current_time()
+    def get_current_time(self, time_zone = 'Australia/Sydney'):
+        return self.monitor.get_current_time(time_zone)
 
     def get_project_status(self, project_id=1, phase=2):
         return self.monitor.get_project_stats(project_id, phase)

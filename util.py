@@ -293,17 +293,14 @@ class PriceAndLoadMonitor:
                           for i in range(48)]
         return cycle(time_intervals)
 
-    def get_current_time(self):
+    def get_current_time(self, time_zone='Australia/Sydney'):
         '''
         Return the current time in the simulation in the format like 2021-10-01 21:00
         '''
         if self.test_mode:
             return next(self.sim_time_iter).strftime("%H:%M")
-        gold_coast_time = datetime.now(tz=pytz.timezone(
-        'Australia/Sydney')).strftime("%H:%M")
-        return gold_coast_time
-        # gold_coast_time = time.gmtime(time.time() + 3600 * 10)
-        # return time.strftime("%H:%M", gold_coast_time)
+        local_time = datetime.now(tz=pytz.timezone(time_zone)).strftime("%H:%M")
+        return local_time
 
     @api_status_check(max_retries=3, delay=60)
     def send_battery_command(self, command=None, json=None, sn=None):
