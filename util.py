@@ -256,6 +256,7 @@ class PriceAndLoadMonitor:
         else:
             response = self.api.send_request("user/token", method='POST', data={
                 'user_account': 'yetao_admin', 'secret': 'a~L$o8dJ246c'}, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        self.token_last_updated = datetime.now()
         return response['data']['token']
 
     def get_realtime_battery_stats(self, sn):
