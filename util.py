@@ -108,7 +108,8 @@ class PriceAndLoadMonitor:
         else:
             self.api = ApiCommunicator(
                 base_url="https://redxpower.com/restapi")
-        self.token = self.get_token(api_version=api_version)
+        self.token = None 
+        self.token_last_updated = datetime.now()
         # Test Mode is for testing the battery control without sending command to the actual battery
         self.test_mode = test_mode
 
@@ -246,7 +247,9 @@ class PriceAndLoadMonitor:
     def get_sim_load(self):
         return next(self.sim_load_iter)
 
-    def get_token(self, api_version='dev3'):
+    def get_token(self, api_version='redx'):
+        if self.token and (datetime.now() - self.token_last_updated) < timedelta(hours=1):
+            return self.token
         if api_version == 'redx':
             response = self.api.send_request("user/token", method='POST', data={
                 'user_account': 'yetao_admin', 'secret': 'tpass%#%'}, headers={'Content-Type': 'application/x-www-form-urlencoded'})
@@ -258,7 +261,7 @@ class PriceAndLoadMonitor:
     def get_realtime_battery_stats(self, sn):
         # Test Get latest summary data
         data = {'deviceSn': sn}
-        headers = {'token': self.token}
+        headers = {'token': self.get_token(api_version=api_version)}
         response = self.api.send_request(
             "device/get_latest_data", method='POST', json=data, headers=headers)
         return response['data']
@@ -268,7 +271,7 @@ class PriceAndLoadMonitor:
         Currently we have only one project, shawsbay, so we hard code the gridID as 1.
         '''
         data = {'gridId': grid_ID}
-        headers = {'token': self.token}
+        headers = {'token': self.get_token(api_version=api_version)}
         response = self.api.send_request(
             "grid/get_meter_reading", method='POST', json=data, headers=headers)
         return response['data'][f'phase{phase}']
@@ -280,7 +283,7 @@ class PriceAndLoadMonitor:
         date_today = datetime.now(tz=pytz.timezone(
             'Australia/Sydney')).strftime("%Y_%m_%d")
         data = {'date': date_today, 'gridID': grid_ID, 'phase': phase}
-        headers = {'token': self.token}
+        headers = {'token': self.get_token(api_version=api_version)}
         response = self.api.send_request(
             "grid/get_prediction_v2", method='POST', json=data, headers=headers)
         prediction_average = [
@@ -365,7 +368,7 @@ class PriceAndLoadMonitor:
             data = json
 
         try:
-            headers = {'token': self.token}
+            headers = {'token': self.get_token(api_version=api_version)}
             response = self.api.send_request(
                 "device/set_params", method='POST', json=data, headers=headers)
             print(f'Send command {command} to battery {sn}, response: {response}')
