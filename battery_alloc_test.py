@@ -182,7 +182,7 @@ class BatteryScheduler:
                 continue
             if not (start_time <= current_time <= end_time):
                 continue
-            adjusted_start_time = current_time + timedelta(minutes=30)
+            adjusted_start_time = current_time + timedelta(minutes=3)
             if adjusted_start_time >= end_time:
                 logging.warning(
                     f'Cannot delay dischargeStart for Device: {sn} as it overlaps with dischargeEnd.')
@@ -190,7 +190,7 @@ class BatteryScheduler:
             schedule[sn]['dischargeStart1'] = adjusted_start_time.strftime(
                 '%H:%M')
             logging.info(
-                f'Delayed dischargeStart for Device: {sn} by 30 mins due to low load.')
+                f'Delayed dischargeStart for Device: {sn} by 3 mins due to low load.')
 
         return schedule
 
