@@ -55,7 +55,7 @@ class BatteryScheduler:
 
         try:
             if isinstance(self.scheduler, AIScheduler):
-                interval = 180
+                interval = 360
                 self._process_ai_scheduler()
             elif isinstance(self.scheduler, PeakValleyScheduler):
                 self._process_peak_valley_scheduler()
