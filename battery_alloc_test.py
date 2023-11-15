@@ -174,10 +174,14 @@ class BatteryScheduler:
         if load >= threshold:
             return schedule
 
+        load_now = load
         for sn in self.sn_list:
+            if load_now >= threshold:
+                break
             current_time = self.get_current_time()
             start_time = schedule[sn]['dischargeStart1']
             end_time = schedule[sn]['dischargeEnd1']
+            discharge_power = schedule[sn]['dischargePower1']
             try:
                 current_time = datetime.strptime(current_time, '%H:%M')
                 start_time = datetime.strptime(start_time, '%H:%M')
@@ -194,8 +198,9 @@ class BatteryScheduler:
                 continue
             schedule[sn]['dischargeStart1'] = adjusted_start_time.strftime(
                 '%H:%M')
+            load_now += discharge_power
             logging.info(
-                f'Delayed dischargeStart for Device: {sn} by 3 mins due to low load.')
+                f'Delayed dischargeStart for Device: {sn} by 3 mins due to low load. Load now: {load_now}')
 
         return schedule
 
