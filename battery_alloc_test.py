@@ -74,6 +74,7 @@ class BatteryScheduler:
 
         schedule = self.daytime_hotfix_discharging(self.last_schedule)
         schedule = self.daytime_hotfix_charging(schedule)
+        logging.info(f"Schedule: {schedule}")
 
         for sn in self.sn_list:
             battery_schedule = schedule.get(sn, None)
@@ -144,10 +145,13 @@ class BatteryScheduler:
             adjusted_charging_power = min(max_charging_power, current_charging_power + surplus_power)
             surplus_power -= (adjusted_charging_power - current_charging_power)
             surplus_power = max(0, surplus_power)  # Avoid negative surplus
-
+            now_str = self.get_current_time()
+            end_30mins_later = (datetime.strptime(now_str, '%H:%M') + timedelta(minutes=30)).strftime('%H:%M')
             if sn in schedule:
                 schedule[sn]['chargePower1'] = adjusted_charging_power
-
+                schedule[sn]['chargeStart1'] = now_str
+                schedule[sn]['chargeEnd1'] = end_30mins_later
+                logging.info(f'Increased charging power for Device: {sn} by {surplus_power}W due to excess solar power.')
         return schedule
     def daytime_hotfix_discharging(self, schedule):
         '''
@@ -444,8 +448,10 @@ class AIScheduler(BaseScheduler):
                 rain_info = weather_fetcher.get_rain_cloud_forecast_24h(
                     weather_fetcher.get_response())
                 # here we give clouds more weight than rain based on the assumption that clouds have a bigger impact on solar generation
+                # sigma is used to adjust the impact of weather on solar generation
+                sigma = 0.5
                 max_solar = (
-                    1-(1.4*rain_info['clouds']+0.6*rain_info['rain'])/(2*100))*5000
+                    1-sigma*(1.4*rain_info['clouds']+0.6*rain_info['rain'])/(2*100))*5000
                 logging.info(
                     f'Weather forecast: rain: {rain_info["rain"]}, clouds: {rain_info["clouds"]}, max_solar: {max_solar}')
             except Exception as e:
