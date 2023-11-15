@@ -150,8 +150,9 @@ class BatteryScheduler:
             if sn in schedule:
                 schedule[sn]['chargePower1'] = adjusted_charging_power
                 schedule[sn]['chargeStart1'] = now_str
-                schedule[sn]['chargeEnd1'] = end_30mins_later
-                logging.info(f'Increased charging power for Device: {sn} by {surplus_power}W due to excess solar power.')
+                if schedule[sn]['chargeEnd1'] < end_30mins_later:
+                    schedule[sn]['chargeEnd1'] = end_30mins_later
+                logging.info(f'Increased charging power for Device: {sn} by {adjusted_charging_power - current_charging_power}W due to excess solar power.')
         return schedule
     def daytime_hotfix_discharging(self, schedule):
         '''
