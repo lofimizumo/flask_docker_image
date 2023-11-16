@@ -109,7 +109,7 @@ class PriceAndLoadMonitor:
             self.api = ApiCommunicator(
                 base_url="https://redxpower.com/restapi")
         self.token = None 
-        self.token_last_updated = datetime.now()
+        self.token_last_updated = datetime.now(tz=pytz.timezone('Australia/Sydney'))
         # Test Mode is for testing the battery control without sending command to the actual battery
         self.test_mode = test_mode
 
@@ -123,8 +123,8 @@ class PriceAndLoadMonitor:
     def get_price_history(self):
         api_key = 'psk_2d5030fe84a68769b6f48ab73bd48ebf'
         fetcher = AmberFetcher(api_key)
-        yesterday_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-        day_before_yesterday_date = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
+        yesterday_date = (datetime.now(tz=pytz.timezone('Australia/Sydney')) - timedelta(days=1)).strftime("%Y-%m-%d")
+        day_before_yesterday_date = (datetime.now(tz=pytz.timezone('Australia/Sydney')) - timedelta(days=2)).strftime("%Y-%m-%d")
         response = fetcher.get_prices(day_before_yesterday_date, yesterday_date, resolution=30)
         prices = [x[1] for x in response]
         return prices
@@ -248,7 +248,7 @@ class PriceAndLoadMonitor:
         return next(self.sim_load_iter)
 
     def get_token(self, api_version='redx'):
-        if self.token and (datetime.now() - self.token_last_updated) < timedelta(hours=1):
+        if self.token and (datetime.now(tz=pytz.timezone('Australia/Sydney')) - self.token_last_updated) < timedelta(hours=1):
             return self.token
         if api_version == 'redx':
             response = self.api.send_request("user/token", method='POST', data={
@@ -256,7 +256,7 @@ class PriceAndLoadMonitor:
         else:
             response = self.api.send_request("user/token", method='POST', data={
                 'user_account': 'yetao_admin', 'secret': 'a~L$o8dJ246c'}, headers={'Content-Type': 'application/x-www-form-urlencoded'})
-        self.token_last_updated = datetime.now()
+        self.token_last_updated = datetime.now(tz=pytz.timezone('Australia/Sydney'))
         return response['data']['token']
 
     def get_realtime_battery_stats(self, sn):
@@ -328,7 +328,6 @@ class PriceAndLoadMonitor:
         # command is only used for peakvalley model, json is used for AI model
         if command:
             from datetime import datetime, timedelta
-            formatted_start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             data = {}
             command = command
             start_time = self.get_current_time(time_zone='Australia/Brisbane')

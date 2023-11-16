@@ -67,7 +67,7 @@ class BatteryScheduler:
             self.event = self.s.enter(interval, 1, self._start)
 
     def _process_ai_scheduler(self):
-        current_day = datetime.now().day
+        current_day = datetime.now(tz=pytz.timezone('Australia/Sydney')).day
         if self.last_scheduled_date != current_day:
             self.last_schedule = self._get_battery_command()
             self.last_scheduled_date = current_day
@@ -324,9 +324,9 @@ class PeakValleyScheduler(BaseScheduler):
 
     def step(self, current_price, current_time, current_usage, current_soc, current_pv):
         # Update solar data each day
-        if self.date != datetime.now().day or self.solar is None:
+        if self.date != datetime.now(tz=pytz.timezone('Australia/Brisbane')).day or self.solar is None:
             self.solar = self._get_solar()
-            self.date = datetime.now().day
+            self.date = datetime.now(tz=pytz.timezone('Australia/Brisbane')).day
 
         # Update battery state
         self.bat_cap = current_soc * self.BatCap
@@ -916,7 +916,7 @@ class AIScheduler(BaseScheduler):
         # plot_charge_windows(hours, consumption, battery_charges, net_consumption)
 
     def step(self):
-        current_date = datetime.now().date()
+        current_date = datetime.now(tz=pytz.timezone('Australia/Sydney'))
         # Check if it's a new day or there's no existing schedule
         if self.last_scheduled_date is None or current_date > self.last_scheduled_date:
             demand, price = self._get_demand_and_price()
