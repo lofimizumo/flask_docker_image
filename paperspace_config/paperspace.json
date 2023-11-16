@@ -1,0 +1,11 @@
+{
+    "apiVersion": "v0alpha0",
+    "enabled": true,
+    "image": "bellakira0717/flask-battery-scheduler:main",
+    "name": "flask-battery-scheduler",
+    "port": 5000,
+    "resources": {
+      "instanceType": "C4",
+      "replicas": 1
+    }
+  }

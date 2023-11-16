@@ -46,4 +46,5 @@ jobs:
           PAPERSPACE_API_KEY: ${{ secrets.PAPERSPACE_API_KEY }}
         with:
           projectId: pl3sp7im7bp
+          configPath: ./paperspace_config/paperspace.json
           image: bellakira0717/flask-battery-scheduler:${{ steps.meta.outputs.tags }}
