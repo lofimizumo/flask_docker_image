@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 schedulers = {}
 scheduler_shawsbay = None
-thread = None
+thread_shawsbay = None
 
 
 @app.route('/')
@@ -48,28 +48,28 @@ def stop_basic_scheduler():
 
 @app.route('/start_shawsbay', methods=['POST'])
 def ai_scheduler():
-    global scheduler_shawsbay, thread
+    global scheduler_shawsbay, thread_shawsbay
 
-    if thread and thread.is_alive():
+    if thread_shawsbay and thread_shawsbay.is_alive():
         return jsonify(status='error', message='Scheduler already running'), 400
 
     shawsbay_phase2_devices = ['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'] 
     scheduler_shawsbay = BatteryScheduler(
         scheduler_type='AIScheduler', battery_sn=shawsbay_phase2_devices, test_mode=False, api_version='redx')
     
-    thread = Thread(target=scheduler_shawsbay.start)
-    thread.daemon = True
-    thread.start()
+    thread_shawsbay = Thread(target=scheduler_shawsbay.start)
+    thread_shawsbay.daemon = True
+    thread_shawsbay.start()
 
     return jsonify(status='success', message='Shawsbay Scheduler started'), 200
 
 @app.route('/stop_shawsbay', methods=['POST'])
 def stop_ai_scheduler():
-    global scheduler_shawsbay, thread
+    global scheduler_shawsbay, thread_shawsbay
 
-    if scheduler_shawsbay and thread.is_alive():
+    if scheduler_shawsbay and thread_shawsbay.is_alive():
         scheduler_shawsbay.stop()  # Ensure this method stops the thread gracefully
-        thread.join()  # Wait for the thread to finish
+        thread_shawsbay.join()  # Wait for the thread to finish
         return jsonify(status='success', message='Scheduler stopped'), 200
     else:
         return jsonify(status='error', message='Shawsbay Scheduler is not running'), 404
