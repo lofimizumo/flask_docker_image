@@ -69,7 +69,7 @@ def stop_ai_scheduler():
 
     if scheduler_shawsbay and thread_shawsbay.is_alive():
         scheduler_shawsbay.stop()  # Ensure this method stops the thread gracefully
-        thread_shawsbay.join()  # Wait for the thread to finish
+        scheduler_shawsbay = None
         return jsonify(status='success', message='Scheduler stopped'), 200
     else:
         return jsonify(status='error', message='Shawsbay Scheduler is not running'), 404
