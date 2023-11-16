@@ -47,4 +47,4 @@ jobs:
         with:
           projectId: pl3sp7im7bp
           configPath: ./paperspace_config/paperspace.json
-          image: bellakira0717/flask-battery-scheduler:${{ steps.meta.outputs.tags }}
+          image: ${{ steps.meta.outputs.tags }}
