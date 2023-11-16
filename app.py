@@ -63,7 +63,7 @@ def stop_ai_scheduler():
     else:
         return jsonify(status='error', message='Shawsbay Scheduler is not running'), 404
 
-@app.rout('/cost_savings', methods=['POST'])
+@app.route('/cost_savings', methods=['POST'])
 def cost_savings():
     data = request.get_json()
     start_date = data['start_date']
