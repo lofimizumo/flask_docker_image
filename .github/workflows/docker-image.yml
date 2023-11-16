@@ -39,3 +39,11 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+                - uses: paperspace/deploy-action@v1.2
+      - name: Deploy to Paperspace
+        id: deploy
+        env:
+          PAPERSPACE_API_KEY: ${{ secrets.PAPERSPACE_API_KEY }}
+        with:
+          projectId: pl3sp7im7bp
+          image: bellakira0717/flask-battery-scheduler:${{ steps.meta.outputs.tags }}
