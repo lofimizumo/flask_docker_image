@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from battery_alloc_test import BatteryScheduler
 from threading import Thread
+from amber import cost_savings
 
 
 # Initialize the Flask application
@@ -61,5 +62,16 @@ def stop_ai_scheduler():
         return jsonify(status='success', message='Scheduler stopped'), 200
     else:
         return jsonify(status='error', message='Shawsbay Scheduler is not running'), 404
+
+@app.rout('/cost_savings', methods=['POST'])
+def cost_savings():
+    data = request.get_json()
+    start_date = data['start_date']
+    end_date = data['end_date']
+    amber_key = data['amber_key']
+    sn = data['deviceSn']
+    return jsonify(cost_savings(start_date, end_date, amber_key, sn))
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+
