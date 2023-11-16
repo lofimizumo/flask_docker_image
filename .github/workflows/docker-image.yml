@@ -39,8 +39,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-                - uses: paperspace/deploy-action@v1.2
       - name: Deploy to Paperspace
+        uses: paperspace/deploy-action@v1.2
         id: deploy
         env:
           PAPERSPACE_API_KEY: ${{ secrets.PAPERSPACE_API_KEY }}
