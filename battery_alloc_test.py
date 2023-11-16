@@ -148,12 +148,16 @@ class BatteryScheduler:
             surplus_power -= (adjusted_charging_power - current_charging_power)
             surplus_power = max(0, surplus_power)  # Avoid negative surplus
             now_str = self.get_current_time()
-            end_10mins_later = (datetime.strptime(now_str, '%H:%M') + timedelta(minutes=10)).strftime('%H:%M')
+            end_10mins_later_str = (datetime.strptime(now_str, '%H:%M') + timedelta(minutes=10)).strftime('%H:%M')
+            discharge_start = schedule.get(sn, {}).get('dischargeStart1', '00:00')
+            end_10mins_later = datetime.strptime(end_10mins_later_str, '%H:%M')
+            if end_10mins_later > datetime.strptime(discharge_start, '%H:%M'):
+                continue
             if sn in schedule:
                 schedule[sn]['chargePower1'] = adjusted_charging_power
                 schedule[sn]['chargeStart1'] = now_str
-                if schedule[sn]['chargeEnd1'] < end_10mins_later:
-                    schedule[sn]['chargeEnd1'] = end_10mins_later
+                if schedule[sn]['chargeEnd1'] < end_10mins_later_str:
+                    schedule[sn]['chargeEnd1'] = end_10mins_later_str
                 logging.info(f'Increased charging power for Device: {sn} by {adjusted_charging_power - current_charging_power}W due to excess solar power.')
         return schedule
     def daytime_hotfix_discharging(self, schedule):

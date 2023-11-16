@@ -6,6 +6,7 @@ import pytz
 from itertools import cycle
 import logging
 
+logging.basicConfig(level=logging.INFO)
 
 def api_status_check(max_retries=10, delay=10):
     """
@@ -58,12 +59,12 @@ def api_status_check(max_retries=10, delay=10):
             for attempt in range(max_retries):
                 response = func(*args, **kwargs)
                 if not check_response(response):
-                    print(f"Attempt {attempt + 1} failed, retrying...")
+                    logging.error(f"Attempt {attempt + 1} failed, retrying...")
                     time.sleep(delay)  # Sleep for some time before retrying
                 else:
-                    print("Status successfully changed!")
+                    logging.info("Status successfully changed!")
                     return response
-            print("Max retry limit reached! Stopping further attempts.")
+            logging.error("Max retry limit reached! Stopping further attempts.")
             return response
 
         def check_response(response):
@@ -85,7 +86,7 @@ def api_status_check(max_retries=10, delay=10):
             # Send an API request to check the status
             status_response = api.send_request('device/get_latest_data', method='POST', json={
                 'deviceSn': sn}, headers={'token': token})
-            print(f"Status: {status_response['data']['showStatus']}")
+            logging.info(f"Status: {status_response['data']['showStatus']}")
 
             if _is_command_expected(status_response['data']['showStatus'], expected_status):
                 return True
@@ -371,7 +372,7 @@ class PriceAndLoadMonitor:
             headers = {'token': self.get_token()}
             response = self.api.send_request(
                 "device/set_params", method='POST', json=data, headers=headers)
-            print(f'Send command {command} to battery {sn}, response: {response}')
+            logging.info(f'Send command {command} to battery {sn}, response: {response}')
         except ConnectionError as e:
             logging.error(f"Connection error occurred: {e}")
             response = None 
@@ -412,7 +413,7 @@ class ApiCommunicator:
                 # Assuming JSON response. Modify as needed.
                 return response.json()
             except requests.RequestException as e:
-                print(f"Error occurred: {e}. Retrying...")
+                logging.error(f"Error occurred: {e}. Retrying...")
 
         raise ConnectionError(
             f"Failed to connect to {url} after {retries} attempts.")
