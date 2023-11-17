@@ -126,6 +126,21 @@ class ApiCommunicator:
             f"Failed to connect to {url} after {retries} attempts.")
 
 
+def get_prices(start_date: str, end_date: str, amber_key: str):
+    fetcher = AmberFetcher(amber_key)
+    try:
+        prices, feed_in_prices = fetcher.get_prices(start_date, end_date)
+    except Exception:
+        raise Exception('Failed to get prices')
+
+    json_prices = [{'date': x[0], 'price': x[1]} for x in prices]
+    json_feed_in_prices = [{'time': x[0], 'price': x[1]} for x in feed_in_prices]
+
+    json_prices = {'data': json_prices}
+    json_feed_in_prices = {'data': json_feed_in_prices}
+
+    return json_prices, json_feed_in_prices
+
 
 def cost_savings(start_date, end_date, amber_key, sn): 
     fetcher = AmberFetcher(amber_key)
@@ -177,3 +192,7 @@ def calculate_cost(usage, usage_price, feed_in_price):
     # end_date = '2023-11-14T23:55'
     # savings = cost_savings(start_date, end_date, amber_key, sn)
     # print(savings)
+
+if __name__ == "__main__":
+    prices = get_prices('2023-11-14T00:00', '2023-11-14T23:55', 'psk_2d5030fe84a68769b6f48ab73bd48ebf')
+    print(prices)

@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from battery_alloc_test import BatteryScheduler
 from threading import Thread
-from amber import cost_savings
+from amber import cost_savings, get_prices
 
 
 # Initialize the Flask application
@@ -78,11 +78,27 @@ def stop_ai_scheduler():
 @app.route('/cost_savings', methods=['POST'])
 def route_cost_savings():
     data = request.get_json()
-    start_date = data['start_date']
-    end_date = data['end_date']
-    amber_key = data['amber_key']
-    sn = data['deviceSn']
+    try:
+        start_date = data['start_date']
+        end_date = data['end_date']
+        amber_key = data['amber_key']
+        sn = data['deviceSn']
+    except KeyError:
+        return jsonify({"error": "Missing keys in request"})
     return jsonify(cost_savings(start_date, end_date, amber_key, sn))
+
+@app.route('/prices', methods=['POST'])
+def route_get_prices():
+    try:
+        data = request.get_json()
+        start_date = data['start_date']
+        end_date = data['end_date']
+        amber_key = data['amber_key']
+        return jsonify(get_prices(start_date, end_date, amber_key))
+    except:
+        return jsonify({
+            "error": "bad request"
+        })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
