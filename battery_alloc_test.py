@@ -25,7 +25,9 @@ class BatteryScheduler:
         self.sn_list = battery_sn if type(battery_sn) == list else [
             battery_sn]
         self.last_schedule = {}
+        self.schedule_before_hotfix = {}
         self.last_scheduled_date = None
+        self.last_five_metre_readings = None
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
     def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
@@ -120,26 +122,21 @@ class BatteryScheduler:
         logging.info("Stopped.")
 
     def daytime_hotfix_charging(self, schedule):
-        """
-        If we see extra exporting solar power available, we increase the charging power to absorb it.
-
-        Args:
-            schedule (dict): A dictionary containing the discharge schedule.
-
-        Returns:
-            dict: The updated schedule with adjusted discharge times.
-        """
         try:
             load = self.get_project_status()
         except Exception as e:
             logging.error(f"Error getting project status or battery stats: {e}")
             return schedule  
 
-        surplus_power = max(0, 0 - load)  
+        surplus_power = max(0, 0 - load-500)  
         max_charging_power = 1500
-        if surplus_power <= 0:
+        now = self.get_current_time()
+        if datetime.strptime(now, '%H:%M') > datetime.strptime('15:00', '%H:%M'):
+            return schedule
+        if surplus_power <= 1000:
             return schedule  
 
+        self.schedule_before_hotfix = schedule.copy()
         for sn in self.sn_list:
             if surplus_power <= 0:
                 break
@@ -160,16 +157,7 @@ class BatteryScheduler:
                     schedule[sn]['chargeEnd1'] = end_10mins_later_str
                 logging.info(f'Increased charging power for Device: {sn} by {adjusted_charging_power - current_charging_power}W due to excess solar power.')
         return schedule
-    def daytime_hotfix_discharging(self, schedule):
-        '''
-        Delay the discharging timer by 30 minutes when the load is low.
-
-        Args:
-            schedule (dict): A dictionary containing the discharge schedule.
-
-        Returns:
-            dict: The updated schedule with adjusted discharge times.
-        '''
+    def daytime_hotfix_discharging(self, schedule: dict) -> dict:
         threshold = 1000
         try:
             load = self.get_project_status()
@@ -177,6 +165,8 @@ class BatteryScheduler:
             logging.error(f"Error getting project status: {e}")
             load = 2000  # Fallback load value
 
+        if datetime.strptime(now, '%H:%M') < datetime.strptime('15:00', '%H:%M'):
+            return schedule
         if load >= threshold:
             return schedule
 
@@ -213,11 +203,18 @@ class BatteryScheduler:
     def get_current_price(self):
         return self.monitor.get_realtime_price()
 
-    def get_current_time(self, time_zone = 'Australia/Sydney'):
+    def get_current_time(self, time_zone = 'Australia/Sydney') -> str:
         return self.monitor.get_current_time(time_zone)
 
-    def get_project_status(self, project_id=1, phase=2):
-        return self.monitor.get_project_stats(project_id, phase)
+    def get_project_status(self, project_id: int = 1, phase: int = 2) -> float:
+        if len(self.last_five_metre_readings) >= 2:
+            self.last_five_metre_readings.pop(0)
+        try:
+            new_value = self.monitor.get_project_stats(project_id, phase)
+            self.last_five_metre_readings.append(new_value)
+            return sum(self.last_five_metre_readings) / len(self.last_five_metre_readings)
+        except AttributeError:
+            return 0
 
     def get_current_battery_stats(self, sn):
         return self.monitor.get_realtime_battery_stats(sn)
