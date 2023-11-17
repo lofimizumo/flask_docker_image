@@ -134,12 +134,9 @@ def get_prices(start_date: str, end_date: str, amber_key: str):
         raise Exception('Failed to get prices')
 
     json_prices = [{'date': x[0], 'price': x[1]} for x in prices]
-    json_feed_in_prices = [{'time': x[0], 'price': x[1]} for x in feed_in_prices]
+    json_feed_in_prices = [{'date': x[0], 'price': x[1]} for x in feed_in_prices]
 
-    json_prices = {'data': json_prices}
-    json_feed_in_prices = {'data': json_feed_in_prices}
-
-    return json_prices, json_feed_in_prices
+    return {'general':json_prices, 'feedIn':json_feed_in_prices}
 
 
 def cost_savings(start_date, end_date, amber_key, sn): 
