@@ -199,7 +199,7 @@ class BatteryScheduler:
                 continue
             adjusted_start_time = current_time + timedelta(minutes=7)
             adjusted_end_time = adjusted_start_time + timedelta(minutes=7)
-            if adjusted_end_time > datetime(hour=23, minute=55):
+            if adjusted_end_time >datetime.now().replace(hour=23, minute=55, second=0, microsecond=0) :
                 continue
             schedule[sn]['dischargeStart1'] = adjusted_start_time.strftime(
                 '%H:%M')
