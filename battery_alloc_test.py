@@ -174,6 +174,7 @@ class BatteryScheduler:
             logging.error(f"Error getting project status: {e}")
             load = 2000  # Fallback load value
 
+        now = self.get_current_time()
         if datetime.strptime(now, '%H:%M') < datetime.strptime('15:00', '%H:%M'):
             return schedule
         if load >= threshold:
