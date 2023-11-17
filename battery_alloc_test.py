@@ -27,7 +27,7 @@ class BatteryScheduler:
         self.last_schedule = {}
         self.schedule_before_hotfix = {}
         self.last_scheduled_date = None
-        self.last_five_metre_readings = None
+        self.last_five_metre_readings = []
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
     def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
