@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 
 class BatteryScheduler:
 
-    def __init__(self, scheduler_type='PeakValley', battery_sn=None, test_mode=False, api_version='dev3',pv_sn=None):
+    def __init__(self, scheduler_type='PeakValley', battery_sn=None, test_mode=False, api_version='dev3', pv_sn=None):
         self.s = sched.scheduler(time.time, time.sleep)
         self.scheduler = None
         self.monitor = util.PriceAndLoadMonitor(
@@ -84,8 +84,9 @@ class BatteryScheduler:
                 continue
             try:
                 self.send_battery_command(json=battery_schedule, sn=sn)
-                current_time = self.get_current_time() 
-                logging.info(f'Schedule sent to battery: {sn} at {current_time}')
+                current_time = self.get_current_time()
+                logging.info(
+                    f'Schedule sent to battery: {sn} at {current_time}')
             except Exception as e:
                 logging.error(f"Error sending battery command: {e}")
                 continue
@@ -98,7 +99,8 @@ class BatteryScheduler:
             bat_stats = self.get_current_battery_stats(sn)
             current_usage = bat_stats['loadP']
             current_soc = bat_stats['soc'] / 100.0
-            current_time = self.get_current_time(time_zone='Australia/Brisbane')
+            current_time = self.get_current_time(
+                time_zone='Australia/Brisbane')
             current_pv = bat_stats['ppv']
             command = self._get_battery_command(
                 current_price=current_price, current_usage=current_usage,
@@ -125,28 +127,33 @@ class BatteryScheduler:
         try:
             load = self.get_project_status()
         except Exception as e:
-            logging.error(f"Error getting project status or battery stats: {e}")
-            return schedule  
+            logging.error(
+                f"Error getting project status or battery stats: {e}")
+            return schedule
 
-        surplus_power = max(0, 0 - load-500)  
+        surplus_power = max(0, 0 - load-500)
         max_charging_power = 1500
         now = self.get_current_time()
         if datetime.strptime(now, '%H:%M') > datetime.strptime('15:00', '%H:%M'):
             return schedule
         if surplus_power <= 1000:
-            return schedule  
+            return schedule
 
         self.schedule_before_hotfix = schedule.copy()
         for sn in self.sn_list:
             if surplus_power <= 0:
                 break
-            current_charging_power = schedule.get(sn, {}).get('chargePower1', 0)
-            adjusted_charging_power = min(max_charging_power, current_charging_power + surplus_power)
+            current_charging_power = schedule.get(
+                sn, {}).get('chargePower1', 0)
+            adjusted_charging_power = min(
+                max_charging_power, current_charging_power + surplus_power)
             surplus_power -= (adjusted_charging_power - current_charging_power)
             surplus_power = max(0, surplus_power)  # Avoid negative surplus
             now_str = self.get_current_time()
-            end_10mins_later_str = (datetime.strptime(now_str, '%H:%M') + timedelta(minutes=10)).strftime('%H:%M')
-            discharge_start = schedule.get(sn, {}).get('dischargeStart1', '00:00')
+            end_10mins_later_str = (datetime.strptime(
+                now_str, '%H:%M') + timedelta(minutes=10)).strftime('%H:%M')
+            discharge_start = schedule.get(
+                sn, {}).get('dischargeStart1', '00:00')
             end_10mins_later = datetime.strptime(end_10mins_later_str, '%H:%M')
             if end_10mins_later > datetime.strptime(discharge_start, '%H:%M'):
                 continue
@@ -155,8 +162,10 @@ class BatteryScheduler:
                 schedule[sn]['chargeStart1'] = now_str
                 if schedule[sn]['chargeEnd1'] < end_10mins_later_str:
                     schedule[sn]['chargeEnd1'] = end_10mins_later_str
-                logging.info(f'Increased charging power for Device: {sn} by {adjusted_charging_power - current_charging_power}W due to excess solar power.')
+                logging.info(
+                    f'Increased charging power for Device: {sn} by {adjusted_charging_power - current_charging_power}W due to excess solar power.')
         return schedule
+
     def daytime_hotfix_discharging(self, schedule: dict) -> dict:
         threshold = 1000
         try:
@@ -187,10 +196,9 @@ class BatteryScheduler:
                 continue
             if not (start_time <= current_time <= end_time):
                 continue
-            adjusted_start_time = current_time + timedelta(minutes=3)
-            if adjusted_start_time >= end_time:
-                logging.warning(
-                    f'Cannot delay dischargeStart for Device: {sn} as it overlaps with dischargeEnd.')
+            adjusted_start_time = current_time + timedelta(minutes=7)
+            adjusted_end_time = adjusted_start_time + timedelta(minutes=7)
+            if adjusted_end_time > datetime(hour=23, minute=55):
                 continue
             schedule[sn]['dischargeStart1'] = adjusted_start_time.strftime(
                 '%H:%M')
@@ -203,7 +211,7 @@ class BatteryScheduler:
     def get_current_price(self):
         return self.monitor.get_realtime_price()
 
-    def get_current_time(self, time_zone = 'Australia/Sydney') -> str:
+    def get_current_time(self, time_zone='Australia/Sydney') -> str:
         return self.monitor.get_current_time(time_zone)
 
     def get_project_status(self, project_id: int = 1, phase: int = 2) -> float:
@@ -267,7 +275,7 @@ class PeakValleyScheduler(BaseScheduler):
         self.DisChgEnd2 = '23:55'
         self.DisChgStart1 = '0:00'
         self.DisChgEnd1 = '5:00'
-        
+
         self.date = None
 
         # Initial data containers and setup
@@ -289,10 +297,9 @@ class PeakValleyScheduler(BaseScheduler):
             self.DisChgStart1, '%H:%M').time()
         self.t_dis_end1 = datetime.strptime(
             self.DisChgEnd1, '%H:%M').time()
-    
+
     def init_price_history(self, price_history):
         self.price_history = price_history
-    
 
     def _get_solar(self, interval=0.5, test_mode=False):
         def gaussian_mixture(interval=0.5):
@@ -329,7 +336,8 @@ class PeakValleyScheduler(BaseScheduler):
         # Update solar data each day
         if self.date != datetime.now(tz=pytz.timezone('Australia/Brisbane')).day or self.solar is None:
             self.solar = self._get_solar()
-            self.date = datetime.now(tz=pytz.timezone('Australia/Brisbane')).day
+            self.date = datetime.now(
+                tz=pytz.timezone('Australia/Brisbane')).day
 
         # Update battery state
         self.bat_cap = current_soc * self.BatCap
@@ -625,7 +633,6 @@ class AIScheduler(BaseScheduler):
                         durations.append((p_left+1, p_right-p_left-1))
                     p_left = p_right
             return durations
-
 
         def split_single_schedule(schedule, num_windows):
             start = schedule[0]
