@@ -372,7 +372,7 @@ class PriceAndLoadMonitor:
             headers = {'token': self.get_token()}
             response = self.api.send_request(
                 "device/set_params", method='POST', json=data, headers=headers)
-            logging.info(f'Send command {command} to battery {sn}, response: {response}')
+            # logging.info(f'Send command {command} to battery {sn}, response: {response}')
         except ConnectionError as e:
             logging.error(f"Connection error occurred: {e}")
             response = None 

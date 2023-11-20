@@ -54,12 +54,11 @@ class SimulationScheduler:
         if not self.is_running:
             return
 
-        try:
-            if isinstance(self.scheduler, AIScheduler):
-                self._process_ai_scheduler()
-            elif isinstance(self.scheduler, PeakValleyScheduler):
-                self._process_peak_valley_scheduler()
-            self.event = self.s.enter(interval, 1, self._start)
+        if isinstance(self.scheduler, AIScheduler):
+            self._process_ai_scheduler()
+        elif isinstance(self.scheduler, PeakValleyScheduler):
+            self._process_peak_valley_scheduler()
+        self.event = self.s.enter(interval, 1, self._start)
 
     def _process_ai_scheduler(self):
         current_day = datetime.now(tz=pytz.timezone('Australia/Sydney')).day
@@ -204,10 +203,11 @@ class SimulationScheduler:
         return self.monitor.get_realtime_price()
 
     def get_current_time(self, time_zone='Australia/Brisbane') -> str:
-        last_time = datetime(hour=0, minute=0)
+        last_time = datetime.now().replace(hour=0, minute=0, second=0)
         def _get_current_time():
-            sim_time = last_time + timedelta(minutes=i*5)
-            yield sim_time.strftime('%H:%M')
+            nonlocal last_time
+            last_time = last_time + timedelta(minutes=5)
+            return last_time.strftime('%H:%M')
         return _get_current_time
 
     def get_project_status(self, project_id: int = 1, phase: int = 2) -> float:
@@ -929,4 +929,6 @@ if __name__ == '__main__':
     scheduler = SimulationScheduler(
         scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx', pv_sn='RX2505ACA10J0A170033')
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
-    scheduler.start()
+    func = scheduler.get_current_time() 
+    for i in range(10):
+        print(func())

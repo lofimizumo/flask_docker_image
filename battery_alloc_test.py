@@ -83,7 +83,10 @@ class BatteryScheduler:
             if not battery_schedule:
                 continue
             try:
-                self.send_battery_command(json=battery_schedule, sn=sn)
+                thread = Thread(target=self.send_battery_command,
+                                args=(battery_schedule, sn))
+                thread.start()
+                # self.send_battery_command(json=battery_schedule, sn=sn)
                 current_time = self.get_current_time()
                 logging.info(
                     f'Schedule sent to battery: {sn} at {current_time}')
@@ -274,7 +277,7 @@ class PeakValleyScheduler(BaseScheduler):
         self.SolarCharge = 0
         self.SellBack = 0
         self.BuyPct = 30
-        self.SellPct = 80
+        self.SellPct = 30
         self.LookBackBars = 2 * 48
         self.ChgStart1 = '5:00'
         self.ChgEnd1 = '16:00'
