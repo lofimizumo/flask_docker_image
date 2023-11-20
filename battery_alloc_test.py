@@ -364,7 +364,7 @@ class PeakValleyScheduler(BaseScheduler):
         buy_price, sell_price = np.percentile(
             self.price_history, [self.BuyPct, self.SellPct])
         
-        peak_price = np.percentie(self.price_history, self.PeakPct)
+        peak_price = np.percentile(self.price_history, self.PeakPct)
 
         current_timenum = datetime.strptime(
             current_time, '%H:%M').time()
