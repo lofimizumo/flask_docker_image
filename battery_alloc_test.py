@@ -244,7 +244,7 @@ class BatteryScheduler:
         pass
 
     def send_battery_command(self, command=None, json=None, sn=None):
-        self.monitor.send_battery_command(command=command, json=json, sn=sn)
+        self.monitor.send_battery_command(peak_valley_command=command, json=json, sn=sn)
 
 
 
