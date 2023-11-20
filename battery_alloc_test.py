@@ -85,7 +85,7 @@ class BatteryScheduler:
                 continue
             try:
                 thread = Thread(target=self.send_battery_command,
-                                args=(battery_schedule, sn))
+                                kwargs={'json':battery_schedule, 'sn':sn})
                 thread.start()
                 # self.send_battery_command(json=battery_schedule, sn=sn)
                 current_time = self.get_current_time()
