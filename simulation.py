@@ -27,6 +27,7 @@ class SimulationScheduler:
         self.schedule_before_hotfix = {}
         self.last_scheduled_date = None
         self.last_five_metre_readings = []
+        self.sim_df = None
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
     def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
@@ -218,9 +219,13 @@ class SimulationScheduler:
 
     def get_current_battery_stats(self, sn):
         raise NotImplementedError
-    
-    def read_simulation_data(self, filename):
-        dataframes = pd.read_csv(filename, sep=',')
+
+    def load_simulation_data(self, path):
+        self.sim_df = pd.read_csv(path)
+        voltages_phase2 = self.sim_df['voltageB'].values
+        currents_phase2 = self.sim_df['currentB'].values 
+        load_phase2 = np.multiply(voltages_phase2, currents_phase2)/10000
+        return load_phase2   
 
 class BaseScheduler:
 

@@ -308,7 +308,7 @@ class PriceAndLoadMonitor:
         return local_time
 
     @api_status_check(max_retries=3, delay=60)
-    def send_battery_command(self, command=None, json=None, sn=None):
+    def send_battery_command(self, peak_valley_command=None, json=None, sn=None):
         if self.test_mode:
             return
 
@@ -326,11 +326,16 @@ class PriceAndLoadMonitor:
             'Time': 2,
         }
 
+        anti_backflow_map = {
+            True: 1,
+            False: 0,
+        }
+        command = peak_valley_command.get('command', None)
+        anti_backflow = peak_valley_command.get('anti_backflow', True)
         # command is only used for peakvalley model, json is used for AI model
         if command:
             from datetime import datetime, timedelta
             data = {}
-            command = command
             start_time = self.get_current_time(time_zone='Australia/Brisbane')
             end_time = (datetime.strptime(start_time, '%H:%M') +
                         timedelta(minutes=30)).strftime("%H:%M")
@@ -341,8 +346,6 @@ class PriceAndLoadMonitor:
                         'operatingMode': mode_map['Time'],
                         'chargeStart1': start_time,
                         'chargeEnd1': end_time,
-                        'dischargeStart1': empty_time,
-                        'dischargeEnd1': empty_time,
                         'chargePower1': 800
                         }
 
@@ -352,10 +355,8 @@ class PriceAndLoadMonitor:
                         'operatingMode': mode_map['Time'],
                         'dischargeStart1': start_time,
                         'dischargeEnd1': end_time,
-                        'chargeStart1': empty_time,
-                        'chargeEnd1': empty_time,
-                        'antiBackflowSW': 1,
-                        'dischargePower1': 2500,
+                        'antiBackflowSW': anti_backflow_map[anti_backflow],
+                        'dischargePower1': 2500
                         }
             elif command == 'Idle':
                 data = {'deviceSn': sn,

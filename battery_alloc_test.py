@@ -6,7 +6,6 @@ import numpy as np
 import util
 import pytz
 import logging
-import pandas as pd
 from threading import Thread
 from solar_prediction import WeatherInfoFetcher
 
@@ -30,7 +29,6 @@ class BatteryScheduler:
         self.schedule_before_hotfix = {}
         self.last_scheduled_date = None
         self.last_five_metre_readings = []
-        self.sim_df = None
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
     def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
@@ -248,12 +246,8 @@ class BatteryScheduler:
     def send_battery_command(self, command=None, json=None, sn=None):
         self.monitor.send_battery_command(command=command, json=json, sn=sn)
 
-    def load_simulation_data(self, path):
-        self.sim_df = pd.read_csv(path)
-        voltages_phase2 = self.sim_df['voltageB'].values
-        currents_phase2 = self.sim_df['currentB'].values 
-        load_phase2 = np.multiply(voltages_phase2, currents_phase2)/10000
-        return load_phase2
+
+
 class BaseScheduler:
 
     def step(self, **kwargs):
@@ -287,6 +281,7 @@ class PeakValleyScheduler(BaseScheduler):
         self.SellBack = 0
         self.BuyPct = 30
         self.SellPct = 30
+        self.PeakPct = 80
         self.LookBackBars = 2 * 48
         self.ChgStart1 = '8:00'
         self.ChgEnd1 = '16:00'
@@ -368,11 +363,13 @@ class PeakValleyScheduler(BaseScheduler):
         # Buy and sell price based on historical data
         buy_price, sell_price = np.percentile(
             self.price_history, [self.BuyPct, self.SellPct])
+        
+        peak_price = np.percentie(self.price_history, self.PeakPct)
 
         current_timenum = datetime.strptime(
             current_time, '%H:%M').time()
 
-        command = ['Idle', 0]  # No action by default
+        command = {'command': 'Idle'} 
 
         if self._is_charging_period(current_timenum) and (current_price <= buy_price or current_pv > current_usage):
             # Charging logic
@@ -380,7 +377,7 @@ class PeakValleyScheduler(BaseScheduler):
             temp_chg = chg_delta + self.bat_cap
 
             self.bat_cap = min(temp_chg, self.BatMaxCapacity)
-            command = ['Charge', self.BatChgMax]
+            command = {'command': 'Charge', 'charging_power': self.BatChgMax}
 
         elif self._is_discharging_period(current_timenum) and (current_price >= sell_price or current_price > self.SpikeLevel) and current_pv < current_usage:
             # Discharging logic
@@ -391,11 +388,10 @@ class PeakValleyScheduler(BaseScheduler):
 
             if temp_dischg >= self.BatCap * self.BatSocMin:
                 self.bat_cap = temp_dischg  # discharge battery
-                _value = -self.BatDisMax if self.SellBack else - \
-                    min(current_usage, self.BatDisMax)
-                command = ['Discharge', _value]
+                anti_backflow = False if current_price > peak_price else True
+                command = {'command': 'Discharge', 'anti_backflow': anti_backflow}
 
-        return command[0]
+        return command
 
     def _is_charging_period(self, t):
         return t >= self.t_chg_start1 and t <= self.t_chg_end1
@@ -961,7 +957,7 @@ class AIScheduler(BaseScheduler):
 
 
 if __name__ == '__main__':
-    scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx', pv_sn='RX2505ACA10J0A170033')
-    # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
+    # scheduler = BatteryScheduler(
+        # scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx', pv_sn='RX2505ACA10J0A170033')
+    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
     scheduler.start()
