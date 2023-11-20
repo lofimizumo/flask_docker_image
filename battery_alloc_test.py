@@ -203,7 +203,7 @@ class BatteryScheduler:
             if not (start_time <= current_time <= end_time):
                 continue
             adjusted_start_time = current_time + timedelta(minutes=30)
-            adjusted_end_time = adjusted_start_time + timedelta(minutes=30)
+            adjusted_end_time = end_time + timedelta(minutes=30)
             if adjusted_end_time > discharge_before :
                 total_power = 5000
                 deducted_power = 1/4*discharge_power
