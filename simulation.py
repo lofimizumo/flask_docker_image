@@ -218,6 +218,9 @@ class SimulationScheduler:
 
     def get_current_battery_stats(self, sn):
         raise NotImplementedError
+    
+    def read_simulation_data(self, filename):
+        dataframes = pd.read_csv(filename, sep=',')
 
 class BaseScheduler:
 

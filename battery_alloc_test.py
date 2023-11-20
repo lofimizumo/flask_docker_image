@@ -6,6 +6,7 @@ import numpy as np
 import util
 import pytz
 import logging
+from threading import Thread
 from solar_prediction import WeatherInfoFetcher
 
 logging.basicConfig(level=logging.INFO)
