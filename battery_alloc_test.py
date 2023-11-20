@@ -6,6 +6,7 @@ import numpy as np
 import util
 import pytz
 import logging
+import pandas as pd
 from threading import Thread
 from solar_prediction import WeatherInfoFetcher
 
@@ -29,6 +30,7 @@ class BatteryScheduler:
         self.schedule_before_hotfix = {}
         self.last_scheduled_date = None
         self.last_five_metre_readings = []
+        self.sim_df = None
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
     def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
@@ -213,6 +215,7 @@ class BatteryScheduler:
                 continue
             schedule[sn]['dischargeStart1'] = adjusted_start_time.strftime(
                 '%H:%M')
+            schedule[sn]['dischargeEnd1'] = adjusted_end_time.strftime('%H:%M')
             load_now += discharge_power
             logging.info(
                 f'Delayed dischargeStart for Device: {sn} by 30 mins due to low load. Load now: {load_now}, new discharge power: {schedule[sn]["dischargePower1"]}')
@@ -245,7 +248,12 @@ class BatteryScheduler:
     def send_battery_command(self, command=None, json=None, sn=None):
         self.monitor.send_battery_command(command=command, json=json, sn=sn)
 
-
+    def load_simulation_data(self, path):
+        self.sim_df = pd.read_csv(path)
+        voltages_phase2 = self.sim_df['voltageB'].values
+        currents_phase2 = self.sim_df['currentB'].values 
+        load_phase2 = np.multiply(voltages_phase2, currents_phase2)/10000
+        return load_phase2
 class BaseScheduler:
 
     def step(self, **kwargs):
