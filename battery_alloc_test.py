@@ -288,12 +288,12 @@ class PeakValleyScheduler(BaseScheduler):
         self.BuyPct = 30
         self.SellPct = 30
         self.LookBackBars = 2 * 48
-        self.ChgStart1 = '5:00'
+        self.ChgStart1 = '8:00'
         self.ChgEnd1 = '16:00'
         self.DisChgStart2 = '16:05'
         self.DisChgEnd2 = '23:55'
         self.DisChgStart1 = '0:00'
-        self.DisChgEnd1 = '5:00'
+        self.DisChgEnd1 = '8:00'
 
         self.date = None
 

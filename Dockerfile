@@ -8,6 +8,7 @@ COPY . /notebooks/
 RUN apk update
 RUN apk --no-cache add linux-headers gcc g++
 RUN pip install optuna
+RUN pip install pandas
 RUN pip install scipy
 RUN pip install numpy==1.25.1
 RUN pip install flask
