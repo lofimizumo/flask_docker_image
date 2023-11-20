@@ -6,12 +6,11 @@ import numpy as np
 import util
 import pytz
 import logging
-from solar_prediction import WeatherInfoFetcher
 
 logging.basicConfig(level=logging.INFO)
 
 
-class BatteryScheduler:
+class SimulationScheduler:
 
     def __init__(self, scheduler_type='PeakValley', battery_sn=None, test_mode=False, api_version='dev3', pv_sn=None):
         self.s = sched.scheduler(time.time, time.sleep)
@@ -51,21 +50,15 @@ class BatteryScheduler:
 
         return self.scheduler.step(**kwargs)
 
-    def _start(self, interval=1800):
+    def _start(self, interval=0.1):
         if not self.is_running:
             return
 
         try:
             if isinstance(self.scheduler, AIScheduler):
-                interval = 360
                 self._process_ai_scheduler()
             elif isinstance(self.scheduler, PeakValleyScheduler):
                 self._process_peak_valley_scheduler()
-            if self.test_mode:
-                interval = 0.1
-            self.event = self.s.enter(interval, 1, self._start)
-        except Exception as e:
-            logging.error(f"An error occurred in _start: {e}")
             self.event = self.s.enter(interval, 1, self._start)
 
     def _process_ai_scheduler(self):
@@ -83,10 +76,8 @@ class BatteryScheduler:
             if not battery_schedule:
                 continue
             try:
-                self.send_battery_command(json=battery_schedule, sn=sn)
+                logging.info(f"Sending battery command to {sn}: {battery_schedule}")
                 current_time = self.get_current_time()
-                logging.info(
-                    f'Schedule sent to battery: {sn} at {current_time}')
             except Exception as e:
                 logging.error(f"Error sending battery command: {e}")
                 continue
@@ -168,7 +159,6 @@ class BatteryScheduler:
 
     def daytime_hotfix_discharging(self, schedule: dict) -> dict:
         threshold = 1000
-        discharge_before = datetime.now().replace(hour=21, minute=30, second=0, microsecond=0)
         try:
             load = self.get_project_status()
         except Exception as e:
@@ -198,49 +188,36 @@ class BatteryScheduler:
                 continue
             if not (start_time <= current_time <= end_time):
                 continue
-            adjusted_start_time = current_time + timedelta(minutes=30)
-            adjusted_end_time = adjusted_start_time + timedelta(minutes=30)
-            if adjusted_end_time > discharge_before :
-                total_power = 5000
-                deducted_power = 1/4*discharge_power
-                hours_from_start_to_end = (discharge_before - adjusted_start_time).seconds/3600
-                new_discharging_power = (total_power - deducted_power) / hours_from_start_to_end
-                schedule[sn]['dischargePower1'] = new_discharging_power
+            adjusted_start_time = current_time + timedelta(minutes=7)
+            adjusted_end_time = adjusted_start_time + timedelta(minutes=7)
+            if adjusted_end_time >datetime.now().replace(hour=23, minute=55, second=0, microsecond=0) :
                 continue
             schedule[sn]['dischargeStart1'] = adjusted_start_time.strftime(
                 '%H:%M')
             load_now += discharge_power
             logging.info(
-                f'Delayed dischargeStart for Device: {sn} by 30 mins due to low load. Load now: {load_now}, new discharge power: {schedule[sn]["dischargePower1"]}')
+                f'Delayed dischargeStart for Device: {sn} by 10 mins due to low load. Load now: {load_now}')
 
         return schedule
 
     def get_current_price(self):
         return self.monitor.get_realtime_price()
 
-    def get_current_time(self, time_zone='Australia/Sydney') -> str:
-        return self.monitor.get_current_time(time_zone)
+    def get_current_time(self, time_zone='Australia/Brisbane') -> str:
+        last_time = datetime(hour=0, minute=0)
+        def _get_current_time():
+            sim_time = last_time + timedelta(minutes=i*5)
+            yield sim_time.strftime('%H:%M')
+        return _get_current_time
 
     def get_project_status(self, project_id: int = 1, phase: int = 2) -> float:
-        if len(self.last_five_metre_readings) >= 2:
-            self.last_five_metre_readings.pop(0)
-        try:
-            new_value = self.monitor.get_project_stats(project_id, phase)
-            self.last_five_metre_readings.append(new_value)
-            return sum(self.last_five_metre_readings) / len(self.last_five_metre_readings)
-        except AttributeError:
-            return 0
+        now = datetime.now().strftime('%H:%M')
+        load_dataframe=self.pandas_load_dataframe
+        current_load=load_dataframe[load_dataframe['time']==now]['load'].values[0]
+        return current_load
 
     def get_current_battery_stats(self, sn):
-        return self.monitor.get_realtime_battery_stats(sn)
-
-    def update_battery_state(self, **kwargs):
-        # Placeholder for potential updates to the scheduler's internal state
-        pass
-
-    def send_battery_command(self, command=None, json=None, sn=None):
-        self.monitor.send_battery_command(command=command, json=json, sn=sn)
-
+        raise NotImplementedError
 
 class BaseScheduler:
 
@@ -949,7 +926,7 @@ class AIScheduler(BaseScheduler):
 
 
 if __name__ == '__main__':
-    scheduler = BatteryScheduler(
+    scheduler = SimulationScheduler(
         scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx', pv_sn='RX2505ACA10J0A170033')
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
     scheduler.start()
