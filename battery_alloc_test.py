@@ -401,7 +401,7 @@ class AIScheduler(BaseScheduler):
         self.battery_max_capacity_kwh = 5
         self.num_batteries = len(sn_list)
         self.price_weight = 1
-        self.min_discharge_rate_kw = 0.5
+        self.min_discharge_rate_kw = 1.25
         self.max_discharge_rate_kw = 2.5
         self.api = util.ApiCommunicator(
             'https://da2e586eae72a40e5bde4ead0fe77b2f0.clg07azjl.paperspacegradient.com/')
