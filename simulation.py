@@ -6,6 +6,7 @@ import numpy as np
 import util
 import pytz
 import logging
+import pandas as pd
 
 logging.basicConfig(level=logging.INFO)
 
@@ -222,8 +223,8 @@ class SimulationScheduler:
 
     def load_simulation_data(self, path):
         self.sim_df = pd.read_csv(path)
-        voltages_phase2 = self.sim_df['voltageB'].values
-        currents_phase2 = self.sim_df['currentB'].values 
+        voltages_phase2 = self.sim_df['VoltageB'].values
+        currents_phase2 = self.sim_df['CurrentB'].values 
         load_phase2 = np.multiply(voltages_phase2, currents_phase2)/10000
         return load_phase2   
 
@@ -937,5 +938,7 @@ if __name__ == '__main__':
     scheduler = SimulationScheduler(
         scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx', pv_sn='RX2505ACA10J0A170033')
     
-    
+    path = 'data/sb_2022.csv'
+    phase2 = scheduler.load_simulation_data(path)
+    print(phase2)
 

@@ -330,10 +330,10 @@ class PriceAndLoadMonitor:
             True: 1,
             False: 0,
         }
-        anti_backflow = peak_valley_command.get('anti_backflow', True)
         # command is only used for peakvalley model, json is used for AI model
         if peak_valley_command:
             command = peak_valley_command.get('command', None)
+            anti_backflow = peak_valley_command.get('anti_backflow', True)
             from datetime import datetime, timedelta
             data = {}
             start_time = self.get_current_time(time_zone='Australia/Brisbane')
