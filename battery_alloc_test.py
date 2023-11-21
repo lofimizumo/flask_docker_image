@@ -200,7 +200,7 @@ class BatteryScheduler:
                     continue
                 increased_power = schedule.get(
                     sn, {}).get('dischargePower1', 0)
-                increased_power = max(700+increased_power, self.battery_original_discharging_powers.get(sn, 1000))
+                increased_power = min(700+increased_power, self.battery_original_discharging_powers.get(sn, 1000))
                 difference = increased_power - schedule[sn]['dischargePower1']
                 logging.info(f'Increased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {increased_power}')
                 schedule[sn]['dischargePower1'] = increased_power
@@ -218,7 +218,7 @@ class BatteryScheduler:
                     continue
                 decreased_power = schedule.get(
                     sn, {}).get('dischargePower1', 0)
-                decreased_power = min(0.6*decreased_power, 200)
+                decreased_power = max(0.6*decreased_power, 200)
                 difference = schedule[sn]['dischargePower1'] - decreased_power
                 logging.info(f'Decreased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {decreased_power}')
                 schedule[sn]['dischargePower1'] = decreased_power
