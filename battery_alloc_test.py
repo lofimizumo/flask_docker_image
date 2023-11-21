@@ -29,6 +29,7 @@ class BatteryScheduler:
         self.schedule_before_hotfix = {}
         self.last_scheduled_date = None
         self.last_five_metre_readings = []
+        self.battery_original_discharging_powers = {}
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
     def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
@@ -74,8 +75,11 @@ class BatteryScheduler:
         if self.last_scheduled_date != current_day:
             self.last_schedule = self._get_battery_command()
             self.last_scheduled_date = current_day
-
-        schedule = self.daytime_hotfix_discharging(self.last_schedule)
+        if self.battery_original_discharging_powers == {}:  # first time
+            for sn in self.sn_list:
+                self.battery_original_discharging_powers[sn] = self.last_schedule.get(
+                    sn, {}).get('dischargePower1', 0)
+        schedule = self.daytime_hotfix_discharging_smooth(self.last_schedule)
         schedule = self.daytime_hotfix_charging(schedule)
         logging.info(f"Schedule: {schedule}")
 
@@ -170,7 +174,34 @@ class BatteryScheduler:
                     f'Increased charging power for Device: {sn} by {adjusted_charging_power - current_charging_power}W due to excess solar power.')
         return schedule
 
-    def daytime_hotfix_discharging(self, schedule: dict) -> dict:
+    def daytime_hotfix_discharging_smooth(self, schedule: dict) -> dict:
+        threshold = 1000
+        try:
+            load = self.get_project_status()
+        except Exception as e:
+            logging.error(f"Error getting project status: {e}")
+            load = 2000  # Fallback load value
+
+        now = self.get_current_time()
+        
+        if datetime.strptime(now, '%H:%M') < datetime.strptime('15:00', '%H:%M'):
+            return schedule
+        if load >= threshold:
+            for sn in self.sn_list:
+                increased_power = schedule.get(
+                    sn, {}).get('dischargePower1', 0)
+                increased_power = max(1.2*increased_power, self.battery_original_discharging_powers.get(sn, 1000))
+                schedule[sn]['dischargePower1'] = increased_power
+
+        else:
+            for sn in self.sn_list:
+                decreased_power = schedule.get(
+                    sn, {}).get('dischargePower1', 0)
+                decreased_power = min(0.8*decreased_power, 500)
+                schedule[sn]['dischargePower1'] = decreased_power
+        return schedule        
+
+    def daytime_hotfix_discharging_spiky(self, schedule: dict) -> dict:
         threshold = 1000
         discharge_before = datetime.now().replace(hour=21, minute=30, second=0, microsecond=0)
         try:
@@ -209,7 +240,7 @@ class BatteryScheduler:
                 deducted_power = 1/4*discharge_power
                 hours_from_start_to_end = (discharge_before - adjusted_start_time).seconds/3600
                 new_discharging_power = (total_power - deducted_power) / hours_from_start_to_end
-                schedule[sn]['dischargePower1'] = new_discharging_power
+                schedule[sn]['dischargePower1'] = min(new_discharging_power, 2500)
                 continue
             schedule[sn]['dischargeStart1'] = adjusted_start_time.strftime(
                 '%H:%M')
@@ -506,7 +537,7 @@ class AIScheduler(BaseScheduler):
         from scipy.ndimage import gaussian_filter1d
 
         def greedy_battery_discharge(consumption, price, batteries, price_weight=1):
-            num_hours = len(consumption)
+            num_hours = len(consumption) - 24 # in order to let the discharging period end before 22:00 (1 hour has 12 * 5min intervals)
             net_consumption = consumption.copy()
             battery_discharges = [[0] * num_hours for _ in batteries]
 
@@ -957,7 +988,7 @@ class AIScheduler(BaseScheduler):
 
 
 if __name__ == '__main__':
-    # scheduler = BatteryScheduler(
-        # scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx', pv_sn='RX2505ACA10J0A170033')
-    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
+    scheduler = BatteryScheduler(
+        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx', pv_sn='RX2505ACA10J0A170033')
+    # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
     scheduler.start()
