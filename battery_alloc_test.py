@@ -92,9 +92,9 @@ class BatteryScheduler:
                                 kwargs={'json':battery_schedule, 'sn':sn})
                 thread.start()
                 # self.send_battery_command(json=battery_schedule, sn=sn)
-                current_time = self.get_current_time()
-                logging.info(
-                    f'Schedule sent to battery: {sn} at {current_time}')
+                # current_time = self.get_current_time()
+                # logging.info(
+                    # f'Schedule sent to battery: {sn} at {current_time}')
             except Exception as e:
                 logging.error(f"Error sending battery command: {e}")
                 continue
@@ -200,11 +200,11 @@ class BatteryScheduler:
                     continue
                 increased_power = schedule.get(
                     sn, {}).get('dischargePower1', 0)
-                increased_power = max(1.8*increased_power, self.battery_original_discharging_powers.get(sn, 1000))
+                increased_power = max(700+increased_power, self.battery_original_discharging_powers.get(sn, 1000))
                 difference = increased_power - schedule[sn]['dischargePower1']
+                logging.info(f'Increased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {increased_power}')
                 schedule[sn]['dischargePower1'] = increased_power
                 load_now -= difference
-                logging.info(f'Increased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {increased_power}')
 
         elif load <= threshold_lower_bound:
             logging.info(f'Load is below lower threshold: {load}, Start increasing discharge power')
@@ -220,9 +220,9 @@ class BatteryScheduler:
                     sn, {}).get('dischargePower1', 0)
                 decreased_power = min(0.6*decreased_power, 200)
                 difference = schedule[sn]['dischargePower1'] - decreased_power
+                logging.info(f'Decreased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {decreased_power}')
                 schedule[sn]['dischargePower1'] = decreased_power
                 load_now += difference
-                logging.info(f'Decreased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {decreased_power}')
         
         return schedule        
 

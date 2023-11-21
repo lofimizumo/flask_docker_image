@@ -269,6 +269,14 @@ class PriceAndLoadMonitor:
         response = self.api.send_request(
             "device/get_latest_data", method='POST', json=data, headers=headers)
         return response['data']
+
+    def is_VPP_on(self, sn):
+        data = {'deviceSn': sn, 'sync': 0}
+        headers = {'token': self.get_token()}
+        response = self.api.send_request(
+            "device/get_params", method='POST', json=data, headers=headers)
+        vpp = response.get('data', {}).get('vppStatus', 0)
+        return True if vpp == 1 else False
     
     def get_project_stats(self, grid_ID=1, phase=2):
         '''
@@ -315,6 +323,14 @@ class PriceAndLoadMonitor:
 
     @api_status_check(max_retries=3, delay=60)
     def send_battery_command(self, peak_valley_command=None, json=None, sn=None):
+        def _convert_floats_to_ints(d):
+            for key, value in d.items():
+                if isinstance(value, float):
+                    d[key] = int(value)
+                elif isinstance(value, dict):
+                    d[key] = convert_floats_to_ints(value)
+            return d
+        
         if self.test_mode:
             return
 
@@ -372,9 +388,19 @@ class PriceAndLoadMonitor:
                         'dischargeEnd1': empty_time,
                         'chargeStart1': empty_time,
                         'chargeEnd1': empty_time, }
+        
+        # AI model pass JSON directly
         if json:
             data = json
+        data = _convert_floats_to_ints(data)
 
+        # Skip the devices on VPP mode
+        if self.is_VPP_on(sn):
+            logging.info(f"Device {sn} is on VPP mode, skipping...")
+            return None
+
+
+        # Send the data
         try:
             headers = {'token': self.get_token()}
             response = self.api.send_request(
