@@ -175,9 +175,9 @@ class BatteryScheduler:
         return schedule
 
     def daytime_hotfix_discharging_smooth(self, schedule: dict) -> dict:
-        threshold = 1000
-        threshold_lower_bound = 1000-1000
-        threshold_upper_bound = 1000+1000
+        threshold = 0
+        threshold_lower_bound = threshold-1500
+        threshold_upper_bound = threshold+4000
         try:
             load = self.get_project_status()
         except Exception as e:
@@ -185,22 +185,44 @@ class BatteryScheduler:
             load = 2000  # Fallback load value
 
         now = self.get_current_time()
-        
+        load_now = load 
         if datetime.strptime(now, '%H:%M') < datetime.strptime('15:00', '%H:%M'):
             return schedule
         if load >= threshold_upper_bound:
+            logging.info(f"Load is above upper threshold: {load}, Start lowering discharge power")
             for sn in self.sn_list:
+                if load_now <= threshold_upper_bound:
+                    break
+                current_time = self.get_current_time()
+                start_time = schedule[sn]['dischargeStart1']
+                end_time = schedule[sn]['dischargeEnd1']
+                if not (start_time <= current_time <= end_time):
+                    continue
                 increased_power = schedule.get(
                     sn, {}).get('dischargePower1', 0)
-                increased_power = max(1.2*increased_power, self.battery_original_discharging_powers.get(sn, 1000))
+                increased_power = max(1.8*increased_power, self.battery_original_discharging_powers.get(sn, 1000))
+                difference = increased_power - schedule[sn]['dischargePower1']
                 schedule[sn]['dischargePower1'] = increased_power
+                load_now -= difference
+                logging.info(f'Increased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {increased_power}')
 
         elif load <= threshold_lower_bound:
+            logging.info(f'Load is below lower threshold: {load}, Start increasing discharge power')
             for sn in self.sn_list:
+                if load_now >= threshold_lower_bound:
+                    break
+                current_time = self.get_current_time()
+                start_time = schedule[sn]['dischargeStart1']
+                end_time = schedule[sn]['dischargeEnd1']
+                if not (start_time <= current_time <= end_time):
+                    continue
                 decreased_power = schedule.get(
                     sn, {}).get('dischargePower1', 0)
-                decreased_power = min(0.8*decreased_power, 500)
+                decreased_power = min(0.6*decreased_power, 200)
+                difference = schedule[sn]['dischargePower1'] - decreased_power
                 schedule[sn]['dischargePower1'] = decreased_power
+                load_now += difference
+                logging.info(f'Decreased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {decreased_power}')
         
         return schedule        
 

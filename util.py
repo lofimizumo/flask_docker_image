@@ -344,7 +344,7 @@ class PriceAndLoadMonitor:
             data = {}
             start_time = self.get_current_time(time_zone='Australia/Brisbane')
             end_time = (datetime.strptime(start_time, '%H:%M') +
-                        timedelta(minutes=30)).strftime("%H:%M")
+                        timedelta(minutes=40)).strftime("%H:%M")
             empty_time = '00:00'
             if command == 'Charge':
                 data = {'deviceSn': sn,
