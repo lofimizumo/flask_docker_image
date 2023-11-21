@@ -113,6 +113,8 @@ class PriceAndLoadMonitor:
         self.token_last_updated = datetime.now(tz=pytz.timezone('Australia/Sydney'))
         # Test Mode is for testing the battery control without sending command to the actual battery
         self.test_mode = test_mode
+        self.get_project_stats_call_count = 0
+        self.get_meter_reading_stats_call_count = 0
 
     def get_realtime_price(self):
         url = 'https://api.amber.com.au/v1/sites/01HDN4PXKQ1MR29SWJPHBQE8M8/prices/current?next=0&previous=0&resolution=30'
@@ -276,6 +278,8 @@ class PriceAndLoadMonitor:
         headers = {'token': self.get_token()}
         response = self.api.send_request(
             "grid/get_meter_reading", method='POST', json=data, headers=headers)
+        self.get_meter_reading_stats_call_count += 1
+        logging.info(f'get_prediction_v2_api called: {self.get_meter_reading_stats_call_count}')
         return response['data'][f'phase{phase}']
 
     def get_project_demand(self, grid_ID=1, phase=2):
@@ -290,6 +294,8 @@ class PriceAndLoadMonitor:
             "grid/get_prediction_v2", method='POST', json=data, headers=headers)
         prediction_average = [
             (int(x['predictionLower']) + int(x['predictionUpper']))/2 for x in response['data']]
+        self.get_project_stats_call_count += 1
+        logging.info(f'get_prediction_v2_api called: {self.get_project_stats_call_count}')
         return prediction_average
 
     def get_sim_time_iter(self):
