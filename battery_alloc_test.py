@@ -176,6 +176,8 @@ class BatteryScheduler:
 
     def daytime_hotfix_discharging_smooth(self, schedule: dict) -> dict:
         threshold = 1000
+        threshold_lower_bound = 1000-1000
+        threshold_upper_bound = 1000+1000
         try:
             load = self.get_project_status()
         except Exception as e:
@@ -186,19 +188,20 @@ class BatteryScheduler:
         
         if datetime.strptime(now, '%H:%M') < datetime.strptime('15:00', '%H:%M'):
             return schedule
-        if load >= threshold:
+        if load >= threshold_upper_bound:
             for sn in self.sn_list:
                 increased_power = schedule.get(
                     sn, {}).get('dischargePower1', 0)
                 increased_power = max(1.2*increased_power, self.battery_original_discharging_powers.get(sn, 1000))
                 schedule[sn]['dischargePower1'] = increased_power
 
-        else:
+        elif load <= threshold_lower_bound:
             for sn in self.sn_list:
                 decreased_power = schedule.get(
                     sn, {}).get('dischargePower1', 0)
                 decreased_power = min(0.8*decreased_power, 500)
                 schedule[sn]['dischargePower1'] = decreased_power
+        
         return schedule        
 
     def daytime_hotfix_discharging_spiky(self, schedule: dict) -> dict:
