@@ -13,7 +13,13 @@ logging.basicConfig(level=logging.INFO)
 
 class BatteryScheduler:
 
-    def __init__(self, scheduler_type='PeakValley', battery_sn=None, test_mode=False, api_version='dev3', pv_sn=None, phase=2):
+    def __init__(self, scheduler_type='PeakValley', 
+                 battery_sn=None, 
+                 test_mode=False, 
+                 api_version='dev3', 
+                 pv_sn=None, 
+                 phase=2,
+                 discharging_starting_load = 5000):
         self.s = sched.scheduler(time.time, time.sleep)
         self.scheduler = None
         self.monitor = util.PriceAndLoadMonitor(
@@ -27,6 +33,7 @@ class BatteryScheduler:
         self.last_schedule = {}
         self.schedule_before_hotfix = {}
         self.last_scheduled_date = None
+        self.discharging_starting_load = discharging_starting_load
         self.last_five_metre_readings = []
         self.battery_original_discharging_powers = {}
         self.battery_original_charging_powers = {}
@@ -144,7 +151,7 @@ class BatteryScheduler:
                 f"Error getting project status or battery stats: {e}")
             return schedule
 
-        surplus_power = max(0, 0 - load-1000)
+        surplus_power =  - load
         max_charging_power = 1500
         now = self.get_current_time()
         if datetime.strptime(now, '%H:%M') > datetime.strptime('16:00', '%H:%M'):
@@ -203,9 +210,8 @@ class BatteryScheduler:
         return schedule
 
     def daytime_hotfix_discharging_smooth(self, schedule: dict) -> dict:
-        threshold = 0
-        threshold_lower_bound = threshold-0
-        threshold_upper_bound = threshold+4000
+        threshold_lower_bound = 0
+        threshold_upper_bound = threshold_lower_bound + self.discharging_starting_load
         try:
             load = self.get_project_status(phase=self.project_phase)
         except Exception as e:
