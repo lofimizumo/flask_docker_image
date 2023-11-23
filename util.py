@@ -275,7 +275,7 @@ class PriceAndLoadMonitor:
         headers = {'token': self.get_token()}
         response = self.api.send_request(
             "device/get_params", method='POST', json=data, headers=headers)
-        vpp = response.get('data', {}).get('vppStatus', 0)
+        vpp = response.get('data', {}).get('operatingMode', 0)
         return True if vpp == 1 else False
     
     def get_project_stats(self, grid_ID=1, phase=2):
@@ -328,11 +328,12 @@ class PriceAndLoadMonitor:
                 if isinstance(value, float):
                     d[key] = int(value)
                 elif isinstance(value, dict):
-                    d[key] = convert_floats_to_ints(value)
+                    d[key] = _convert_floats_to_ints(value)
             return d
         
         if self.test_mode:
             return
+        
 
         command_map = {
             'Idle': 3,
