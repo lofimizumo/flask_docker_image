@@ -246,7 +246,7 @@ class BatteryScheduler:
                     continue
                 decreased_power = schedule.get(
                     sn, {}).get('dischargePower1', 0)
-                decreased_power = max(0.1*decreased_power, 0)
+                decreased_power = 0 if 0.5*decreased_power < 200 else 0.5*decreased_power 
                 difference = schedule[sn]['dischargePower1'] - decreased_power
                 logging.info(f'Decreased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {decreased_power}')
                 schedule[sn]['dischargePower1'] = decreased_power
