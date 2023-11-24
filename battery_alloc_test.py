@@ -46,7 +46,8 @@ class BatteryScheduler:
             self.scheduler.init_price_history(self.monitor.get_price_history())
         elif scheduler_type == 'AIScheduler':
             self.scheduler = AIScheduler(
-                sn_list=self.sn_list, api_version=api_version, pv_sn=pv_sn)
+                sn_list=self.sn_list, api_version=api_version, pv_sn=pv_sn,
+                phase=self.project_phase)
         else:
             raise ValueError(f"Unknown scheduler type: {scheduler_type}")
 
@@ -495,7 +496,7 @@ class PeakValleyScheduler(BaseScheduler):
 
 class AIScheduler(BaseScheduler):
 
-    def __init__(self, sn_list, pv_sn, api_version='redx'):
+    def __init__(self, sn_list, pv_sn, api_version='redx',phase=2):
         self.battery_max_capacity_kwh = 5
         self.num_batteries = len(sn_list)
         self.price_weight = 1
@@ -505,6 +506,7 @@ class AIScheduler(BaseScheduler):
             'https://da2e586eae72a40e5bde4ead0fe77b2f0.clg07azjl.paperspacegradient.com/')
         self.battery_sn_list = sn_list
         self.pv_sn = pv_sn
+        self.project_phase = phase
         self.battery_monitors = {sn: util.PriceAndLoadMonitor(
             test_mode=False, api_version=api_version) for sn in sn_list}
         self.schedule = None
@@ -513,7 +515,7 @@ class AIScheduler(BaseScheduler):
     def _get_demand_and_price(self):
         # we don't need to get each battery's demand, just use the get_project_demand() method to get the total demand instead.
         # take the first battery monitor from the list
-        demand = self.battery_monitors[self.battery_sn_list[0]].get_project_demand(
+        demand = self.battery_monitors[self.battery_sn_list[0]].get_project_demand(phase=self.project_phase
         )
         interval = int(24*60/len(demand))
 
@@ -1047,6 +1049,7 @@ class AIScheduler(BaseScheduler):
 
 
 if __name__ == '__main__':
+    # For Phase 2
     scheduler = BatteryScheduler(
         scheduler_type='AIScheduler', 
         battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], 
@@ -1054,12 +1057,14 @@ if __name__ == '__main__':
         api_version='redx', 
         pv_sn='RX2505ACA10J0A170033',
         phase=2)
+    
+    # For Phase 3
     # scheduler = BatteryScheduler(
     #     scheduler_type='AIScheduler', 
     #     battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'], 
     #     test_mode=False, 
     #     api_version='redx', 
     #     pv_sn='RX2505ACA10J0A180002',
-    #     phase=2)
+    #     phase=3)
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
     scheduler.start()

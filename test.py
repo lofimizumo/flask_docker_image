@@ -9,6 +9,15 @@ response = requests.post(url, json=data)
 print(response.json())
 
 #%%
+
+
+url = "https://d231f65111596470ebbc257f8269abcda.clg07azjl.paperspacegradient.com/start_shawsbay_phase3"
+# url = "http://127.0.0.1:5234/"
+data = {}
+response = requests.post(url, json=data)
+print(response.json())
+
+#%%
 import requests
 
 url = "https://d231f65111596470ebbc257f8269abcda.clg07azjl.paperspacegradient.com/start"
