@@ -155,7 +155,7 @@ class BatteryScheduler:
         surplus_power =  - load
         max_charging_power = 1500
         now = self.get_current_time()
-        if datetime.strptime(now, '%H:%M') > datetime.strptime('16:00', '%H:%M'):
+        if datetime.strptime(now, '%H:%M') > datetime.strptime('16:00', '%H:%M') or datetime.strptime(now, '%H:%M') < datetime.strptime('06:00', '%H:%M'):
             return schedule
         
         # Return original schedule if surplus power is less than 0W
@@ -180,7 +180,7 @@ class BatteryScheduler:
                 power_now += difference
             return schedule
 
-        if surplus_power <= threshold+2000:
+        if surplus_power <= threshold+3000:
             return schedule
         
         # Only when surplus power is greater than 3000W, we start to increase the charging power
@@ -194,18 +194,18 @@ class BatteryScheduler:
             surplus_power -= (adjusted_charging_power - current_charging_power)
             surplus_power = max(0, surplus_power)  # Avoid negative surplus
             now_str = self.get_current_time()
-            end_10mins_later_str = (datetime.strptime(
-                now_str, '%H:%M') + timedelta(minutes=10)).strftime('%H:%M')
+            end_30mins_later_str = (datetime.strptime(
+                now_str, '%H:%M') + timedelta(minutes=30)).strftime('%H:%M')
             discharge_start = schedule.get(
                 sn, {}).get('dischargeStart1', '00:00')
-            end_10mins_later = datetime.strptime(end_10mins_later_str, '%H:%M')
-            if end_10mins_later > datetime.strptime(discharge_start, '%H:%M'):
+            end_30mins_later = datetime.strptime(end_30mins_later_str, '%H:%M')
+            if end_30mins_later > datetime.strptime(discharge_start, '%H:%M'):
                 continue
             if sn in schedule:
                 schedule[sn]['chargePower1'] = adjusted_charging_power
                 schedule[sn]['chargeStart1'] = now_str
-                if schedule[sn]['chargeEnd1'] < end_10mins_later_str:
-                    schedule[sn]['chargeEnd1'] = end_10mins_later_str
+                if schedule[sn]['chargeEnd1'] < end_30mins_later_str:
+                    schedule[sn]['chargeEnd1'] = end_30mins_later_str
                 logging.info(
                     f'Increased charging power for Device: {sn} by {adjusted_charging_power - current_charging_power}W due to excess solar power.')
         return schedule
@@ -642,7 +642,7 @@ class AIScheduler(BaseScheduler):
                 best_avg = float('inf')
                 best_start = 0
 
-                for start in range(0, num_hours - duration + 1):
+                for start in range(12, num_hours - duration + 1): # start from 1:00 AM
                     # check if all slots in this window are available
                     if all(engaged_slots[start:start+duration]):
                         period_cost = charging_cost[start:start+duration]
@@ -883,7 +883,7 @@ class AIScheduler(BaseScheduler):
                             'operatingMode': mode_map['Time'],
                             'chargeStart1': start_time if task_type == 'Charge' else "00:00",
                             'chargeEnd1': end_time if task_type == 'Charge' else "00:00",
-                            'chargePower1': power,
+                            'chargePower1': power+200, #Charging Power is increased by 200W to compensate in case
                             # 'chargeStart1': "09:00",
                             # 'chargeEnd1':  "15:00",
                             # 'chargePower1': "800",

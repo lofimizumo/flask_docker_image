@@ -62,14 +62,15 @@ def api_status_check(max_retries=10, delay=10):
                     logging.error(f"Attempt {attempt + 1} failed, retrying...")
                     time.sleep(delay)  # Sleep for some time before retrying
                 else:
-                    logging.info("Status successfully changed!")
+                    # logging.info("Status successfully changed!")
                     return response
             logging.error("Max retry limit reached! Stopping further attempts.")
             return response
 
         def check_response(response):
             if response is None or not isinstance(response, dict):
-                raise ValueError("Invalid response: None or not a dictionary.")
+                logging.error(f"Invalid response: {response}")
+                # raise ValueError("Invalid response: None or not a dictionary.")
             if 'errorCode' not in response or response['errorCode'] != 0:
                 raise ValueError(f"Command failed to execute. Response: {response}")
             return True
@@ -287,7 +288,7 @@ class PriceAndLoadMonitor:
         response = self.api.send_request(
             "grid/get_meter_reading", method='POST', json=data, headers=headers)
         self.get_meter_reading_stats_call_count += 1
-        logging.info(f'get_prediction_v2_api called: {self.get_meter_reading_stats_call_count}')
+        # logging.info(f'get_prediction_v2_api called: {self.get_meter_reading_stats_call_count}')
         return response['data'][f'phase{phase}']
 
     def get_project_demand(self, grid_ID=1, phase=2):
@@ -303,7 +304,7 @@ class PriceAndLoadMonitor:
         prediction_average = [
             (int(x['predictionLower']) + int(x['predictionUpper']))/2 for x in response['data']]
         self.get_project_stats_call_count += 1
-        logging.info(f'get_prediction_v2_api called: {self.get_project_stats_call_count}')
+        # logging.info(f'get_prediction_v2_api called: {self.get_project_stats_call_count}')
         return prediction_average
 
     def get_sim_time_iter(self):
