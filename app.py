@@ -101,7 +101,7 @@ def ai_scheduler_phase3():
         battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'], 
         test_mode=False, 
         api_version='redx', 
-        pv_sn='RX2505ACA10J0A180002',
+        pv_sn=['RX2505ACA10J0A180002'],
         phase=3)
     thread_shawsbay_phase3 = Thread(target=scheduler_shawsbay_phase3.start)
     thread_shawsbay_phase3.daemon = True
@@ -121,7 +121,7 @@ def ai_scheduler_phase1():
         battery_sn=['RX2505ACA10J0A180037', 'RX2505ACA10J0A160039', 'RX2505ACA10J0A160014', 'RX2505ACA10J0A180009'], 
         test_mode=False, 
         api_version='redx', 
-        pv_sn='RX2505ACA10J0A160039',
+        pv_sn=['RX2505ACA10J0A160039'],
         phase=1)
     thread_shawsbay_phase1 = Thread(target=scheduler_shawsbay_phase1.start)
     thread_shawsbay_phase1.daemon = True

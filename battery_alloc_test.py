@@ -743,8 +743,9 @@ class AIScheduler(BaseScheduler):
                           for x in range(num_batteries)]
         masks = [all(mask[i] == 0 for mask in battery_discharges)
                  for i in range(len(battery_discharges[0]))]
+        num_pv_panels = len(self.pv_sn) if self.pvsn is not None else 1
         _, battery_charges = greedy_battery_charge_with_mask(
-            consumption, price, self._get_solar(max_solar_power=5000*len(self.pv_sn)), charging_needs, masks)
+            consumption, price, self._get_solar(max_solar_power=5000*num_pv_panels), charging_needs, masks)
 
         def _get_charging_window(battery_charge_schedule):
             p_left = 0
