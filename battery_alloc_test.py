@@ -211,8 +211,9 @@ class BatteryScheduler:
         return schedule
 
     def daytime_hotfix_discharging_smooth(self, schedule: dict) -> dict:
-        threshold_lower_bound = 0
+        threshold_lower_bound = 4000
         threshold_upper_bound = threshold_lower_bound + self.discharging_starting_load
+        threshold_peak_bound = 8000
         try:
             load = self.get_project_status(phase=self.project_phase)
         except Exception as e:
@@ -223,6 +224,22 @@ class BatteryScheduler:
         load_now = load 
         if datetime.strptime(now, '%H:%M') < datetime.strptime('15:00', '%H:%M'):
             return schedule
+        
+        if load >= threshold_peak_bound:
+            logging.info(f"Load is above peak threshold: {load}, Start increasing discharge power")
+            for sn in self.sn_list:
+                current_time = self.get_current_time()
+                start_time = schedule[sn]['dischargeStart1']
+                end_time = schedule[sn]['dischargeEnd1']
+                if datetime.strptime(start_time, '%H:%M') > datetime.strptime(current_time, '%H:%M'):
+                    continue
+                if datetime.strptime(end_time, '%H:%M') < datetime.strptime(current_time, '%H:%M'):
+                    end_time = datetime.strptime(current_time, '%H:%M')+timedelta(minutes=30)
+                    schedule[sn]['dischargeEnd1'] = end_time.strftime('%H:%M') 
+                logging.info(f'Peak: Maximized discharging power for Device: {sn} by 30 minutes.')
+                schedule[sn]['dischargePower1'] = 2500
+            return schedule
+
         if load >= threshold_upper_bound:
             logging.info(f"Load is above upper threshold: {load}, Start increasing discharge power")
             for sn in self.sn_list:
@@ -870,7 +887,7 @@ class AIScheduler(BaseScheduler):
                     if task_type == 'Discharge':
                         data = {
                             'deviceSn': sn,
-                            'operatingMode': mode_map['Time'],
+                            # 'operatingMode': mode_map['Time'],
                             'dischargeStart1': start_time if task_type == 'Discharge' else "00:00",
                             'dischargeEnd1': end_time if task_type == 'Discharge' else "00:00",
                             'dischargePower1': power,
@@ -880,7 +897,7 @@ class AIScheduler(BaseScheduler):
                     elif task_type == 'Charge':
                         data = {
                             'deviceSn': sn,
-                            'operatingMode': mode_map['Time'],
+                            # 'operatingMode': mode_map['Time'],
                             'chargeStart1': start_time if task_type == 'Charge' else "00:00",
                             'chargeEnd1': end_time if task_type == 'Charge' else "00:00",
                             'chargePower1': power+200, #Charging Power is increased by 200W to compensate in case

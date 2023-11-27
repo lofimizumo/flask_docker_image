@@ -223,10 +223,19 @@ class SimulationScheduler:
 
     def load_simulation_data(self, path):
         self.sim_df = pd.read_csv(path)
+        start_date = "2022-11-24"
+        end_date = "2023-2-22"
+        self.sim_df['logTime'] = pd.to_datetime(
+            self.sim_df['logTime'], format="%Y-%m-%d %H:%M:%S.%f")
+        self.sim_df = self.sim_df[self.sim_df['logTime'] < pd.to_datetime(
+            end_date)] 
+        self.sim_df = self.sim_df[self.sim_df['logTime'] > pd.to_datetime(start_date)]
+        self.sim_df = self.sim_df.sort_values(by=['logTime'])
+        self.sim_df = self.sim_df
         voltages_phase2 = self.sim_df['VoltageB'].values
         currents_phase2 = self.sim_df['CurrentB'].values 
         load_phase2 = np.multiply(voltages_phase2, currents_phase2)/10000
-        return load_phase2   
+        return (load_phase2, self.sim_df['logTime'].values)   
 
 class BaseScheduler:
 
@@ -938,7 +947,11 @@ if __name__ == '__main__':
     scheduler = SimulationScheduler(
         scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx', pv_sn='RX2505ACA10J0A170033')
     
-    path = 'data/sb_2022.csv'
+    path = 'data/log_tuya_meter.csv'
     phase2 = scheduler.load_simulation_data(path)
-    print(phase2)
+    print(len(phase2[0]), len(phase2[1]))
+    print(phase2[0][0])
+    print(phase2[1][0])
+    print(phase2[0][1])
+    print(phase2[1][1])
 
