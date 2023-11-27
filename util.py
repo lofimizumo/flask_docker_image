@@ -397,7 +397,8 @@ class PriceAndLoadMonitor:
         data = _convert_floats_to_ints(data)
 
         # Skip the devices on VPP mode
-        if self.is_VPP_on(sn):
+        is_VPP_on = self.is_VPP_on(sn)
+        if is_VPP_on:
             logging.info(f"Device {sn} is on VPP mode, skipping...")
             return None
 

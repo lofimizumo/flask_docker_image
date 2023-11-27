@@ -12,6 +12,8 @@ scheduler_shawsbay = None
 thread_shawsbay = None
 scheduler_shawsbay_phase3 = None
 thread_shawsbay_phase3 = None
+scheduler_shawsbay_phase1 = None
+thread_shawsbay_phase1 = None
 
 
 @app.route('/')
@@ -106,6 +108,37 @@ def ai_scheduler_phase3():
     thread_shawsbay_phase3.start()
 
     return jsonify(status='success', message='Shawsbay Scheduler started'), 200
+
+@app.route('/start_shawsbay_phase1', methods=['POST'])
+def ai_scheduler_phase1():
+    global scheduler_shawsbay_phase1, thread_shawsbay_phase1
+
+    if thread_shawsbay_phase1 and thread_shawsbay_phase1.is_alive():
+        return jsonify(status='error', message='Scheduler_Phase1 already running'), 400
+
+    scheduler_shawsbay_phase1 = BatteryScheduler(
+        scheduler_type='AIScheduler', 
+        battery_sn=['RX2505ACA10J0A180037', 'RX2505ACA10J0A160039', 'RX2505ACA10J0A160014', 'RX2505ACA10J0A180009'], 
+        test_mode=False, 
+        api_version='redx', 
+        pv_sn='RX2505ACA10J0A160039',
+        phase=1)
+    thread_shawsbay_phase1 = Thread(target=scheduler_shawsbay_phase1.start)
+    thread_shawsbay_phase1.daemon = True
+    thread_shawsbay_phase1.start()
+
+    return jsonify(status='success', message='Shawsbay_Phase_1 Scheduler started'), 200
+
+@app.route('/stop_shawsbay_phase1', methods=['POST'])
+def stop_ai_scheduler_phase1():
+    global scheduler_shawsbay_phase1, thread_shawsbay_phase1
+
+    if scheduler_shawsbay_phase1 and thread_shawsbay_phase1.is_alive():
+        scheduler_shawsbay_phase1.stop()
+        scheduler_shawsbay_phase1 = None
+        return jsonify(status='success', message='Scheduler stopped'), 200
+    else:
+        return jsonify(status='error', message='Shawsbay_Phase_1 Scheduler is not running'), 404
 
 @app.route('/cost_savings', methods=['POST'])
 def route_cost_savings():

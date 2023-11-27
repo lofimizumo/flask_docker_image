@@ -19,7 +19,7 @@ class BatteryScheduler:
                  api_version='dev3', 
                  pv_sn=None, 
                  phase=2,
-                 discharging_starting_load = 5000):
+                 discharging_starting_load = 2000):
         self.s = sched.scheduler(time.time, time.sleep)
         self.scheduler = None
         self.monitor = util.PriceAndLoadMonitor(
@@ -33,7 +33,7 @@ class BatteryScheduler:
         self.last_schedule = {}
         self.schedule_before_hotfix = {}
         self.last_scheduled_date = None
-        self.discharging_starting_load = discharging_starting_load
+        self.discharging_buffer = discharging_starting_load
         self.last_five_metre_readings = []
         self.battery_original_discharging_powers = {}
         self.battery_original_charging_powers = {}
@@ -212,7 +212,7 @@ class BatteryScheduler:
 
     def daytime_hotfix_discharging_smooth(self, schedule: dict) -> dict:
         threshold_lower_bound = 4000
-        threshold_upper_bound = threshold_lower_bound + self.discharging_starting_load
+        threshold_upper_bound = threshold_lower_bound + self.discharging_buffer
         threshold_peak_bound = 8000
         try:
             load = self.get_project_status(phase=self.project_phase)
@@ -423,7 +423,8 @@ class PeakValleyScheduler(BaseScheduler):
     def init_price_history(self, price_history):
         self.price_history = price_history
 
-    def _get_solar(self, interval=0.5, test_mode=False):
+    def _get_solar(self, interval=0.5, test_mode=False, max_solar_power=5000):
+        max_solar = max_solar_power
         def gaussian_mixture(interval=0.5):
             gaus_x = np.arange(0, 24, interval)
             mu1 = 10.35
@@ -444,12 +445,11 @@ class PeakValleyScheduler(BaseScheduler):
                     weather_fetcher.get_response())
                 # here we give clouds more weight than rain based on the assumption that clouds have a bigger impact on solar generation
                 max_solar = (
-                    1-(1.4*rain_info['clouds']+0.6*rain_info['rain'])/(2*100))*5000
+                    1-(1.4*rain_info['clouds']+0.6*rain_info['rain'])/(2*100))*max_solar
                 logging.info(
                     f'Weather forecast: rain: {rain_info["rain"]}, clouds: {rain_info["clouds"]}, max_solar: {max_solar}')
             except Exception as e:
                 logging.error(e)
-                max_solar = 5000
 
         _, gaus_y = gaussian_mixture(interval)
         return gaus_y*max_solar
@@ -569,7 +569,8 @@ class AIScheduler(BaseScheduler):
                                 shoulder_price, off_peak_price, peak_price, interval)
         return np.array(demand, dtype=np.float64), np.array(price, dtype=np.float64)
 
-    def _get_solar(self, interval=5/60, test_mode=False):
+    def _get_solar(self, interval=5/60, test_mode=False, max_solar_power=5000):
+        max_solar = max_solar_power
         def gaussian_mixture(interval=0.5):
             gaus_x = np.arange(0, 24, interval)
             mu1 = 10.35
@@ -592,12 +593,11 @@ class AIScheduler(BaseScheduler):
                 # sigma is used to adjust the impact of weather on solar generation
                 sigma = 0.5
                 max_solar = (
-                    1-sigma*(1.4*rain_info['clouds']+0.6*rain_info['rain'])/(2*100))*5000
+                    1-sigma*(1.4*rain_info['clouds']+0.6*rain_info['rain'])/(2*100))*max_solar
                 logging.info(
                     f'Weather forecast: rain: {rain_info["rain"]}, clouds: {rain_info["clouds"]}, max_solar: {max_solar}')
             except Exception as e:
                 logging.error(e)
-                max_solar = 5000
 
         _, gaus_y = gaussian_mixture(interval)
         return gaus_y*max_solar
@@ -744,7 +744,7 @@ class AIScheduler(BaseScheduler):
         masks = [all(mask[i] == 0 for mask in battery_discharges)
                  for i in range(len(battery_discharges[0]))]
         _, battery_charges = greedy_battery_charge_with_mask(
-            consumption, price, self._get_solar(), charging_needs, masks)
+            consumption, price, self._get_solar(max_solar_power=5000*len(self.pv_sn)), charging_needs, masks)
 
         def _get_charging_window(battery_charge_schedule):
             p_left = 0
@@ -1067,21 +1067,21 @@ class AIScheduler(BaseScheduler):
 
 if __name__ == '__main__':
     # For Phase 2
-    scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler', 
-        battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], 
-        test_mode=False, 
-        api_version='redx', 
-        pv_sn='RX2505ACA10J0A170033',
-        phase=2)
-    
-    # For Phase 3
     # scheduler = BatteryScheduler(
     #     scheduler_type='AIScheduler', 
-    #     battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'], 
+    #     battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], 
     #     test_mode=False, 
     #     api_version='redx', 
-    #     pv_sn='RX2505ACA10J0A180002',
-    #     phase=3)
+    #     pv_sn=['RX2505ACA10J0A170033'],
+    #     phase=2)
+    
+    # For Phase 3
+    scheduler = BatteryScheduler(
+        scheduler_type='AIScheduler', 
+        battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'], 
+        test_mode=False, 
+        api_version='redx', 
+        pv_sn=['RX2505ACA10J0A170033','RX2505ACA10J0A170019'],
+        phase=3)
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037'], test_mode=False, api_version='dev3')
     scheduler.start()
