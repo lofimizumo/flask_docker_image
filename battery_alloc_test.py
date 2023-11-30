@@ -22,7 +22,8 @@ class BatteryScheduler:
                  api_version='dev3', 
                  pv_sn=None, 
                  phase=2,
-                 config='config.yaml'
+                 config='config.yaml',
+                 project_mode='normal'
                  ):
         self.s = sched.scheduler(time.time, time.sleep)
         self.scheduler = None
@@ -41,6 +42,7 @@ class BatteryScheduler:
         self.battery_original_discharging_powers = {}
         self.battery_original_charging_powers = {}
         self.project_phase = phase
+        self.project_mode = project_mode
         self.sn_types = self.read_yaml_settings(config).get('battery',{})
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
@@ -51,7 +53,8 @@ class BatteryScheduler:
         elif scheduler_type == 'AIScheduler':
             self.scheduler = AIScheduler(
                 sn_list=self.sn_list, api_version=api_version, pv_sn=pv_sn,
-                phase=self.project_phase)
+                phase=self.project_phase,
+                mode=self.project_mode)
         else:
             raise ValueError(f"Unknown scheduler type: {scheduler_type}")
 
@@ -123,9 +126,9 @@ class BatteryScheduler:
             command = self._get_battery_command(
                 current_price=current_price, current_usage=current_usage,
                 current_time=current_time, current_soc=current_soc, current_pv=current_pv, device_type=device_type)
-            self.send_battery_command(command=command, sn=sn)
-        logging.info(f"Current price: {current_price}, current usage: {current_usage}, "
-                     f"current time: {current_time}, current soc: {current_soc}, command: {command}")
+            # self.send_battery_command(command=command, sn=sn)
+            logging.info(f"AmberModel {sn}:Current price: {current_price}, current usage: {current_usage}, "
+                        f"current time: {current_time}, current soc: {current_soc}, command: {command}")
 
     def start(self):
         self.is_running = True
@@ -148,6 +151,7 @@ class BatteryScheduler:
     def remove_amber_device(self, sn):
         if sn in self.sn_list:
             self.sn_list.remove(sn)
+
     def get_current_price(self):
         return self.monitor.get_realtime_price()
 
@@ -166,10 +170,6 @@ class BatteryScheduler:
 
     def get_current_battery_stats(self, sn):
         return self.monitor.get_realtime_battery_stats(sn)
-
-    def update_battery_state(self, **kwargs):
-        # Placeholder for potential updates to the scheduler's internal state
-        pass
 
     def send_battery_command(self, command=None, json=None, sn=None):
         self.monitor.send_battery_command(peak_valley_command=command, json=json, sn=sn)
@@ -315,7 +315,7 @@ class PeakValleyScheduler(BaseScheduler):
             power = 1500 if device_type == '5000' else 800
             command = {'command': 'Charge', 'power': power}
 
-        elif self._is_discharging_period(current_time) and (current_price >= sell_price or current_price > self.SpikeLevel) and current_pv < current_usage:
+        elif self._is_discharging_period(current_time) and (current_price >= sell_price or current_price > self.SpikeLevel) and current_pv <= current_usage:
             # Discharging logic
             dischg_delta = self.BatDisMax * \
                 self.HrMin if self.SellBack else min(
@@ -341,7 +341,7 @@ class PeakValleyScheduler(BaseScheduler):
 
 class AIScheduler(BaseScheduler):
 
-    def __init__(self, sn_list, pv_sn, api_version='redx',phase=2):
+    def __init__(self, sn_list, pv_sn, api_version='redx',phase=2, mode='normal'):
         self.battery_max_capacity_kwh = 5
         self.num_batteries = len(sn_list)
         self.price_weight = 1
@@ -358,6 +358,8 @@ class AIScheduler(BaseScheduler):
         self.last_scheduled_date = None
         self.battery_original_discharging_powers = {}
         self.battery_original_charging_powers = {}
+        self.mode = mode
+
     def _get_demand_and_price(self):
         # we don't need to get each battery's demand, just use the get_project_demand() method to get the total demand instead.
         # take the first battery monitor from the list
@@ -440,7 +442,10 @@ class AIScheduler(BaseScheduler):
         return battery_status
 
     def daytime_hotfix_charging(self, schedule, load, current_time):
-        surplus_power =  - load
+        if self.mode == 'normal':
+            surplus_power =  - load
+        else:
+            surplus_power = - load + 5000
         max_charging_power = 1500
         current_time_str = current_time 
         current_time = datetime.strptime(current_time_str, '%H:%M')
@@ -464,19 +469,27 @@ class AIScheduler(BaseScheduler):
                     sn, {}).get('chargePower1', 800)
                 adjusted_charging_power = max(adjusted_charging_power*0.6, self.battery_original_charging_powers.get(sn, 800))
                 difference = original_charging_power - adjusted_charging_power
-                logging.info(
-                    f'No surplus power, return original charging power for: {sn}')
+                # logging.info(
+                    # f'No surplus power, return original charging power for: {sn}')
                 schedule[sn]['chargePower1'] = adjusted_charging_power
                 power_now += difference
             return schedule
 
-        if surplus_power <= threshold+3000:
+        if surplus_power <= threshold+2000:
             return schedule
         
         # Only when surplus power is greater than 3000W, we start to increase the charging power
         for sn in self.sn_list:
             if surplus_power <= 0:
                 break
+            discharge_start_str = schedule.get(
+                sn, {}).get('dischargeStart1', '00:00')
+            discharge_end_str = schedule.get(
+                sn, {}).get('dischargeEnd1', '00:00')
+            discharge_start = datetime.strptime(discharge_start_str, '%H:%M')
+            discharge_end = datetime.strptime(discharge_end_str, '%H:%M')
+            if current_time > discharge_start and current_time < discharge_end:
+                continue
             current_charging_power = schedule.get(
                 sn, {}).get('chargePower1', 800)
             adjusted_charging_power = min(
@@ -484,10 +497,8 @@ class AIScheduler(BaseScheduler):
             surplus_power -= (adjusted_charging_power - current_charging_power)
             surplus_power = max(0, surplus_power)  # Avoid negative surplus
             end_30mins_later_str = (current_time + timedelta(minutes=30)).strftime('%H:%M')
-            discharge_start = schedule.get(
-                sn, {}).get('dischargeStart1', '00:00')
             end_30mins_later = datetime.strptime(end_30mins_later_str, '%H:%M')
-            if end_30mins_later > datetime.strptime(discharge_start, '%H:%M'):
+            if end_30mins_later > discharge_start: 
                 continue
             if sn in schedule:
                 schedule[sn]['chargePower1'] = adjusted_charging_power
@@ -578,7 +589,7 @@ class AIScheduler(BaseScheduler):
                 best_start = 0
 
                 # Find the window with the highest rolling average
-                for start in range(0, num_hours - duration + 1):
+                for start in range(198, num_hours - duration + 1): # Discharging start from 16:30 PM
                     weight_adjusted_array = [i*j*price_weight for i, j in zip(
                         net_consumption[start:start+duration], price[start:start+duration])]
                     avg = sum(weight_adjusted_array) / duration
@@ -1035,14 +1046,14 @@ if __name__ == '__main__':
     #     phase=2)
     
     # For Phase 3
-    scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler', 
-        battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'], 
-        test_mode=False, 
-        api_version='redx', 
-        pv_sn=['RX2505ACA10J0A170033','RX2505ACA10J0A170019'],
-        phase=3)
+    # scheduler = BatteryScheduler(
+    #     scheduler_type='AIScheduler', 
+    #     battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'], 
+    #     test_mode=False, 
+    #     api_version='redx', 
+    #     pv_sn=['RX2505ACA10J0A170033','RX2505ACA10J0A170019'],
+    #     phase=3)
 
     # For Amber Model
-    # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10J0A160016'], test_mode=False, api_version='redx')
+    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10J0A160016','011LOKG080015B','RX2505ACA20J0A180003'], test_mode=False, api_version='redx')
     scheduler.start()
