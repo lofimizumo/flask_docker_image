@@ -288,7 +288,9 @@ class PeakValleyScheduler(BaseScheduler):
         self.bat_cap = current_soc * self.BatCap
 
         # Update price history every five minutes
-        if self.last_updated_time is None or current_time.minute - self.last_updated_time.minute >= 5:
+        current_time = datetime.strptime(
+            current_time, '%H:%M').time()
+        if self.last_updated_time is None or current_time.minute != self.last_updated_time.minute:
             self.last_updated_time = current_time
             self.price_history.append(current_price)
 
@@ -301,12 +303,10 @@ class PeakValleyScheduler(BaseScheduler):
         
         peak_price = np.percentile(self.price_history, self.PeakPct)
 
-        current_timenum = datetime.strptime(
-            current_time, '%H:%M').time()
 
         command = {'command': 'Idle'} 
 
-        if self._is_charging_period(current_timenum) and (current_price <= buy_price or current_pv > current_usage):
+        if self._is_charging_period(current_time) and (current_price <= buy_price or current_pv > current_usage):
             # Charging logic
             chg_delta = self.BatChgMax * self.HrMin
             temp_chg = chg_delta + self.bat_cap
@@ -315,7 +315,7 @@ class PeakValleyScheduler(BaseScheduler):
             power = 1500 if device_type == '5000' else 800
             command = {'command': 'Charge', 'power': power}
 
-        elif self._is_discharging_period(current_timenum) and (current_price >= sell_price or current_price > self.SpikeLevel) and current_pv < current_usage:
+        elif self._is_discharging_period(current_time) and (current_price >= sell_price or current_price > self.SpikeLevel) and current_pv < current_usage:
             # Discharging logic
             dischg_delta = self.BatDisMax * \
                 self.HrMin if self.SellBack else min(
