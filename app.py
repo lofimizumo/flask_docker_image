@@ -7,7 +7,8 @@ from amber import cost_savings, get_prices
 # Initialize the Flask application
 app = Flask(__name__)
 
-schedulers = {}
+amber_devices = {}
+scheduler_amber = None
 scheduler_shawsbay = None
 thread_shawsbay = None
 scheduler_shawsbay_phase3 = None
@@ -25,30 +26,42 @@ def home():
 def basic_scheduler():
     data = request.get_json()
     sn = data['deviceSn']
-    if sn in schedulers:
+    global scheduler_amber  # Add global declaration
+    if sn in amber_devices:
         return jsonify(status='error', message='Scheduler already exists for this deviceSn'), 400
-    
-    scheduler = BatteryScheduler(
-        scheduler_type='PeakValley', battery_sn=sn, api_version='redx')
-    schedulers[sn] = scheduler
-    thread = Thread(target=scheduler.start)
-    thread.daemon = True  # This will make sure the thread exits when the main program exits
-    thread.start()
+    if scheduler_amber is None:
+        scheduler_amber = BatteryScheduler(
+            scheduler_type='PeakValley', battery_sn=sn, api_version='redx')
+        thread = Thread(target=scheduler_amber.start)
+        thread.daemon = True  # This will make sure the thread exits when the main program exits
+        thread.start()
+        amber_devices[sn] = scheduler_amber
     return jsonify(status='success', message='Scheduler started'), 200
 
-@app.route('/stop', methods=['POST'])
-def stop_basic_scheduler():
+@app.route('/add_amber_device', methods=['POST'])
+def add_amber_device():
+    data = request.get_json()
+    sn = data['deviceSn']
+    if sn in amber_devices:
+        return jsonify(status='error', message='Scheduler already exists for this deviceSn'), 400
+    if scheduler_amber is None:
+        return jsonify(status='error', message='Scheduler not running, call /start to init the Amber scheduler'), 400
+
+    scheduler_amber.add_amber_device(sn)
+    amber_devices[sn] = scheduler_amber
+    return jsonify(status='success', message='Device {sn} added'), 200
+
+@app.route('/remove_amber_device', methods=['POST'])
+def remove_amber_device():
     data = request.get_json()
     sn = data['deviceSn']
     
-    # Get the scheduler instance from the dictionary and stop it
-    scheduler = schedulers.get(sn)
-    if scheduler:
-        scheduler.stop()
-        schedulers.pop(sn)
-        return jsonify(status='success', message='Scheduler stopped'), 200
+    if sn in amber_devices:
+        amber_devices.pop(sn)
+        scheduler_amber.remove_amber_device(sn)
+        return jsonify(status='success', message='Device {sn} removed'), 200
     else:
-        return jsonify(status='error', message='Scheduler not found'), 404
+        return jsonify(status='error', message='Device not found'), 404
 
 @app.route('/start_shawsbay', methods=['POST'])
 def ai_scheduler():
@@ -166,5 +179,5 @@ def route_get_prices():
         })
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5700, debug=True)
 

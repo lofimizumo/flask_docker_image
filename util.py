@@ -6,7 +6,9 @@ import pytz
 from itertools import cycle
 import logging
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S')
 
 def api_status_check(max_retries=10, delay=10):
     """
@@ -370,7 +372,7 @@ class PriceAndLoadMonitor:
                         'operatingMode': mode_map['Time'],
                         'chargeStart1': start_time,
                         'chargeEnd1': end_time,
-                        'chargePower1': 800
+                        'chargePower1': peak_valley_command.get('power', 800)
                         }
 
             elif command == 'Discharge':
