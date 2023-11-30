@@ -126,7 +126,7 @@ class BatteryScheduler:
             command = self._get_battery_command(
                 current_price=current_price, current_usage=current_usage,
                 current_time=current_time, current_soc=current_soc, current_pv=current_pv, device_type=device_type)
-            # self.send_battery_command(command=command, sn=sn)
+            self.send_battery_command(command=command, sn=sn)
             logging.info(f"AmberModel {sn}:Current price: {current_price}, current usage: {current_usage}, "
                         f"current time: {current_time}, current soc: {current_soc}, command: {command}")
 
