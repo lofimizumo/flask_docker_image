@@ -99,9 +99,12 @@ class BatteryScheduler:
         schedule = self.scheduler.daytime_hotfix_charging(schedule, load, current_time)
         logging.info(f"Schedule: {schedule}")
 
+
         for sn in self.sn_list:
             battery_schedule = schedule.get(sn, None)
-            if not battery_schedule:
+            original_schedule = self.last_schedule.get(sn, None)
+            if all(battery_schedule.get(k) == original_schedule.get(k) for k in battery_schedule) and all(battery_schedule.get(k) == original_schedule.get(k) for k in original_schedule):
+                logging.info(f"Schedule for {sn} is the same as the last one, skip sending command.")
                 continue
             try:
                 thread = Thread(target=self.send_battery_command,
