@@ -279,7 +279,7 @@ class PriceAndLoadMonitor:
         response = self.api.send_request(
             "device/get_params", method='POST', json=data, headers=headers)
         vpp = response.get('data', {}).get('operatingMode', 0)
-        return True if vpp == 1 else False
+        return True if vpp == '1' else False
     
     def get_project_stats(self, grid_ID=1, phase=2):
         '''
