@@ -102,7 +102,7 @@ class BatteryScheduler:
 
         for sn in self.sn_list:
             battery_schedule = schedule.get(sn, None)
-            original_schedule = self.last_schedule.get(sn, None)
+            original_schedule = battery_schedule if self.last_schedule is None else self.last_schedule.get(sn, None)
             if all(battery_schedule.get(k) == original_schedule.get(k) for k in battery_schedule) and all(battery_schedule.get(k) == original_schedule.get(k) for k in original_schedule):
                 logging.info(f"Schedule for {sn} is the same as the last one, skip sending command.")
                 continue
