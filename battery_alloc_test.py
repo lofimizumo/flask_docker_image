@@ -101,9 +101,9 @@ class BatteryScheduler:
 
 
         for sn in self.sn_list:
-            battery_schedule = schedule.get(sn, None)
-            original_schedule = battery_schedule if self.last_schedule is None else self.last_schedule.get(sn, None)
-            if all(battery_schedule.get(k) == original_schedule.get(k) for k in battery_schedule) and all(battery_schedule.get(k) == original_schedule.get(k) for k in original_schedule):
+            battery_schedule = schedule.get(sn, {})
+            last_battery_schedule = self.last_schedule.get(sn, {})
+            if all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in battery_schedule) and all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in last_battery_schedule):
                 logging.info(f"Schedule for {sn} is the same as the last one, skip sending command.")
                 continue
             try:
@@ -1040,13 +1040,13 @@ class AIScheduler(BaseScheduler):
 
 if __name__ == '__main__':
     # For Phase 2
-    # scheduler = BatteryScheduler(
-    #     scheduler_type='AIScheduler', 
-    #     battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], 
-    #     test_mode=False, 
-    #     api_version='redx', 
-    #     pv_sn=['RX2505ACA10J0A170033'],
-    #     phase=2)
+    scheduler = BatteryScheduler(
+        scheduler_type='AIScheduler', 
+        battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], 
+        test_mode=False, 
+        api_version='redx', 
+        pv_sn=['RX2505ACA10J0A170033'],
+        phase=2)
     
     # For Phase 3
     # scheduler = BatteryScheduler(
@@ -1058,5 +1058,5 @@ if __name__ == '__main__':
     #     phase=3)
 
     # For Amber Model
-    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10J0A160016','011LOKG080015B','RX2505ACA20J0A180003'], test_mode=False, api_version='redx')
+    # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10J0A160016','011LOKG080015B','RX2505ACA20J0A180003'], test_mode=False, api_version='redx')
     scheduler.start()
