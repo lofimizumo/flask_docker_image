@@ -114,7 +114,7 @@ class BatteryScheduler:
                 logging.error(f"Error sending battery command: {e}")
                 continue
 
-        self.last_schedule = schedule
+        self.last_schedule = schedule.copy()
 
     def _process_peak_valley_scheduler(self):
         for sn in self.sn_list:
