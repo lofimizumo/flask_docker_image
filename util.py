@@ -262,6 +262,8 @@ class PriceAndLoadMonitor:
             response = self.api.send_request("user/token", method='POST', data={
                 'user_account': 'yetao_admin', 'secret': 'a~L$o8dJ246c'}, headers={'Content-Type': 'application/x-www-form-urlencoded'})
         self.token_last_updated = datetime.now(tz=pytz.timezone('Australia/Sydney'))
+        if response is None:
+            raise Exception('API failed: get_token')
         return response['data']['token']
 
     def get_realtime_battery_stats(self, sn):
@@ -270,6 +272,8 @@ class PriceAndLoadMonitor:
         headers = {'token': self.get_token()}
         response = self.api.send_request(
             "device/get_latest_data", method='POST', json=data, headers=headers)
+        if response is None:
+            raise Exception('API failed: get_latest_data')
         return response['data']
 
     def is_VPP_on(self, sn):
@@ -290,6 +294,8 @@ class PriceAndLoadMonitor:
             "grid/get_meter_reading", method='POST', json=data, headers=headers)
         self.get_meter_reading_stats_call_count += 1
         # logging.info(f'get_prediction_v2_api called: {self.get_meter_reading_stats_call_count}')
+        if response is None:
+            raise Exception('Get meter reading API failed')
         return response['data'][f'phase{phase}']
 
     def get_project_demand(self, grid_ID=1, phase=2):
@@ -302,6 +308,8 @@ class PriceAndLoadMonitor:
         headers = {'token': self.get_token()}
         response = self.api.send_request(
             "grid/get_prediction_v2", method='POST', json=data, headers=headers)
+        if response is None:
+            raise Exception('Get prediction v2 API failed')
         prediction_average = [
             (int(x['predictionLower']) + int(x['predictionUpper']))/2 for x in response['data']]
         self.get_project_stats_call_count += 1
