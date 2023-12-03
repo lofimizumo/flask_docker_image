@@ -2,6 +2,7 @@ import sched
 from datetime import datetime, timedelta
 import time
 import numpy as np
+import copy
 import util
 import pytz
 import logging
@@ -80,7 +81,7 @@ class BatteryScheduler:
 
         try:
             if isinstance(self.scheduler, AIScheduler):
-                interval = 360
+                interval = 360 
                 self._process_ai_scheduler()
             elif isinstance(self.scheduler, PeakValleyScheduler):
                 self._process_peak_valley_scheduler()
@@ -103,9 +104,9 @@ class BatteryScheduler:
         for sn in self.sn_list:
             battery_schedule = schedule.get(sn, {})
             last_battery_schedule = self.last_schedule.get(sn, {})
-            # if all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in battery_schedule) and all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in last_battery_schedule):
-                # logging.info(f"Schedule for {sn} is the same as the last one, skip sending command.")
-                # continue
+            if all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in battery_schedule) and all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in last_battery_schedule):
+                logging.info(f"Schedule for {sn} is the same as the last one, skip sending command.")
+                continue
             try:
                 thread = Thread(target=self.send_battery_command,
                                 kwargs={'json':battery_schedule, 'sn':sn})
@@ -114,7 +115,7 @@ class BatteryScheduler:
                 logging.error(f"Error sending battery command: {e}")
                 continue
 
-        self.last_schedule = schedule.copy()
+        self.last_schedule = copy.deepcopy(schedule)
 
     def _process_peak_valley_scheduler(self):
         for sn in self.sn_list:
