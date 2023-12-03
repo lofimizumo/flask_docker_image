@@ -103,9 +103,9 @@ class BatteryScheduler:
         for sn in self.sn_list:
             battery_schedule = schedule.get(sn, {})
             last_battery_schedule = self.last_schedule.get(sn, {})
-            if all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in battery_schedule) and all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in last_battery_schedule):
-                logging.info(f"Schedule for {sn} is the same as the last one, skip sending command.")
-                continue
+            # if all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in battery_schedule) and all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in last_battery_schedule):
+                # logging.info(f"Schedule for {sn} is the same as the last one, skip sending command.")
+                # continue
             try:
                 thread = Thread(target=self.send_battery_command,
                                 kwargs={'json':battery_schedule, 'sn':sn})
@@ -531,6 +531,7 @@ class AIScheduler(BaseScheduler):
                 end_time = datetime.strptime(schedule[sn]['dischargeEnd1'], '%H:%M')
                 end_time_str = schedule[sn]['dischargeEnd1']
                 if start_time > current_time:
+                    logging.info(f'--Device: {sn} is not in discharging period, skip.')
                     continue
                 if end_time < current_time:
                     end_time = current_time +timedelta(minutes=30)
@@ -549,12 +550,13 @@ class AIScheduler(BaseScheduler):
                 if load_now <= threshold_upper_bound:
                     break
                 if not start_time <= current_time <= end_time:
+                    logging.info(f'--Device: {sn} is not in discharging period, skip.')
                     continue
                 increased_power = schedule.get(
                     sn, {}).get('dischargePower1', 0)
                 increased_power = min(700+increased_power, self.battery_original_discharging_powers.get(sn, 1000))
                 difference = increased_power - schedule[sn]['dischargePower1']
-                logging.info(f'Increased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {increased_power}')
+                logging.info(f'--Increased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {increased_power}')
                 schedule[sn]['dischargePower1'] = increased_power
                 load_now -= difference
 
@@ -567,12 +569,13 @@ class AIScheduler(BaseScheduler):
                 if load_now >= threshold_lower_bound:
                     break
                 if not start_time <= current_time <= end_time:
+                    logging.info(f'--Device: {sn} is not in discharging period, skip.')
                     continue
                 decreased_power = schedule.get(
                     sn, {}).get('dischargePower1', 0)
                 decreased_power = 0 if 0.5*decreased_power < 200 else 0.5*decreased_power 
                 difference = schedule[sn]['dischargePower1'] - decreased_power
-                logging.info(f'Decreased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {decreased_power}')
+                logging.info(f'--Decreased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {decreased_power}')
                 schedule[sn]['dischargePower1'] = decreased_power
                 load_now += difference
         
@@ -1021,6 +1024,7 @@ class AIScheduler(BaseScheduler):
     def step(self):
         current_day = datetime.now(tz=pytz.timezone('Australia/Sydney')).day
         if self.last_scheduled_date != current_day:
+            logging.info(f'Updating schedule: day {current_day}, time: {datetime.now(tz=pytz.timezone("Australia/Sydney"))}, last_scheduled_date: {self.last_scheduled_date}')
             demand, price = self._get_demand_and_price()
             stats = self._get_battery_status()
             self.schedule = self.generate_schedule(
@@ -1040,22 +1044,22 @@ class AIScheduler(BaseScheduler):
 
 if __name__ == '__main__':
     # For Phase 2
-    scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler', 
-        battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], 
-        test_mode=False, 
-        api_version='redx', 
-        pv_sn=['RX2505ACA10J0A170033'],
-        phase=2)
-    
-    # For Phase 3
     # scheduler = BatteryScheduler(
     #     scheduler_type='AIScheduler', 
-    #     battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'], 
+    #     battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], 
     #     test_mode=False, 
     #     api_version='redx', 
-    #     pv_sn=['RX2505ACA10J0A170033','RX2505ACA10J0A170019'],
-    #     phase=3)
+    #     pv_sn=['RX2505ACA10J0A170033'],
+    #     phase=2)
+    
+    # For Phase 3
+    scheduler = BatteryScheduler(
+        scheduler_type='AIScheduler', 
+        battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'], 
+        test_mode=False, 
+        api_version='redx', 
+        pv_sn=['RX2505ACA10J0A170033','RX2505ACA10J0A170019'],
+        phase=3)
 
     # For Amber Model
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10J0A160016','011LOKG080015B','RX2505ACA20J0A180003'], test_mode=False, api_version='redx')
