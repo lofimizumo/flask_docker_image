@@ -8,6 +8,7 @@ import pytz
 import logging
 import pickle
 import pandas as pd
+from matplotlib import pyplot as plt
 
 logging.basicConfig(level=logging.INFO)
 
@@ -43,17 +44,12 @@ class SimulationScheduler:
         self.generator = TimeIntervalGenerator(start_date_str=simulate_day)
         self.current_time = None
         self.load_df = None
+        self.schedule_analyser = ScheduleAnalyser()
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
     def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
-        if scheduler_type == 'PeakValley':
-            self.scheduler = PeakValleyScheduler()
-            self.scheduler.init_price_history(self.monitor.get_price_history())
-        elif scheduler_type == 'AIScheduler':
-            self.scheduler = AIScheduler(
-                sn_list=self.sn_list, api_version=api_version, pv_sn=pv_sn)
-        else:
-            raise ValueError(f"Unknown scheduler type: {scheduler_type}")
+        self.scheduler = AIScheduler(
+            sn_list=self.sn_list, api_version=api_version, pv_sn=pv_sn)
 
     def _get_battery_command(self, **kwargs):
         if not self.scheduler:
@@ -73,8 +69,6 @@ class SimulationScheduler:
         logging.info(f'Current time: {self.current_time}')
         if isinstance(self.scheduler, AIScheduler):
             self._process_ai_scheduler()
-        elif isinstance(self.scheduler, PeakValleyScheduler):
-            self._process_peak_valley_scheduler()
         self.event = self.s.enter(interval, 1, self._start)
 
     def _process_ai_scheduler(self):
@@ -84,9 +78,7 @@ class SimulationScheduler:
         # logging.info(f"Schedule: {schedule}")
 
         self.last_schedule = schedule
-
-    def _process_peak_valley_scheduler(self):
-        pass
+        self.schedule_analyser.update_schedule(schedule)
 
     def start(self):
         self.is_running = True
@@ -289,23 +281,6 @@ class SimulationScheduler:
         return new_df
 
 
-class BaseScheduler:
-
-    def step(self, **kwargs):
-        """
-        Execute one scheduling step and return a battery command.
-        Override this method in the derived class.
-        """
-        raise NotImplementedError
-
-    def required_data(self):
-        """
-        Return a list of data fields required by the scheduler.
-        Override this method in the derived class.
-        """
-        raise NotImplementedError
-
-
 class TimeIntervalGenerator:
     def __init__(self, start_date_str='2022-11-25'):
         self.start_time = datetime.fromisoformat(start_date_str)
@@ -321,143 +296,114 @@ class TimeIntervalGenerator:
         return next(self.generator)
 
 
-class PeakValleyScheduler(BaseScheduler):
-    def __init__(self, batnum=1):
-        # Constants and Initializations
-        self.BatNum = batnum
-        self.BatMaxCapacity = 5
-        self.BatCap = self.BatNum * self.BatMaxCapacity
-        self.BatChgMax = self.BatNum * 1.5
-        self.BatDisMax = self.BatNum * 2.5
-        self.BatSocMin = 0.1
-        self.HrMin = 30 / 60
-        self.SellDiscount = 0.12
-        self.SpikeLevel = 300
-        self.SolarCharge = 0
-        self.SellBack = 0
-        self.BuyPct = 30
-        self.SellPct = 80
-        self.LookBackBars = 2 * 48
-        self.ChgStart1 = '5:00'
-        self.ChgEnd1 = '16:00'
-        self.DisChgStart2 = '16:05'
-        self.DisChgEnd2 = '23:55'
-        self.DisChgStart1 = '0:00'
-        self.DisChgEnd1 = '5:00'
+class ScheduleAnalyser:
+    def __init__(self):
+        self.schedules = {}
 
-        self.date = None
+    def update_schedule(self, schedule):
+        """Update the schedule dictionary with a new schedule."""
+        for key, value in schedule.items():
+            if key not in self.schedules:
+                self.schedules[key] = []
+            self.schedules[key].append(value)
 
-        # Initial data containers and setup
-        self.price_history = None
-        self.solar = None
-        self.soc = self.BatSocMin
-        self.bat_cap = self.soc * self.BatCap
+    def parse_time(self, time_str):
+        """Parse a time string in the format HH:MM to a datetime object."""
+        return datetime.strptime(time_str, '%H:%M')
 
-        # Convert start and end times to datetime.time
-        self.t_chg_start1 = datetime.strptime(
-            self.ChgStart1, '%H:%M').time()
-        self.t_chg_end1 = datetime.strptime(
-            self.ChgEnd1, '%H:%M').time()
-        self.t_dis_start2 = datetime.strptime(
-            self.DisChgStart2, '%H:%M').time()
-        self.t_dis_end2 = datetime.strptime(
-            self.DisChgEnd2, '%H:%M').time()
-        self.t_dis_start1 = datetime.strptime(
-            self.DisChgStart1, '%H:%M').time()
-        self.t_dis_end1 = datetime.strptime(
-            self.DisChgEnd1, '%H:%M').time()
+    def battery_schedule(self, schedule_list, initial_power=5000, max_capacity=10000):
+        """Process a series of battery schedules and return power usage."""
+        all_power_usage = []
+        for i, (schedule, start_time_str) in enumerate(schedule_list):
+            start_time = self.parse_time(start_time_str)
+            end_time = self.parse_time('23:59') if i == len(schedule_list) - 1 else self.parse_time(schedule_list[i + 1][1])
+            power_usage = self.calculate_power(schedule, start_time, end_time, initial_power, max_capacity)
+            all_power_usage.extend(power_usage)
+            # Update initial power for the next schedule
+            initial_power = power_usage[-1][1]
 
-    def init_price_history(self, price_history):
-        self.price_history = price_history
+        return all_power_usage
 
-    def _get_solar(self, interval=0.5, test_mode=True):
-        def gaussian_mixture(interval=0.5):
-            gaus_x = np.arange(0, 24, interval)
-            mu1 = 10.35
-            mu2 = 13.65
-            sigma = 1.67
-            gaus_y1 = np.exp(-0.5 * ((gaus_x - mu1) / sigma)
-                             ** 2) / (sigma * np.sqrt(2 * np.pi))
-            gaus_y2 = np.exp(-0.5 * ((gaus_x - mu2) / sigma)
-                             ** 2) / (sigma * np.sqrt(2 * np.pi))
-            gaus_y = (gaus_y1 + gaus_y2) / np.max(gaus_y1 + gaus_y2)
-            return gaus_x, gaus_y
-        if test_mode:
-            max_solar = 5000
-        else:
-            try:
-                weather_fetcher = WeatherInfoFetcher('Shaws Bay')
-                rain_info = weather_fetcher.get_rain_cloud_forecast_24h(
-                    weather_fetcher.get_response())
-                # here we give clouds more weight than rain based on the assumption that clouds have a bigger impact on solar generation
-                max_solar = (
-                    1-(1.4*rain_info['clouds']+0.6*rain_info['rain'])/(2*100))*5000
-                logging.info(
-                    f'Weather forecast: rain: {rain_info["rain"]}, clouds: {rain_info["clouds"]}, max_solar: {max_solar}')
-            except Exception as e:
-                logging.error(e)
-                max_solar = 5000
+    def calculate_power(self, schedule, start_time, end_time, initial_power, max_capacity):
+        """Calculate the power usage or charging for a given time period."""
+        remaining_power = initial_power
+        power_usage = []
 
-        _, gaus_y = gaussian_mixture(interval)
-        return gaus_y*max_solar
+        current_time = start_time
+        while current_time < end_time:
+            # Check if current time is within a charging period
+            is_charging = False
+            charging_power = 0
+            for key, value in schedule.items():
+                if 'chargeStart' in key:
+                    charge_start = self.parse_time(schedule[key])
+                    charge_end = self.parse_time(schedule[key.replace('Start', 'End')])
+                    charge_power = schedule[key.replace('Start', 'Power')]
 
-    def step(self, current_price, current_time, current_usage, current_soc, current_pv):
-        # Update solar data each day
-        if self.date != datetime.now(tz=pytz.timezone('Australia/Brisbane')).day or self.solar is None:
-            self.solar = self._get_solar()
-            self.date = datetime.now(
-                tz=pytz.timezone('Australia/Brisbane')).day
+                    # Adjust the charge start and end times to the current date for comparison
+                    charge_start = current_time.replace(hour=charge_start.hour, minute=charge_start.minute)
+                    charge_end = current_time.replace(hour=charge_end.hour, minute=charge_end.minute)
 
-        # Update battery state
-        self.bat_cap = current_soc * self.BatCap
+                    if charge_start <= current_time <= charge_end:
+                        is_charging = True
+                        charging_power = charge_power
+                        break
 
-        self.price_history.append(current_price)
-        if len(self.price_history) > self.LookBackBars:
-            self.price_history.pop(0)
+            if is_charging:
+                # Calculate the charging for this hour
+                if remaining_power + charging_power > max_capacity:
+                    charging_power = max_capacity - remaining_power
+                remaining_power = min(remaining_power + charging_power, max_capacity)
+            else:
+                # Assume some discharging if not charging
+                discharging_power = -100  # example discharging rate per hour
+                remaining_power = max(0, remaining_power + discharging_power)
 
-        # Buy and sell price based on historical data
-        buy_price, sell_price = np.percentile(
-            self.price_history, [self.BuyPct, self.SellPct])
+            power_usage.append((current_time.strftime('%H:%M'), remaining_power, charging_power if is_charging else discharging_power))
+            current_time += timedelta(hours=1)
 
-        current_timenum = datetime.strptime(
-            current_time, '%H:%M').time()
+        return power_usage
 
-        command = ['Idle', 0]  # No action by default
+    def plot_battery_schedule(self, schedule_list, initial_power=5000, max_capacity=10000):
+        """Plot a series of battery schedules."""
+        # Getting the power usage data
+        all_power_usage = self.battery_schedule(schedule_list, initial_power, max_capacity)
 
-        if self._is_charging_period(current_timenum) and (current_price <= buy_price or current_pv > current_usage):
-            # Charging logic
-            chg_delta = self.BatChgMax * self.HrMin
-            temp_chg = chg_delta + self.bat_cap
+        # Preparing the plot data
+        time_axis = []
+        power_values = []
+        start_time = self.parse_time("00:00")
+        number_of_5_min_per_day = 24 * 60 / 5
 
-            self.bat_cap = min(temp_chg, self.BatMaxCapacity)
-            command = ['Charge', self.BatChgMax]
+        # Generate time axis for every 5 minutes
+        for _5min in range(int(number_of_5_min_per_day)):
+            current_time = (start_time + timedelta(minutes=5 * _5min)).strftime('%H:%M')
+            time_axis.append(current_time)
 
-        elif self._is_discharging_period(current_timenum) and (current_price >= sell_price or current_price > self.SpikeLevel) and current_pv < current_usage:
-            # Discharging logic
-            dischg_delta = self.BatDisMax * \
-                self.HrMin if self.SellBack else min(
-                    current_usage, self.BatDisMax) * self.HrMin
-            temp_dischg = self.bat_cap - dischg_delta
+            # Find the corresponding power value for the current time
+            power_for_current_time = next((power for time, power, _ in all_power_usage if time == current_time), None)
+            if power_for_current_time is not None:
+                power_values.append(power_for_current_time)
+            else:
+                # If there is no exact match, keep the last known power value (assuming constant until next change)
+                power_values.append(power_values[-1] if power_values else initial_power)
 
-            if temp_dischg >= self.BatCap * self.BatSocMin:
-                self.bat_cap = temp_dischg  # discharge battery
-                _value = -self.BatDisMax if self.SellBack else - \
-                    min(current_usage, self.BatDisMax)
-                command = ['Discharge', _value]
+        time_axis = np.array(time_axis)
+        power_values = np.array(power_values)
 
-        return command[0]
-
-    def _is_charging_period(self, t):
-        return t >= self.t_chg_start1 and t <= self.t_chg_end1
-
-    def _is_discharging_period(self, t):
-        return (t >= self.t_dis_start2 and t <= self.t_dis_end2) or (t >= self.t_dis_start1 and t <= self.t_dis_end1)
-
-    def required_data(self):
-        return ['current_price', 'current_time', 'current_usage', 'current_soc', 'current_pv']
+        # Plotting the graph
+        plt.figure(figsize=(12, 6))
+        plt.plot(time_axis, power_values)
+        plt.xticks(rotation=45)
+        plt.xlabel('Time')
+        plt.ylabel('Power Usage (kWh)')
+        plt.title('Battery Schedule')
+        plt.grid(True)
+        plt.show()
 
 
-class AIScheduler(BaseScheduler):
+
+class AIScheduler():
 
     def __init__(self, sn_list, pv_sn, api_version='redx'):
         self.battery_max_capacity_kwh = 5
@@ -526,24 +472,7 @@ class AIScheduler(BaseScheduler):
                              ** 2) / (sigma * np.sqrt(2 * np.pi))
             gaus_y = (gaus_y1 + gaus_y2) / np.max(gaus_y1 + gaus_y2)
             return gaus_x, gaus_y
-        if test_mode:
-            max_solar = 5000
-        else:
-            try:
-                weather_fetcher = WeatherInfoFetcher('Shaws Bay')
-                rain_info = weather_fetcher.get_rain_cloud_forecast_24h(
-                    weather_fetcher.get_response())
-                # here we give clouds more weight than rain based on the assumption that clouds have a bigger impact on solar generation
-                # sigma is used to adjust the impact of weather on solar generation
-                sigma = 0.5
-                max_solar = (
-                    1-sigma*(1.4*rain_info['clouds']+0.6*rain_info['rain'])/(2*100))*5000
-                logging.info(
-                    f'Weather forecast: rain: {rain_info["rain"]}, clouds: {rain_info["clouds"]}, max_solar: {max_solar}')
-            except Exception as e:
-                logging.error(e)
-                max_solar = 5000
-
+        max_solar = 5000
         _, gaus_y = gaussian_mixture(interval)
         return gaus_y*max_solar
 
@@ -869,7 +798,7 @@ class AIScheduler(BaseScheduler):
     def step(self):
         current_date = datetime.now(tz=pytz.timezone('Australia/Sydney')).day
         # Check if it's a new day or there's no existing schedule
-        if self.last_scheduled_date != current_date: 
+        if self.last_scheduled_date != current_date:
             demand, price = pickle.load(open('demand_price.pkl', 'rb'))
             # demand, price = self._get_demand_and_price()
             stats = self._get_battery_status()
@@ -883,8 +812,19 @@ class AIScheduler(BaseScheduler):
         return []
 
 
+def test_func():
+    schedule_analyser = ScheduleAnalyser()
+    schedule_list = [
+        ({'chargeStart1': '00:05', 'chargeEnd1': '05:50', 'chargePower1': 869}, '08:00'),
+        ({'chargeStart2': '10:30', 'chargeEnd2': '15:00', 'chargePower2': 700}, '10:00'),
+        ({'chargeStart2': '08:30', 'chargeEnd2': '10:00', 'chargePower2': 200}, '09:00')
+    ]
+    schedule_list = sorted(schedule_list, key=lambda schedule: datetime.strptime(
+        schedule[1], '%H:%M'))
+    print(schedule_analyser.plot_battery_schedule(schedule_list))
 if __name__ == '__main__':
-    scheduler = SimulationScheduler(
-        scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx', pv_sn='RX2505ACA10J0A170033')
+    # scheduler = SimulationScheduler(
+    #     scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx', pv_sn='RX2505ACA10J0A170033')
 
-    scheduler.start()
+    # scheduler.start()
+    test_func()

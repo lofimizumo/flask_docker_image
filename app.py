@@ -131,7 +131,7 @@ def ai_scheduler_phase1():
 
     scheduler_shawsbay_phase1 = BatteryScheduler(
         scheduler_type='AIScheduler', 
-        battery_sn=['RX2505ACA10J0A180037', 'RX2505ACA10J0A160039', 'RX2505ACA10J0A160014', 'RX2505ACA10J0A180009'], 
+        battery_sn=['RX2505ACA10J0A150009', 'RX2505ACA10J0A180037', 'RX2505ACA10J0A160039', 'RX2505ACA10J0A160014', 'RX2505ACA10J0A180009'], 
         test_mode=False, 
         api_version='redx', 
         pv_sn=['RX2505ACA10J0A160039'],
