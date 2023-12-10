@@ -389,7 +389,7 @@ class PriceAndLoadMonitor:
                         'dischargeStart1': start_time,
                         'dischargeEnd1': end_time,
                         'antiBackflowSW': anti_backflow_map[anti_backflow],
-                        'dischargePower1': 2500
+                        'dischargePower1': peak_valley_command.get('power', 2500)
                         }
             elif command == 'Idle':
                 data = {'deviceSn': sn,

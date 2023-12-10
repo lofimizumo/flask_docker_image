@@ -308,7 +308,7 @@ class PeakValleyScheduler(BaseScheduler):
         peak_price = np.percentile(self.price_history, self.PeakPct)
 
 
-        command = {'command': 'Idle'} 
+        command = {"command": "Idle"} 
 
         if self._is_charging_period(current_time) and (current_price <= buy_price or current_pv > current_usage):
             # Charging logic
@@ -316,7 +316,7 @@ class PeakValleyScheduler(BaseScheduler):
             temp_chg = chg_delta + self.bat_cap
 
             self.bat_cap = min(temp_chg, self.BatMaxCapacity)
-            power = 1500 if device_type == '5000' else 800
+            power = 1500 if device_type == "5000" else 800
             command = {'command': 'Charge', 'power': power}
 
         elif self._is_discharging_period(current_time) and (current_price >= sell_price or current_price > self.SpikeLevel) and current_pv <= current_usage:
@@ -329,7 +329,8 @@ class PeakValleyScheduler(BaseScheduler):
             if temp_dischg >= self.BatCap * self.BatSocMin:
                 self.bat_cap = temp_dischg  # discharge battery
                 anti_backflow = False if current_price > peak_price else True
-                command = {'command': 'Discharge', 'anti_backflow': anti_backflow}
+                power = 5000 if device_type == "5000" else 2500
+                command = {'command': 'Discharge', 'power': power, 'anti_backflow': anti_backflow}
 
         return command
 
@@ -347,6 +348,8 @@ class AIScheduler(BaseScheduler):
 
     def __init__(self, sn_list, pv_sn, api_version='redx',phase=2, mode='normal'):
         self.battery_max_capacity_kwh = 5
+        if sn_list is None:
+            raise ValueError('sn_list is None')
         self.num_batteries = len(sn_list)
         self.price_weight = 1
         self.min_discharge_rate_kw = 1.25
