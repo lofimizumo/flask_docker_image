@@ -6,3 +6,7 @@ scratch/
 *.pyc
 data/
 ignoreMe/
+demand_element.pkl
+output.txt
+timesetting.txt
+__pycache__/util.cpython-310.pyc

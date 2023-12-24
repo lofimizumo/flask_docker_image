@@ -307,7 +307,7 @@ class PriceAndLoadMonitor:
         data = {'date': date_today, 'gridID': grid_ID, 'phase': phase}
         headers = {'token': self.get_token()}
         response = self.api.send_request(
-            "grid/get_prediction_v2", method='POST', json=data, headers=headers)
+            "grid/get_prediction", method='POST', json=data, headers=headers)
         if response is None:
             raise Exception('Get prediction v2 API failed')
         prediction_average = [

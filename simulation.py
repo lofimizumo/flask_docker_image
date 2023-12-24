@@ -374,9 +374,12 @@ class AIScheduler():
         # Price for Shawsbay
         shoulder_period = [('9:00', '16:59'), ('20:00', '21:59')]
         peak_period = [('7:00', '8:59'), ('17:00', '19:59')]
-        shoulder_price = 0.076586 + 0.059583 + 0.016196 + 0.007801
-        off_peak_price = 0.058583 + 0.034259 + 0.016196 + 0.007801
-        peak_price = 0.088695 + 0.079609 + 0.016196 + 0.007801
+        # shoulder_price = 0.076586 + 0.059583 + 0.016196 + 0.007801
+        # off_peak_price = 0.058583 + 0.034259 + 0.016196 + 0.007801
+        # peak_price = 0.088695 + 0.079609 + 0.016196 + 0.007801
+        shoulder_price = 3.7 
+        off_peak_price = 2.5
+        peak_price = 4.8 
 
         price = get_price_array(shoulder_period, peak_period,
                                 shoulder_price, off_peak_price, peak_price, interval)
@@ -854,22 +857,152 @@ class AIScheduler():
 
     def _get_command_from_schedule(self, current_time):
         return 'Idle'
+    def plot(self, consumption, price, battery_discharges, net_consumption):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        import numpy as np
 
+        # Seaborn settings
+        sns.set(style="whitegrid")
+        sns.set_palette("tab10")
+
+        def time_string(minute_count):
+            """ Convert total minutes to a formatted time string like 14:35 """
+            hour = minute_count // 60
+            minute = minute_count % 60
+            return f"{hour:02d}:{minute:02d}"
+
+        def time_to_minutes(t):
+            hours, minutes = map(int, t.split(':'))
+            return hours * 60 + minutes
+
+        def plot_greedy_solution(hours, consumption, battery_discharges, net_consumption, weight_adjusted_array):
+            plt.figure(figsize=(15, 6))
+
+            # Generate the times list for the x-axis
+            times = [time_string(i * 5) for i in range(288)]
+
+            # Plot original consumption
+            sns.lineplot(x=times, y=consumption, marker='o',
+                         label='Original Consumption')
+
+            # Plot net consumption after battery discharge
+            sns.lineplot(x=times, y=net_consumption,
+                         linestyle='--', label='Net Consumption')
+
+            # Plot the weighted consumption
+            sns.lineplot(x=times, y=weight_adjusted_array,
+                         linestyle='dashdot', label='Weighted Consumption')
+
+            # Plot the constant discharge rates for each battery as rectangles
+            palette = sns.color_palette(n_colors=15)
+            legend_added = set()
+
+            # Maintain a height tracker for each hour to determine the starting height for each battery's rectangle
+            height_tracker = [0] * len(times)
+
+            for i, discharge in enumerate(battery_discharges):
+                label = f'Battery {i+1} Discharge'
+                for j, rate in enumerate(discharge):
+                    if rate > 0:  # If the battery is discharging at this hour
+                        # Base the start of discharge at net consumption + height of previous batteries
+                        start = net_consumption[j] + height_tracker[j]
+                        end = start + rate
+                        plt.fill_between([times[j], times[j+1]], [start, start], [end, end], color=palette[i],
+                                         alpha=0.5, label=label if i not in legend_added else "")
+                        legend_added.add(i)
+
+                        # Update the height tracker for the next battery
+                        height_tracker[j] += rate
+
+            # Define a soft color palette for the periods
+            soft_yellow = "#FFFACD"  # lemon chiffon
+            soft_red = "#FFC1C1"  # rosy brown
+
+            shoulder_period = [('9:00', '16:59'), ('20:00', '21:59')]
+            peak_period = [('7:00', '8:59'), ('17:00', '19:59')]
+
+            # Add the shaded regions with dotted frame for shoulder period
+            for i, period in enumerate(shoulder_period):
+                start = times[time_to_minutes(period[0]) // 5]
+                end = times[time_to_minutes(period[1]) // 5]
+                plt.axvspan(start, end, color=soft_yellow, alpha=0.6, edgecolor='yellow',
+                            linestyle='dotted', linewidth=1.5, label='Shoulder Period' if i == 0 else "")
+
+            # Add the shaded regions with dotted frame for peak period
+            for i, period in enumerate(peak_period):
+                start = times[time_to_minutes(period[0]) // 5]
+                end = times[time_to_minutes(period[1]) // 5]
+                plt.axvspan(start, end, color=soft_red, alpha=0.6, edgecolor='red',
+                            linestyle='dotted', linewidth=1.5, label='Peak Period' if i == 0 else "")
+
+            plt.xlabel('Time')
+            plt.ylabel('Consumption/Discharge Rate')
+            plt.title('Energy Consumption and Battery Discharge')
+            tick_spacing = 12
+            plt.xticks([times[i]
+                       for i in range(0, len(times), tick_spacing)], rotation=45)
+
+            plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
+            plt.tight_layout()
+            plt.show()
+
+        def plot_charge_windows(hours, consumption, battery_charges, net_consumption):
+            net_consumption = np.array(net_consumption)
+            net_consumption += np.sum(battery_charges, axis=0)
+            plt.figure(figsize=(15, 6))
+
+            sns.lineplot(x=hours, y=consumption, marker='o',
+                         label='Original Consumption')
+            sns.lineplot(x=hours, y=net_consumption, linestyle='--',
+                         label='Net Consumption after Charge')
+            palette = sns.color_palette(n_colors=15)
+            legend_added = set()
+            height_tracker = [0] * len(hours)
+
+            for i, charge in enumerate(battery_charges):
+                label = f'Battery {i+1} Charge'
+                for hour, rate in enumerate(charge):
+                    if rate > 0:
+                        start = consumption[hour] + height_tracker[hour]
+                        end = start + rate
+                        plt.fill_between([hour, hour+1], [start, start], [end, end], color=palette[i],
+                                         alpha=0.5, label=label if i not in legend_added else "")
+                        legend_added.add(i)
+                        height_tracker[hour] += rate
+
+            plt.xlabel('Hour')
+            plt.ylabel('Consumption/Charge Rate')
+            plt.title('Energy Consumption and Battery Charge')
+            plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
+            plt.tight_layout()
+            plt.show()
+        weight_adjusted_array = [i*j*self.price_weight for i, j in zip(
+            consumption, price)]
+        hours = list(range(len(consumption)))
+
+        plot_greedy_solution(hours, consumption,
+                             battery_discharges, net_consumption, weight_adjusted_array)
     def step(self):
         current_date = datetime.now(tz=pytz.timezone('Australia/Sydney')).day
         # Check if it's a new day or there's no existing schedule
         if self.last_scheduled_date != current_date:
-            demand, price = pickle.load(open('demand_price.pkl', 'rb'))
-            # demand, price = self._get_demand_and_price()
-            stats = self._get_battery_status()
+            demand = pickle.load(open('demand_element.pkl', 'rb'))
+            _ , price = self._get_demand_and_price()
+            stats = self.mock_get_battery_status()
+            # stats = self._get_battery_status()
             self.schedule = self.generate_schedule(
                 demand, price, self.battery_max_capacity_kwh, self.num_batteries, stats, self.price_weight)
             self.last_scheduled_date = current_date
+
 
         return self.schedule
 
     def required_data(self):
         return []
+
+    def mock_get_battery_status(self):
+        return {x: {'soc': 100} for x in self.sn_list}
 
 
 def test_func():
@@ -896,5 +1029,15 @@ if __name__ == '__main__':
     scheduler = SimulationScheduler(
         scheduler_type='AIScheduler', battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], test_mode=False, api_version='redx', pv_sn='RX2505ACA10J0A170033')
 
+    # For Project element
+    battery_sn_mock = [str(i) for i in range(30)]
+
+    scheduler = SimulationScheduler(
+        scheduler_type='AIScheduler', 
+        battery_sn= battery_sn_mock,
+        test_mode=False, 
+        api_version='redx', 
+        pv_sn=['RX2505ACA10J0A170033','RX2505ACA10J0A170019'],
+        phase=3)       
     scheduler.start()
     # test_func()

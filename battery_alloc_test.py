@@ -611,7 +611,7 @@ class AIScheduler(BaseScheduler):
                 capacity = 12*1000 * capacity
                 discharge_rate = capacity / duration
                 for h in range(best_start, best_start + duration):
-                    discharged = min(discharge_rate, net_consumption[h])
+                    discharged = min(discharge_rate, 1+net_consumption[h])
                     battery_discharges[_][h] = discharged
                     net_consumption[h] -= discharged
 
@@ -1041,6 +1041,8 @@ class AIScheduler(BaseScheduler):
                     sn, {}).get('chargePower1', 0)
 
         return self.schedule
+
+
 
     def required_data(self):
         return []
