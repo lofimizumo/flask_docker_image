@@ -611,9 +611,9 @@ class AIScheduler(BaseScheduler):
                 capacity = 12*1000 * capacity
                 discharge_rate = capacity / duration
                 for h in range(best_start, best_start + duration):
-                    discharged = min(discharge_rate, 1+net_consumption[h])
-                    battery_discharges[_][h] = discharged
-                    net_consumption[h] -= discharged
+                    # discharged = min(discharge_rate, 1+net_consumption[h])
+                    battery_discharges[_][h] = discharge_rate
+                    net_consumption[h] -= discharge_rate
 
             return net_consumption, battery_discharges
 
@@ -1050,22 +1050,22 @@ class AIScheduler(BaseScheduler):
 
 if __name__ == '__main__':
     # For Phase 2
-    # scheduler = BatteryScheduler(
-    #     scheduler_type='AIScheduler', 
-    #     battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], 
-    #     test_mode=False, 
-    #     api_version='redx', 
-    #     pv_sn=['RX2505ACA10J0A170033'],
-    #     phase=2)
-    
-    # For Phase 3
     scheduler = BatteryScheduler(
         scheduler_type='AIScheduler', 
-        battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'], 
+        battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], 
         test_mode=False, 
         api_version='redx', 
-        pv_sn=['RX2505ACA10J0A170033','RX2505ACA10J0A170019'],
-        phase=3)
+        pv_sn=['RX2505ACA10J0A170033'],
+        phase=2)
+    
+    # For Phase 3
+    # scheduler = BatteryScheduler(
+    #     scheduler_type='AIScheduler', 
+    #     battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'], 
+    #     test_mode=False, 
+    #     api_version='redx', 
+    #     pv_sn=['RX2505ACA10J0A170033','RX2505ACA10J0A170019'],
+    #     phase=3)
 
     # For Amber Model
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10J0A160016','011LOKG080015B','RX2505ACA20J0A180003'], test_mode=False, api_version='redx')
