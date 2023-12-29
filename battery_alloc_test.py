@@ -519,7 +519,7 @@ class AIScheduler(BaseScheduler):
     def daytime_hotfix_discharging_smooth(self, schedule: dict, load, current_time) -> dict:
         threshold_lower_bound = 4000
         threshold_upper_bound = threshold_lower_bound + 2000 
-        threshold_peak_bound = 8000
+        threshold_peak_bound = 12000
 
         current_time_str = current_time
         current_time = datetime.strptime(current_time, '%H:%M')
@@ -542,7 +542,7 @@ class AIScheduler(BaseScheduler):
                     end_time_str = end_time.strftime('%H:%M')
                     schedule[sn]['dischargeEnd1'] = end_time_str 
                 logging.info(f'Peak: Maximized discharging power for Device: {sn} by 30 minutes.')
-                schedule[sn]['dischargePower1'] = 2500
+                schedule[sn]['dischargePower1'] = 2000
             return schedule
 
         if load >= threshold_upper_bound:
