@@ -308,8 +308,8 @@ class PriceAndLoadMonitor:
         headers = {'token': self.get_token()}
         response = self.api.send_request(
             "grid/get_prediction", method='POST', json=data, headers=headers)
-        if response is None:
-            raise Exception('Get prediction v2 API failed')
+        if response.get('data', None) is None:
+            raise Exception('Get prediction API failed')
         prediction_average = [
             (int(x['predictionLower']) + int(x['predictionUpper']))/2 for x in response['data']]
         self.get_project_stats_call_count += 1

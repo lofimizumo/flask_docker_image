@@ -8,6 +8,7 @@ import pytz
 import logging
 import yaml
 from threading import Thread
+import pickle
 from solar_prediction import WeatherInfoFetcher
 
 logging.basicConfig(level=logging.INFO,
@@ -370,8 +371,13 @@ class AIScheduler(BaseScheduler):
     def _get_demand_and_price(self):
         # we don't need to get each battery's demand, just use the get_project_demand() method to get the total demand instead.
         # take the first battery monitor from the list
-        demand = self.battery_monitors[self.sn_list[0]].get_project_demand(phase=self.project_phase
-        )
+        try:
+            demand = self.battery_monitors[self.sn_list[0]].get_project_demand(phase=self.project_phase
+            )
+        except Exception as e:
+            demand, price = pickle.load(open('demand_price.pkl', 'rb'))
+            logging.info(f'Error fetching demand with get_prediction API, use the default demand instead. Error: {e}')
+
         interval = int(24*60/len(demand))
 
         def time_to_minutes(t):
