@@ -76,7 +76,7 @@ class BatteryScheduler:
 
         return self.scheduler.step(**kwargs)
 
-    def _start(self, interval=1800):
+    def _start(self, interval=120):
         if not self.is_running:
             return
 
@@ -122,18 +122,18 @@ class BatteryScheduler:
         for sn in self.sn_list:
             current_price = self.get_current_price()
             bat_stats = self.get_current_battery_stats(sn)
-            current_usage = bat_stats['loadP']
-            current_soc = bat_stats['soc'] / 100.0
+            current_usage = bat_stats['loadP'] if bat_stats else 0
+            current_soc = bat_stats['soc'] / 100.0 if bat_stats else 0
             current_time = self.get_current_time(
                 time_zone='Australia/Brisbane')
-            current_pv = bat_stats['ppv']
+            current_pv = bat_stats['ppv'] if bat_stats else 0
             device_type = self.sn_types.get(sn, '2505')
             command = self._get_battery_command(
                 current_price=current_price, current_usage=current_usage,
                 current_time=current_time, current_soc=current_soc, current_pv=current_pv, device_type=device_type)
             self.send_battery_command(command=command, sn=sn)
-            logging.info(f"AmberModel {sn}:Current price: {current_price}, current usage: {current_usage}, "
-                        f"current time: {current_time}, current soc: {current_soc}, command: {command}")
+            logging.info(f"AmberModel {sn}:price: {current_price}, usage: {current_usage}, "
+                        f"time: {current_time}, command: {command}")
 
     def start(self):
         self.is_running = True
@@ -222,6 +222,8 @@ class PeakValleyScheduler(BaseScheduler):
         self.DisChgEnd2 = '23:55'
         self.DisChgStart1 = '0:00'
         self.DisChgEnd1 = '8:00'
+        self.PeakStart = '18:00'
+        self.PeakEnd = '20:00'
 
         self.date = None
         self.last_updated_time = None
@@ -245,6 +247,10 @@ class PeakValleyScheduler(BaseScheduler):
             self.DisChgStart1, '%H:%M').time()
         self.t_dis_end1 = datetime.strptime(
             self.DisChgEnd1, '%H:%M').time()
+        self.t_peak_start = datetime.strptime(
+            self.PeakStart, '%H:%M').time()
+        self.t_peak_end = datetime.strptime(
+            self.PeakEnd, '%H:%M').time()
 
     def init_price_history(self, price_history):
         self.price_history = price_history
@@ -313,25 +319,16 @@ class PeakValleyScheduler(BaseScheduler):
 
         if self._is_charging_period(current_time) and (current_price <= buy_price or current_pv > current_usage):
             # Charging logic
-            chg_delta = self.BatChgMax * self.HrMin
-            temp_chg = chg_delta + self.bat_cap
-
-            self.bat_cap = min(temp_chg, self.BatMaxCapacity)
             power = 1500 if device_type == "5000" else 800
             command = {'command': 'Charge', 'power': power}
 
         elif self._is_discharging_period(current_time) and (current_price >= sell_price or current_price > self.SpikeLevel) and current_pv <= current_usage:
             # Discharging logic
-            dischg_delta = self.BatDisMax * \
-                self.HrMin if self.SellBack else min(
-                    current_usage, self.BatDisMax) * self.HrMin
-            temp_dischg = self.bat_cap - dischg_delta
-
-            if temp_dischg >= self.BatCap * self.BatSocMin:
-                self.bat_cap = temp_dischg  # discharge battery
-                anti_backflow = False if current_price > peak_price else True
-                power = 5000 if device_type == "5000" else 2500
-                command = {'command': 'Discharge', 'power': power, 'anti_backflow': anti_backflow}
+            anti_backflow = False if current_price > peak_price else True
+            if self._is_peak_period(current_time) and (current_price > 20): # 20 is the peak price threshold
+                anti_backflow = False
+            power = 5000 if device_type == "5000" else 2500
+            command = {'command': 'Discharge', 'power': power, 'anti_backflow': anti_backflow}
 
         return command
 
@@ -340,6 +337,9 @@ class PeakValleyScheduler(BaseScheduler):
 
     def _is_discharging_period(self, t):
         return (t >= self.t_dis_start2 and t <= self.t_dis_end2) or (t >= self.t_dis_start1 and t <= self.t_dis_end1)
+
+    def _is_peak_period(self, t):
+        return t >= self.t_peak_start and t <= self.t_peak_end 
 
     def required_data(self):
         return ['current_price', 'current_time', 'current_usage', 'current_soc', 'current_pv']
@@ -503,6 +503,7 @@ class AIScheduler(BaseScheduler):
             discharge_end = datetime.strptime(discharge_end_str, '%H:%M')
             if current_time > discharge_start and current_time < discharge_end:
                 continue
+            
             current_charging_power = schedule.get(
                 sn, {}).get('chargePower1', 800)
             adjusted_charging_power = min(
@@ -1056,13 +1057,13 @@ class AIScheduler(BaseScheduler):
 
 if __name__ == '__main__':
     # For Phase 2
-    scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler', 
-        battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], 
-        test_mode=False, 
-        api_version='redx', 
-        pv_sn=['RX2505ACA10J0A170033'],
-        phase=2)
+    # scheduler = BatteryScheduler(
+    #     scheduler_type='AIScheduler', 
+    #     battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], 
+    #     test_mode=False, 
+    #     api_version='redx', 
+    #     pv_sn=['RX2505ACA10J0A170033'],
+    #     phase=2)
     
     # For Phase 3
     # scheduler = BatteryScheduler(
@@ -1074,5 +1075,5 @@ if __name__ == '__main__':
     #     phase=3)
 
     # For Amber Model
-    # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10J0A160016','011LOKG080015B','RX2505ACA20J0A180003'], test_mode=False, api_version='redx')
+    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['011LOKG080015B','RX2505ACA10J0A160016','RX2505ACA20J0A180003'], test_mode=False, api_version='redx')
     scheduler.start()

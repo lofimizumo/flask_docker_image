@@ -2,6 +2,8 @@ import requests
 import pytz
 from datetime import datetime, timedelta
 import numpy as np
+import pandas as pd
+import json
 
 
 class AmberFetcher:
@@ -35,6 +37,20 @@ class AmberFetcher:
         feed_in_prices = [(x['nemTime'], x['perKwh']) for x in feed_in_data]
         return prices, feed_in_prices
 
+    def get_prices_csv(self, start_date, end_date, resolution=5):
+        if not self.site_id:
+            self.site_id = self.get_site()
+        header = {'Authorization': f'Bearer {self.api_key}',
+                  'accept': 'application/json'}
+        # make end_date 1 day before
+        end_date = datetime.strptime(end_date, "%Y-%m-%dT%H:%M") - timedelta(days=1)
+        end_date = end_date.strftime("%Y-%m-%dT%H:%M")
+        url = f"{self.base_url}/sites/{self.site_id}/prices?startDate={start_date}&endDate={end_date}&resolution={resolution}"
+        response = requests.get(url, headers=header)
+        if response.status_code != 200:
+            raise Exception("Error: " + str(response.status_code))
+        data = response.json()
+        json.dump(data, open('prices.json', 'w'))
 
 
 
@@ -191,5 +207,6 @@ def calculate_cost(usage, usage_price, feed_in_price):
     # print(savings)
 
 if __name__ == "__main__":
-    prices = get_prices('2023-11-14T00:00', '2023-11-14T23:55', 'psk_2d5030fe84a68769b6f48ab73bd48ebf')
-    print(prices)
+    # prices = get_prices('2023-11-14T00:00', '2023-11-14T23:55', 'psk_2d5030fe84a68769b6f48ab73bd48ebf')
+    amber = AmberFetcher('psk_2d5030fe84a68769b6f48ab73bd48ebf')
+    amber.get_prices_csv('2024-01-01T00:00', '2024-01-07T23:55')
