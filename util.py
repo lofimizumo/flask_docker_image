@@ -330,6 +330,17 @@ class PriceAndLoadMonitor:
             return next(self.sim_time_iter).strftime("%H:%M")
         local_time = datetime.now(tz=pytz.timezone(time_zone)).strftime("%H:%M")
         return local_time
+    
+    def get_params(self, sn):
+        try:
+            headers = {'token': self.get_token()}
+            data = {'deviceSn': sn, 'sync': 0}
+            response = self.api.send_request(
+                "device/get_params", method='POST', json=data, headers=headers)
+            return response
+        except ConnectionError as e:
+            logging.error(f"Connection error occurred: {e}")
+            return None
 
     @api_status_check(max_retries=3, delay=60)
     def send_battery_command(self, peak_valley_command=None, json=None, sn=None):
@@ -369,11 +380,16 @@ class PriceAndLoadMonitor:
             anti_backflow = peak_valley_command.get('anti_backflow', True)
             from datetime import datetime, timedelta
             data = {}
-            start_time = self.get_current_time(time_zone='Australia/Brisbane')
-            end_time = (datetime.strptime(start_time, '%H:%M') +
-                        timedelta(minutes=40)).strftime("%H:%M")
+            current_time_str = self.get_current_time(time_zone='Australia/Brisbane')
+            current_time = datetime.strptime(current_time_str, '%H:%M')
             empty_time = '00:00'
             if command == 'Charge':
+                current_charge_end = self.get_params(sn)['data']['chargeEnd1']
+                if current_time < datetime.strptime(current_charge_end, '%H:%M'):
+                    return None
+                start_time = self.get_current_time(time_zone='Australia/Brisbane')
+                end_time = (datetime.strptime(start_time, '%H:%M') +
+                            timedelta(minutes=40)).strftime("%H:%M")
                 data = {'deviceSn': sn,
                         'controlCommand': command_map[command],
                         'operatingMode': mode_map['Time'],
@@ -384,6 +400,12 @@ class PriceAndLoadMonitor:
                         }
 
             elif command == 'Discharge':
+                current_discharge_end = self.get_params(sn)['data']['dischargeEnd1']
+                if current_time < datetime.strptime(current_discharge_end, '%H:%M'):
+                    return None
+                start_time = self.get_current_time(time_zone='Australia/Brisbane')
+                end_time = (datetime.strptime(start_time, '%H:%M') +
+                            timedelta(minutes=40)).strftime("%H:%M")
                 data = {'deviceSn': sn,
                         'controlCommand': command_map[command],
                         'operatingMode': mode_map['Time'],
