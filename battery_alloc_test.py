@@ -319,7 +319,7 @@ class PeakValleyScheduler(BaseScheduler):
 
         if self._is_charging_period(current_time) and (current_price <= buy_price or current_pv > current_usage):
             # Charging logic
-            power = 1500 if device_type == "5000" else 800
+            power = 2500 if device_type == "5000" else 800
             command = {'command': 'Charge', 'power': power}
 
         elif self._is_discharging_period(current_time) and (current_price >= sell_price or current_price > self.SpikeLevel) and current_pv <= current_usage:
