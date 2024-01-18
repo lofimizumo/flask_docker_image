@@ -106,7 +106,7 @@ class BatteryScheduler:
             battery_schedule = schedule.get(sn, {})
             last_battery_schedule = self.last_schedule.get(sn, {})
             if all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in battery_schedule) and all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in last_battery_schedule):
-                logging.info(f"Schedule for {sn} is the same as the last one, skip sending command.")
+                # logging.info(f"Schedule for {sn} is the same as the last one, skip sending command.")
                 continue
             try:
                 thread = Thread(target=self.send_battery_command,
@@ -726,6 +726,7 @@ class AIScheduler(BaseScheduler):
         masks = [all(mask[i] == 0 for mask in battery_discharges)
                  for i in range(len(battery_discharges[0]))]
         num_pv_panels = len(self.pv_sn) if self.pv_sn is not None else 1
+        
         _, battery_charges = greedy_battery_charge_with_mask(
             consumption, price, self._get_solar(max_solar_power=5000*num_pv_panels), charging_needs, masks)
 
@@ -1066,14 +1067,14 @@ if __name__ == '__main__':
     #     phase=2)
     
     # For Phase 3
-    scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler', 
-        battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'], 
-        test_mode=False, 
-        api_version='redx', 
-        pv_sn=['RX2505ACA10J0A170033','RX2505ACA10J0A170019'],
-        phase=3)
+    # scheduler = BatteryScheduler(
+    #     scheduler_type='AIScheduler', 
+    #     battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'], 
+    #     test_mode=False, 
+    #     api_version='redx', 
+    #     pv_sn=['RX2505ACA10J0A170033','RX2505ACA10J0A170019'],
+    #     phase=3)
 
     # For Amber Model
-    # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA20J0A180003','RX2505ACA10J0A160016','011LOKG080015B'], test_mode=False, api_version='redx')
+    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['011LOKL140058B','RX2505ACA10J0A160016','RX2505ACA10J0A180003'], test_mode=False, api_version='redx')
     scheduler.start()
