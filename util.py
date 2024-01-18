@@ -402,7 +402,7 @@ class PriceAndLoadMonitor:
             elif command == 'Discharge':
                 current_discharge_end = self.get_params(sn)['data']['dischargeEnd1']
                 if current_time < datetime.strptime(current_discharge_end, '%H:%M'):
-                    return None
+                    return {'result': 'skipped'}
                 start_time = self.get_current_time(time_zone='Australia/Brisbane')
                 end_time = (datetime.strptime(start_time, '%H:%M') +
                             timedelta(minutes=40)).strftime("%H:%M")
