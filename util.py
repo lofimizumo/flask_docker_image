@@ -389,6 +389,8 @@ class PriceAndLoadMonitor:
                         'operatingMode': mode_map['Time'],
                         'dischargeStart1': start_time,
                         'dischargeEnd1': end_time,
+                        'chargeStart1': empty_time,
+                        'chargeEnd1': empty_time,
                         'antiBackflowSW': anti_backflow_map[anti_backflow],
                         'dischargePower1': peak_valley_command.get('power', 2500)
                         }
