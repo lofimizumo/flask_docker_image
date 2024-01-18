@@ -379,7 +379,8 @@ class PriceAndLoadMonitor:
                         'operatingMode': mode_map['Time'],
                         'chargeStart1': start_time,
                         'chargeEnd1': end_time,
-                        'chargePower1': peak_valley_command.get('power', 800)
+                        'chargePower1': peak_valley_command.get('power', 800),
+                        'enableGridCharge1': peak_valley_command.get('grid_charge', 0)
                         }
 
             elif command == 'Discharge':

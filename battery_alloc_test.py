@@ -319,10 +319,10 @@ class PeakValleyScheduler(BaseScheduler):
 
         if self._is_charging_period(current_time) and (current_price <= buy_price or current_pv > current_usage):
             # Charging logic
-            power = 2500 if device_type == "5000" else 800
-            command = {'command': 'Charge', 'power': power}
+            power = 2000 if device_type == "5000" else 800
+            command = {'command': 'Charge', 'power': power, 'grid_charge': True if current_pv <= current_usage else False}
 
-        elif self._is_discharging_period(current_time) and (current_price >= sell_price or current_price > self.SpikeLevel) and current_pv <= current_usage:
+        elif self._is_discharging_period(current_time) and (current_price >= sell_price or current_price > self.SpikeLevel):
             # Discharging logic
             anti_backflow = False if current_price > peak_price else True
             if self._is_peak_period(current_time) and (current_price > 20): # 20 is the peak price threshold
@@ -336,7 +336,8 @@ class PeakValleyScheduler(BaseScheduler):
         return t >= self.t_chg_start1 and t <= self.t_chg_end1
 
     def _is_discharging_period(self, t):
-        return (t >= self.t_dis_start2 and t <= self.t_dis_end2) or (t >= self.t_dis_start1 and t <= self.t_dis_end1)
+        return True
+        # return (t >= self.t_dis_start2 and t <= self.t_dis_end2) or (t >= self.t_dis_start1 and t <= self.t_dis_end1)
 
     def _is_peak_period(self, t):
         return t >= self.t_peak_start and t <= self.t_peak_end 
