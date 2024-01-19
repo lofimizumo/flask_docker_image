@@ -132,8 +132,7 @@ class BatteryScheduler:
                 current_price=current_price, current_usage=current_usage,
                 current_time=current_time, current_soc=current_soc, current_pv=current_pv, device_type=device_type)
             self.send_battery_command(command=command, sn=sn)
-            logging.info(f"AmberModel {sn}:price: {current_price}, usage: {current_usage}, "
-                        f"time: {current_time}, command: {command}")
+
 
     def start(self):
         self.is_running = True
@@ -329,15 +328,20 @@ class PeakValleyScheduler(BaseScheduler):
                 anti_backflow = False
             power = 5000 if device_type == "5000" else 2500
             command = {'command': 'Discharge', 'power': power, 'anti_backflow': anti_backflow}
+        
+        if current_price > peak_price:
+            command = {'command': 'Discharge', 'power': power, 'anti_backflow': False}
 
+        logging.info(f"AmberModel :price: {current_price}, sell price:{sell_price}, peak_price{peak_price} ,usage: {current_usage}, "
+                    f"time: {current_time}, command: {command}")
         return command
 
     def _is_charging_period(self, t):
         return t >= self.t_chg_start1 and t <= self.t_chg_end1
 
     def _is_discharging_period(self, t):
-        return True
-        # return (t >= self.t_dis_start2 and t <= self.t_dis_end2) or (t >= self.t_dis_start1 and t <= self.t_dis_end1)
+        # return True
+        return (t >= self.t_dis_start2 and t <= self.t_dis_end2) or (t >= self.t_dis_start1 and t <= self.t_dis_end1)
 
     def _is_peak_period(self, t):
         return t >= self.t_peak_start and t <= self.t_peak_end 
@@ -1077,5 +1081,5 @@ if __name__ == '__main__':
     #     phase=3)
 
     # For Amber Model
-    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['011LOKL140058B','RX2505ACA10J0A160016','RX2505ACA10J0A180003'], test_mode=False, api_version='redx')
+    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10J0A180003','011LOKL140058B','RX2505ACA10J0A160016'], test_mode=False, api_version='redx')
     scheduler.start()

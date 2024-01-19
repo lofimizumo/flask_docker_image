@@ -386,7 +386,7 @@ class PriceAndLoadMonitor:
             if command == 'Charge':
                 current_charge_end = self.get_params(sn)['data']['chargeEnd1']
                 if current_time < datetime.strptime(current_charge_end, '%H:%M'):
-                    return None
+                    return {'result': 'skipped'}
                 start_time = self.get_current_time(time_zone='Australia/Brisbane')
                 end_time = (datetime.strptime(start_time, '%H:%M') +
                             timedelta(minutes=40)).strftime("%H:%M")
