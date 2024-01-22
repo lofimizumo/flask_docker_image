@@ -341,6 +341,36 @@ class PriceAndLoadMonitor:
         except ConnectionError as e:
             logging.error(f"Connection error occurred: {e}")
             return None
+        
+    def set_register(self, data):
+        key_register_map = {
+            'chargeStart1': 8,
+            'chargeEnd1': 10,
+            'dischargeStart1': 12,
+            'dischargeEnd1': 14,
+        }
+
+        try:
+            headers = {'token': self.get_token()}
+            sn = data.get('deviceSn', None)
+            for key, value in data.items():
+                if key in key_register_map:
+                    hour = int(value.split(':')[0])
+                    response = self.api.send_request(
+                        "device/set_register", method='POST', json={
+                            "deviceSn":sn, 
+                            "addr": key_register_map[key],
+                            "value": hour
+                        },
+                        headers=headers
+                    )
+        except ConnectionError as e:
+            logging.error(f"Connection error occurred: {e}")
+            response = None
+        except Exception as e:
+            logging.error(f"An unexpected error occurred: {e}")
+            response = None
+        return response
 
     @api_status_check(max_retries=3, delay=60)
     def send_battery_command(self, peak_valley_command=None, json=None, sn=None):
@@ -442,6 +472,7 @@ class PriceAndLoadMonitor:
         # Send the data
         try:
             headers = {'token': self.get_token()}
+            self.set_register(data)
             response = self.api.send_request(
                 "device/set_params", method='POST', json=data, headers=headers)
             # logging.info(f'Send command {command} to battery {sn}, response: {response}')
