@@ -76,7 +76,7 @@ class BatteryScheduler:
 
         return self.scheduler.step(**kwargs)
 
-    def _start(self, interval=120):
+    def _start(self, interval=1800):
         if not self.is_running:
             return
 
@@ -214,7 +214,8 @@ class PeakValleyScheduler(BaseScheduler):
         self.SellBack = 0
         self.BuyPct = 30
         self.SellPct = 30
-        self.PeakPct = 80
+        self.PeakPct = 99
+        self.PeakPrice = 200
         self.LookBackBars = 2 * 48
         self.ChgStart1 = '8:00'
         self.ChgEnd1 = '16:00'
@@ -312,26 +313,27 @@ class PeakValleyScheduler(BaseScheduler):
         buy_price, sell_price = np.percentile(
             self.price_history, [self.BuyPct, self.SellPct])
         
-        peak_price = np.percentile(self.price_history, self.PeakPct)
-
+        # peak_price = np.percentile(self.price_history, self.PeakPct)
+        # use hard coded peak price for now
+        peak_price = self.PeakPrice
 
         command = {"command": "Idle"} 
 
         if self._is_charging_period(current_time) and (current_price <= buy_price or current_pv > current_usage):
             # Charging logic
-            power = 2000 if device_type == "5000" else 800
+            power = 2500 if device_type == "5000" else 1500
             command = {'command': 'Charge', 'power': power, 'grid_charge': True if current_pv <= current_usage else False}
 
-        if self._is_discharging_period(current_time) and (current_price >= sell_price or current_price > self.SpikeLevel):
+        if self._is_discharging_period(current_time) and (current_price >= sell_price):
             # Discharging logic
-            anti_backflow = False if current_price > peak_price else True
-            if self._is_peak_period(current_time) and (current_price > 20): # 20 is the peak price threshold
+            anti_backflow = False if current_price > np.percentile(self.price_history, self.PeakPct) else True
+            if self._is_peak_period(current_time) and (current_price > 40): # 40 is the peak price threshold
                 anti_backflow = False
             power = 5000 if device_type == "5000" else 2500
             command = {'command': 'Discharge', 'power': power, 'anti_backflow': anti_backflow}
         
-        if current_price > peak_price:
-            command = {'command': 'Discharge', 'power': power, 'anti_backflow': False}
+        if current_price > peak_price and current_pv < current_usage:
+            command = {'command': 'Discharge', 'power': power, 'anti_backflow': True}
 
         logging.info(f"AmberModel :price: {current_price}, sell price:{sell_price}, peak_price{peak_price} ,usage: {current_usage}, "
                     f"time: {current_time}, command: {command}")
