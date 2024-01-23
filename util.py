@@ -472,7 +472,7 @@ class PriceAndLoadMonitor:
         # Send the data
         try:
             headers = {'token': self.get_token()}
-            self.set_register(data)
+            # self.set_register(data)
             response = self.api.send_request(
                 "device/set_params", method='POST', json=data, headers=headers)
             # logging.info(f'Send command {command} to battery {sn}, response: {response}')
