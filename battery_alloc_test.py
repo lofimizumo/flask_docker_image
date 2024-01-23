@@ -1084,5 +1084,5 @@ if __name__ == '__main__':
     #     phase=3)
 
     # For Amber Model
-    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10J0A160016','RX2505ACA10J0A180003','011LOKL140058B'], test_mode=False, api_version='redx')
+    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10J0A180003','RX2505ACA10J0A160016','011LOKL140058B'], test_mode=False, api_version='redx')
     scheduler.start()
