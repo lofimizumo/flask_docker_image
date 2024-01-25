@@ -18,11 +18,11 @@ logging.basicConfig(level=logging.INFO,
 
 class BatteryScheduler:
 
-    def __init__(self, scheduler_type='PeakValley', 
-                 battery_sn=None, 
-                 test_mode=False, 
-                 api_version='dev3', 
-                 pv_sn=None, 
+    def __init__(self, scheduler_type='PeakValley',
+                 battery_sn=None,
+                 test_mode=False,
+                 api_version='dev3',
+                 pv_sn=None,
                  phase=2,
                  config='config.yaml',
                  project_mode='normal'
@@ -45,7 +45,7 @@ class BatteryScheduler:
         self.battery_original_charging_powers = {}
         self.project_phase = phase
         self.project_mode = project_mode
-        self.sn_types = self.read_yaml_settings(config).get('battery',{})
+        self.sn_types = self.read_yaml_settings(config).get('battery', {})
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
     def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
@@ -64,7 +64,7 @@ class BatteryScheduler:
         with open(file_path, 'r') as file:
             settings = yaml.safe_load(file)
         return settings
-    
+
     def _get_battery_command(self, **kwargs):
         if not self.scheduler:
             raise ValueError("Scheduler not set. Use set_scheduler() first.")
@@ -82,7 +82,7 @@ class BatteryScheduler:
 
         try:
             if isinstance(self.scheduler, AIScheduler):
-                interval = 360 
+                interval = 360
                 self._process_ai_scheduler()
             elif isinstance(self.scheduler, PeakValleyScheduler):
                 self._process_peak_valley_scheduler()
@@ -97,10 +97,11 @@ class BatteryScheduler:
         schedule = self._get_battery_command()
         load = self.get_project_status(phase=self.project_phase)
         current_time = self.get_current_time()
-        schedule = self.scheduler.daytime_hotfix_discharging_smooth(schedule, load, current_time)
-        schedule = self.scheduler.daytime_hotfix_charging(schedule, load, current_time)
+        schedule = self.scheduler.daytime_hotfix_discharging_smooth(
+            schedule, load, current_time)
+        schedule = self.scheduler.daytime_hotfix_charging(
+            schedule, load, current_time)
         logging.info(f"Schedule: {schedule}")
-
 
         for sn in self.sn_list:
             battery_schedule = schedule.get(sn, {})
@@ -110,7 +111,7 @@ class BatteryScheduler:
                 continue
             try:
                 thread = Thread(target=self.send_battery_command,
-                                kwargs={'json':battery_schedule, 'sn':sn})
+                                kwargs={'json': battery_schedule, 'sn': sn})
                 thread.start()
             except Exception as e:
                 logging.error(f"Error sending battery command: {e}")
@@ -133,7 +134,6 @@ class BatteryScheduler:
                 current_time=current_time, current_soc=current_soc, current_pv=current_pv, device_type=device_type)
             self.send_battery_command(command=command, sn=sn)
             logging.info(f"--AmberModel {sn} Setting--\n")
-
 
     def start(self):
         self.is_running = True
@@ -177,8 +177,8 @@ class BatteryScheduler:
         return self.monitor.get_realtime_battery_stats(sn)
 
     def send_battery_command(self, command=None, json=None, sn=None):
-        self.monitor.send_battery_command(peak_valley_command=command, json=json, sn=sn)
-
+        self.monitor.send_battery_command(
+            peak_valley_command=command, json=json, sn=sn)
 
 
 class BaseScheduler:
@@ -258,6 +258,7 @@ class PeakValleyScheduler(BaseScheduler):
 
     def _get_solar(self, interval=0.5, test_mode=False, max_solar_power=5000):
         max_solar = max_solar_power
+
         def gaussian_mixture(interval=0.5):
             gaus_x = np.arange(0, 24, interval)
             mu1 = 10.35
@@ -287,8 +288,6 @@ class PeakValleyScheduler(BaseScheduler):
         _, gaus_y = gaussian_mixture(interval)
         return gaus_y*max_solar
 
-
-
     def step(self, current_price, current_time, current_usage, current_soc, current_pv, device_type):
         # Update solar data each day
         if self.date != datetime.now(tz=pytz.timezone('Australia/Brisbane')).day or self.solar is None:
@@ -312,31 +311,41 @@ class PeakValleyScheduler(BaseScheduler):
         # Buy and sell price based on historical data
         buy_price, sell_price = np.percentile(
             self.price_history, [self.BuyPct, self.SellPct])
-        
+
         # peak_price = np.percentile(self.price_history, self.PeakPct)
         # use hard coded peak price for now
         peak_price = self.PeakPrice
 
-        command = {"command": "Idle"} 
+        command = {"command": "Idle"}
 
         # Charging logic
         if self._is_charging_period(current_time) and (current_price <= buy_price or current_pv > current_usage):
-            power = 2500 if device_type == "5000" else 1500
-            command = {'command': 'Charge', 'power': power, 'grid_charge': True if current_pv <= current_usage else False}
+            power = 1300 if device_type == "5000" else 800
+            excess_solar = 1000*(current_pv - current_usage)
+            if excess_solar > 0:
+                power = min(power, excess_solar)
+                logging.info(
+                    f"Increase charging power due to excess solar: {excess_solar}, adjusted power: {power}")
+            command = {'command': 'Charge', 'power': power,
+                       'grid_charge': True if current_pv <= current_usage else False}
 
         # Discharging logic
+        power = 5000 if device_type == "5000" else 2500
         if self._is_discharging_period(current_time) and (current_price >= sell_price):
-            anti_backflow = False if current_price > np.percentile(self.price_history, self.PeakPct) else True
-            if self._is_peak_period(current_time) and (current_price > 40): # 40 is the peak price threshold
+            anti_backflow = False if current_price > np.percentile(
+                self.price_history, self.PeakPct) else True
+            # 40 is the peak price threshold
+            if self._is_peak_period(current_time) and (current_price > 40):
                 anti_backflow = False
-            power = 5000 if device_type == "5000" else 2500
-            command = {'command': 'Discharge', 'power': power, 'anti_backflow': anti_backflow}
-        
+            command = {'command': 'Discharge', 'power': power,
+                       'anti_backflow': anti_backflow}
+
         if current_price > peak_price and current_pv < current_usage:
-            command = {'command': 'Discharge', 'power': power, 'anti_backflow': True}
+            command = {'command': 'Discharge',
+                       'power': power, 'anti_backflow': True}
 
         logging.info(f"AmberModel :price: {current_price}, sell price:{sell_price}, peak_price{peak_price} ,usage: {current_usage}, "
-                    f"time: {current_time}, command: {command}")
+                     f"time: {current_time}, command: {command}")
         return command
 
     def _is_charging_period(self, t):
@@ -347,7 +356,7 @@ class PeakValleyScheduler(BaseScheduler):
         return (t >= self.t_dis_start2 and t <= self.t_dis_end2) or (t >= self.t_dis_start1 and t <= self.t_dis_end1)
 
     def _is_peak_period(self, t):
-        return t >= self.t_peak_start and t <= self.t_peak_end 
+        return t >= self.t_peak_start and t <= self.t_peak_end
 
     def required_data(self):
         return ['current_price', 'current_time', 'current_usage', 'current_soc', 'current_pv']
@@ -355,7 +364,7 @@ class PeakValleyScheduler(BaseScheduler):
 
 class AIScheduler(BaseScheduler):
 
-    def __init__(self, sn_list, pv_sn, api_version='redx',phase=2, mode='normal'):
+    def __init__(self, sn_list, pv_sn, api_version='redx', phase=2, mode='normal'):
         self.battery_max_capacity_kwh = 5
         if sn_list is None:
             raise ValueError('sn_list is None')
@@ -381,10 +390,11 @@ class AIScheduler(BaseScheduler):
         # take the first battery monitor from the list
         try:
             demand = self.battery_monitors[self.sn_list[0]].get_project_demand(phase=self.project_phase
-            )
+                                                                               )
         except Exception as e:
             demand, price = pickle.load(open('demand_price.pkl', 'rb'))
-            logging.info(f'Error fetching demand with get_prediction API, use the default demand instead. Error: {e}')
+            logging.info(
+                f'Error fetching demand with get_prediction API, use the default demand instead. Error: {e}')
 
         interval = int(24*60/len(demand))
 
@@ -423,6 +433,7 @@ class AIScheduler(BaseScheduler):
 
     def _get_solar(self, interval=5/60, test_mode=False, max_solar_power=5000):
         max_solar = max_solar_power
+
         def gaussian_mixture(interval=0.5):
             gaus_x = np.arange(0, 24, interval)
             mu1 = 10.35
@@ -464,11 +475,11 @@ class AIScheduler(BaseScheduler):
 
     def daytime_hotfix_charging(self, schedule, load, current_time):
         if self.mode == 'normal':
-            surplus_power =  - load
+            surplus_power = - load
         else:
             surplus_power = - load + 5000
         max_charging_power = 1500
-        current_time_str = current_time 
+        current_time_str = current_time
         current_time = datetime.strptime(current_time_str, '%H:%M')
         if current_time > datetime.strptime('16:00', '%H:%M') or current_time < datetime.strptime('06:00', '%H:%M'):
             return schedule
@@ -480,7 +491,8 @@ class AIScheduler(BaseScheduler):
             for sn in self.sn_list:
                 if power_now >= threshold:
                     break
-                start_time_str = schedule.get(sn, {}).get('chargeStart1', '00:00')
+                start_time_str = schedule.get(
+                    sn, {}).get('chargeStart1', '00:00')
                 end_time_str = schedule.get(sn, {}).get('chargeEnd1', '00:00')
                 if not (datetime.strptime(start_time_str, '%H:%M') <= current_time <= datetime.strptime(end_time_str, '%H:%M')):
                     continue
@@ -488,17 +500,18 @@ class AIScheduler(BaseScheduler):
                     sn, {}).get('chargePower1', 800)
                 adjusted_charging_power = schedule.get(
                     sn, {}).get('chargePower1', 800)
-                adjusted_charging_power = max(adjusted_charging_power*0.6, self.battery_original_charging_powers.get(sn, 800))
+                adjusted_charging_power = max(
+                    adjusted_charging_power*0.6, self.battery_original_charging_powers.get(sn, 800))
                 difference = original_charging_power - adjusted_charging_power
                 # logging.info(
-                    # f'No surplus power, return original charging power for: {sn}')
+                # f'No surplus power, return original charging power for: {sn}')
                 schedule[sn]['chargePower1'] = adjusted_charging_power
                 power_now += difference
             return schedule
 
         if surplus_power <= threshold+2000:
             return schedule
-        
+
         # Only when surplus power is greater than 3000W, we start to increase the charging power
         for sn in self.sn_list:
             if surplus_power <= 0:
@@ -511,16 +524,17 @@ class AIScheduler(BaseScheduler):
             discharge_end = datetime.strptime(discharge_end_str, '%H:%M')
             if current_time > discharge_start and current_time < discharge_end:
                 continue
-            
+
             current_charging_power = schedule.get(
                 sn, {}).get('chargePower1', 800)
             adjusted_charging_power = min(
                 max_charging_power, current_charging_power + surplus_power)
             surplus_power -= (adjusted_charging_power - current_charging_power)
             surplus_power = max(0, surplus_power)  # Avoid negative surplus
-            end_30mins_later_str = (current_time + timedelta(minutes=30)).strftime('%H:%M')
+            end_30mins_later_str = (
+                current_time + timedelta(minutes=30)).strftime('%H:%M')
             end_30mins_later = datetime.strptime(end_30mins_later_str, '%H:%M')
-            if end_30mins_later > discharge_start: 
+            if end_30mins_later > discharge_start:
                 continue
             if sn in schedule:
                 schedule[sn]['chargePower1'] = adjusted_charging_power
@@ -533,79 +547,95 @@ class AIScheduler(BaseScheduler):
 
     def daytime_hotfix_discharging_smooth(self, schedule: dict, load, current_time) -> dict:
         threshold_lower_bound = 4000
-        threshold_upper_bound = threshold_lower_bound + 2000 
+        threshold_upper_bound = threshold_lower_bound + 2000
         threshold_peak_bound = 12000
 
         current_time_str = current_time
         current_time = datetime.strptime(current_time, '%H:%M')
-        load_now = load 
+        load_now = load
         if current_time < datetime.strptime('15:00', '%H:%M'):
             return schedule
-        
 
         if load >= threshold_peak_bound:
-            logging.info(f"Load is above peak threshold: {load}, Start increasing discharge power")
+            logging.info(
+                f"Load is above peak threshold: {load}, Start increasing discharge power")
             for sn in self.sn_list:
-                start_time = datetime.strptime(schedule[sn]['dischargeStart1'], '%H:%M')
-                end_time = datetime.strptime(schedule[sn]['dischargeEnd1'], '%H:%M')
+                start_time = datetime.strptime(
+                    schedule[sn]['dischargeStart1'], '%H:%M')
+                end_time = datetime.strptime(
+                    schedule[sn]['dischargeEnd1'], '%H:%M')
                 end_time_str = schedule[sn]['dischargeEnd1']
                 if start_time > current_time:
-                    logging.info(f'--Device: {sn} is not in discharging period, skip.')
+                    logging.info(
+                        f'--Device: {sn} is not in discharging period, skip.')
                     continue
                 if end_time < current_time:
-                    end_time = current_time +timedelta(minutes=30)
+                    end_time = current_time + timedelta(minutes=30)
                     end_time_str = end_time.strftime('%H:%M')
-                    schedule[sn]['dischargeEnd1'] = end_time_str 
-                logging.info(f'Peak: Maximized discharging power for Device: {sn} by 30 minutes.')
+                    schedule[sn]['dischargeEnd1'] = end_time_str
+                logging.info(
+                    f'Peak: Maximized discharging power for Device: {sn} by 30 minutes.')
                 schedule[sn]['dischargePower1'] = 2000
             return schedule
 
         if load >= threshold_upper_bound:
-            logging.info(f"Load is above upper threshold: {load}, Start increasing discharge power")
+            logging.info(
+                f"Load is above upper threshold: {load}, Start increasing discharge power")
             for sn in self.sn_list:
-                start_time = datetime.strptime(schedule[sn]['dischargeStart1'], '%H:%M')
-                end_time = datetime.strptime(schedule[sn]['dischargeEnd1'], '%H:%M')
+                start_time = datetime.strptime(
+                    schedule[sn]['dischargeStart1'], '%H:%M')
+                end_time = datetime.strptime(
+                    schedule[sn]['dischargeEnd1'], '%H:%M')
                 end_time_str = schedule[sn]['dischargeEnd1']
                 if load_now <= threshold_upper_bound:
                     break
                 if not start_time <= current_time <= end_time:
-                    logging.info(f'--Device: {sn} is not in discharging period, skip.')
+                    logging.info(
+                        f'--Device: {sn} is not in discharging period, skip.')
                     continue
                 increased_power = schedule.get(
                     sn, {}).get('dischargePower1', 0)
-                increased_power = min(700+increased_power, self.battery_original_discharging_powers.get(sn, 1000))
+                increased_power = min(
+                    700+increased_power, self.battery_original_discharging_powers.get(sn, 1000))
                 difference = increased_power - schedule[sn]['dischargePower1']
-                logging.info(f'--Increased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {increased_power}')
+                logging.info(
+                    f'--Increased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {increased_power}')
                 schedule[sn]['dischargePower1'] = increased_power
                 load_now -= difference
 
         elif load <= threshold_lower_bound:
-            logging.info(f'Load is below lower threshold: {load}, Start lowering discharge power')
+            logging.info(
+                f'Load is below lower threshold: {load}, Start lowering discharge power')
             for sn in self.sn_list:
-                start_time = datetime.strptime(schedule[sn]['dischargeStart1'], '%H:%M')
-                end_time = datetime.strptime(schedule[sn]['dischargeEnd1'], '%H:%M')
+                start_time = datetime.strptime(
+                    schedule[sn]['dischargeStart1'], '%H:%M')
+                end_time = datetime.strptime(
+                    schedule[sn]['dischargeEnd1'], '%H:%M')
                 end_time_str = schedule[sn]['dischargeEnd1']
                 if load_now >= threshold_lower_bound:
                     break
                 if not start_time <= current_time <= end_time:
-                    logging.info(f'--Device: {sn} is not in discharging period, skip.')
+                    logging.info(
+                        f'--Device: {sn} is not in discharging period, skip.')
                     continue
                 decreased_power = schedule.get(
                     sn, {}).get('dischargePower1', 0)
-                decreased_power = 0 if 0.5*decreased_power < 200 else 0.5*decreased_power 
+                decreased_power = 0 if 0.5*decreased_power < 200 else 0.5*decreased_power
                 difference = schedule[sn]['dischargePower1'] - decreased_power
-                logging.info(f'--Decreased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {decreased_power}')
+                logging.info(
+                    f'--Decreased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {decreased_power}')
                 schedule[sn]['dischargePower1'] = decreased_power
                 load_now += difference
-        
-        return schedule        
+
+        return schedule
 
     def generate_schedule(self, consumption, price, batterie_capacity_kwh, num_batteries, stats, price_weight=1):
         import optuna
         from scipy.ndimage import gaussian_filter1d
 
         def greedy_battery_discharge(consumption, price, batteries, price_weight=1):
-            num_hours = len(consumption) - 24 # in order to let the discharging period end before 22:00 (1 hour has 12 * 5min intervals)
+            # in order to let the discharging period end before 22:00 (1 hour has 12 * 5min intervals)
+            num_hours = len(consumption) - 24
             net_consumption = consumption.copy()
             battery_discharges = [[0] * num_hours for _ in batteries]
 
@@ -614,7 +644,8 @@ class AIScheduler(BaseScheduler):
                 best_start = 0
 
                 # Find the window with the highest rolling average
-                for start in range(198, num_hours - duration + 1): # Discharging start from 16:30 PM
+                # Discharging start from 16:30 PM
+                for start in range(198, num_hours - duration + 1):
                     weight_adjusted_array = [i*j*price_weight for i, j in zip(
                         net_consumption[start:start+duration], price[start:start+duration])]
                     avg = sum(weight_adjusted_array) / duration
@@ -649,7 +680,7 @@ class AIScheduler(BaseScheduler):
                 best_avg = float('inf')
                 best_start = 0
 
-                for start in range(12, num_hours - duration + 1): # start from 1:00 AM
+                for start in range(12, num_hours - duration + 1):  # start from 1:00 AM
                     # check if all slots in this window are available
                     if all(engaged_slots[start:start+duration]):
                         period_cost = charging_cost[start:start+duration]
@@ -734,7 +765,7 @@ class AIScheduler(BaseScheduler):
         masks = [all(mask[i] == 0 for mask in battery_discharges)
                  for i in range(len(battery_discharges[0]))]
         num_pv_panels = len(self.pv_sn) if self.pv_sn is not None else 1
-        
+
         _, battery_charges = greedy_battery_charge_with_mask(
             consumption, price, self._get_solar(max_solar_power=5000*num_pv_panels), charging_needs, masks)
 
@@ -892,7 +923,7 @@ class AIScheduler(BaseScheduler):
                             # 'operatingMode': mode_map['Time'],
                             'chargeStart1': start_time if task_type == 'Charge' else "00:00",
                             'chargeEnd1': end_time if task_type == 'Charge' else "00:00",
-                            'chargePower1': power+200, #Charging Power is increased by 200W to compensate in case
+                            'chargePower1': power+200,  # Charging Power is increased by 200W to compensate in case
                             # 'chargeStart1': "09:00",
                             # 'chargeEnd1':  "15:00",
                             # 'chargePower1': "800",
@@ -1044,7 +1075,8 @@ class AIScheduler(BaseScheduler):
     def step(self):
         current_day = datetime.now(tz=pytz.timezone('Australia/Sydney')).day
         if self.last_scheduled_date != current_day:
-            logging.info(f'Updating schedule: day {current_day}, time: {datetime.now(tz=pytz.timezone("Australia/Sydney"))}, last_scheduled_date: {self.last_scheduled_date}')
+            logging.info(
+                f'Updating schedule: day {current_day}, time: {datetime.now(tz=pytz.timezone("Australia/Sydney"))}, last_scheduled_date: {self.last_scheduled_date}')
             demand, price = self._get_demand_and_price()
             stats = self._get_battery_status()
             self.schedule = self.generate_schedule(
@@ -1058,8 +1090,6 @@ class AIScheduler(BaseScheduler):
 
         return self.schedule
 
-
-
     def required_data(self):
         return []
 
@@ -1067,22 +1097,23 @@ class AIScheduler(BaseScheduler):
 if __name__ == '__main__':
     # For Phase 2
     # scheduler = BatteryScheduler(
-    #     scheduler_type='AIScheduler', 
-    #     battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'], 
-    #     test_mode=False, 
-    #     api_version='redx', 
+    #     scheduler_type='AIScheduler',
+    #     battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'],
+    #     test_mode=False,
+    #     api_version='redx',
     #     pv_sn=['RX2505ACA10J0A170033'],
     #     phase=2)
-    
+
     # For Phase 3
     # scheduler = BatteryScheduler(
-    #     scheduler_type='AIScheduler', 
-    #     battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'], 
-    #     test_mode=False, 
-    #     api_version='redx', 
+    #     scheduler_type='AIScheduler',
+    #     battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'],
+    #     test_mode=False,
+    #     api_version='redx',
     #     pv_sn=['RX2505ACA10J0A170033','RX2505ACA10J0A170019'],
     #     phase=3)
 
     # For Amber Model
-    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['RX2505ACA10J0A180003','RX2505ACA10J0A160016','011LOKL140058B'], test_mode=False, api_version='redx')
+    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=[
+                                 'RX2505ACA10J0A180003', 'RX2505ACA10J0A160016', '011LOKL140058B'], test_mode=False, api_version='redx')
     scheduler.start()
