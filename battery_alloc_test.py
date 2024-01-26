@@ -76,7 +76,7 @@ class BatteryScheduler:
 
         return self.scheduler.step(**kwargs)
 
-    def _start(self, interval=1800):
+    def _start(self, interval=900):
         if not self.is_running:
             return
 
