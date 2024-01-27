@@ -344,7 +344,7 @@ class PeakValleyScheduler(BaseScheduler):
 
         if current_price > peak_price and current_pv < current_usage:
             command = {'command': 'Discharge',
-                       'power': power, 'anti_backflow': True}
+                       'power': power, 'anti_backflow': False}
 
         logging.info(f"AmberModel :price: {current_price}, sell price:{sell_price}, peak_price{peak_price} ,usage: {current_usage}, "
                      f"time: {current_time}, command: {command}")
@@ -1098,22 +1098,22 @@ class AIScheduler(BaseScheduler):
 
 if __name__ == '__main__':
     # For Phase 2
-    # scheduler = BatteryScheduler(
-    #     scheduler_type='AIScheduler',
-    #     battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'],
-    #     test_mode=False,
-    #     api_version='redx',
-    #     pv_sn=['RX2505ACA10J0A170033'],
-    #     phase=2)
-
-    # For Phase 3
     scheduler = BatteryScheduler(
         scheduler_type='AIScheduler',
-        battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'],
+        battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'],
         test_mode=False,
         api_version='redx',
-        pv_sn=['RX2505ACA10J0A170033','RX2505ACA10J0A170019'],
-        phase=3)
+        pv_sn=['RX2505ACA10J0A170033'],
+        phase=2)
+
+    # For Phase 3
+    # scheduler = BatteryScheduler(
+    #     scheduler_type='AIScheduler',
+    #     battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'],
+    #     test_mode=False,
+    #     api_version='redx',
+    #     pv_sn=['RX2505ACA10J0A170033','RX2505ACA10J0A170019'],
+    #     phase=3)
 
     # For Amber Model
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=[
