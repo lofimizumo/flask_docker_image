@@ -341,6 +341,23 @@ class PriceAndLoadMonitor:
         except ConnectionError as e:
             logging.error(f"Connection error occurred: {e}")
             return None
+    
+    def set_antibackflow_register(self, data):
+        try:
+            headers = {'token': self.get_token()}
+            sn = data.get('deviceSn', None)
+            response = self.api.send_request(
+                "device/set_register", method='POST', json={
+                    "deviceSn":sn, 
+                    "addr": 58,
+                    "value": 0
+                },
+                headers=headers
+            )
+        except Exception as e:
+            logging.error(f"Set Anti-backflow: unexpected error occurred: {e}")
+            response = None
+        return response
         
     def set_register(self, data):
         key_register_map = {
@@ -473,6 +490,7 @@ class PriceAndLoadMonitor:
         try:
             headers = {'token': self.get_token()}
             # self.set_register(data)
+            self.set_antibackflow_register(data)
             response = self.api.send_request(
                 "device/set_params", method='POST', json=data, headers=headers)
             logging.info(f'Successfully Sent command {command} to battery {sn}, response: {response}')
