@@ -213,7 +213,7 @@ class PeakValleyScheduler(BaseScheduler):
         self.SolarCharge = 0
         self.SellBack = 0
         self.BuyPct = 30
-        self.SellPct = 30
+        self.SellPct = 80
         self.PeakPct = 90
         self.PeakPrice = 200
         self.LookBackBars = 2 * 48
@@ -333,12 +333,13 @@ class PeakValleyScheduler(BaseScheduler):
 
         # Discharging logic
         power = 5000 if device_type == "5000" else 2500
-        if self._is_discharging_period(current_time) and (current_price >= sell_price):
+        # Additional logic "current_price >= 30" below from Jonathan, comment me in the future
+        if self._is_discharging_period(current_time) and (current_price >= sell_price) and (current_price >= 30):
             anti_backflow = False if current_price > np.percentile(
                 self.price_history, self.PeakPct) else True
-            # 40 is the peak price threshold
-            if self._is_peak_period(current_time) and (current_price > 40):
-                anti_backflow = False
+            # Additional logic line below from Jonathan, comment me in the future
+            anti_backflow = True if current_price <= 50 else anti_backflow
+            
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': anti_backflow}
 
@@ -1098,13 +1099,13 @@ class AIScheduler(BaseScheduler):
 
 if __name__ == '__main__':
     # For Phase 2
-    scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler',
-        battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'],
-        test_mode=False,
-        api_version='redx',
-        pv_sn=['RX2505ACA10J0A170033'],
-        phase=2)
+    # scheduler = BatteryScheduler(
+    #     scheduler_type='AIScheduler',
+    #     battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'],
+    #     test_mode=False,
+    #     api_version='redx',
+    #     pv_sn=['RX2505ACA10J0A170033'],
+    #     phase=2)
 
     # For Phase 3
     # scheduler = BatteryScheduler(
@@ -1116,6 +1117,6 @@ if __name__ == '__main__':
     #     phase=3)
 
     # For Amber Model
-    # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=[
-                                #  'RX2505ACA10J0A180003', 'RX2505ACA10J0A160016', '011LOKL140058B'], test_mode=False, api_version='redx')
+    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=[
+                                 'RX2505ACA10J0A180003', 'RX2505ACA10J0A160016', '011LOKL140058B'], test_mode=False, api_version='redx')
     scheduler.start()
