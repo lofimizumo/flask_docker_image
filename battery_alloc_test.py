@@ -120,13 +120,13 @@ class BatteryScheduler:
         self.last_schedule = copy.deepcopy(schedule)
 
     def _process_peak_valley_scheduler(self):
+        current_price = self.get_current_price()
+        current_time = self.get_current_time(
+            time_zone='Australia/Brisbane')
         for sn in self.sn_list:
-            current_price = self.get_current_price()
             bat_stats = self.get_current_battery_stats(sn)
             current_usage = bat_stats['loadP'] if bat_stats else 0
             current_soc = bat_stats['soc'] / 100.0 if bat_stats else 0
-            current_time = self.get_current_time(
-                time_zone='Australia/Brisbane')
             current_pv = bat_stats['ppv'] if bat_stats else 0
             device_type = self.sn_types.get(sn, '2505')
             command = self._get_battery_command(
