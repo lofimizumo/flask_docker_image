@@ -320,7 +320,7 @@ class PeakValleyScheduler(BaseScheduler):
 
         # Charging logic
         if self._is_charging_period(current_time) and (current_price <= buy_price or current_pv > current_usage):
-            maxpower = 1300 if device_type == "5000" else 800
+            maxpower = 2000 if device_type == "5000" else 900
             excess_solar = 1000*(current_pv - current_usage)
             if excess_solar > 0:
                 power = min(maxpower, excess_solar)
