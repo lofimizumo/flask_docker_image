@@ -46,7 +46,7 @@ class BatteryScheduler:
         self.battery_original_charging_powers = {}
         self.project_phase = phase
         self.project_mode = project_mode
-        self.sample_interval = 5
+        self.sample_interval = 120
         self.sn_types = self.read_yaml_settings(config).get('battery', {})
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
