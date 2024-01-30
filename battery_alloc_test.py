@@ -321,10 +321,9 @@ class PeakValleyScheduler(BaseScheduler):
             self.price_history.pop(0)
 
         # Set current_price to the median of the last five minutes
-        sample_points_per_minute = int(60 / self.sample_interval)
+        sample_points_per_minute = 60 / self.sample_interval
         if current_price < self.PeakPrice:
-            current_price = np.median(self.price_history[-5 *
-                                                            sample_points_per_minute:])
+            current_price = np.median(self.price_history[int(-5 * sample_points_per_minute):])
 
         # Buy and sell price based on historical data
         buy_price, sell_price = np.percentile(
