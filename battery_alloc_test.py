@@ -37,7 +37,8 @@ class BatteryScheduler:
         self.pv_sn = pv_sn
         self.sn_list = battery_sn if type(battery_sn) == list else [
             battery_sn]
-        self.last_schedule = {}
+        self.last_schedule_ai = {}
+        self.last_schedule_peakvalley = {}
         self.schedule_before_hotfix = {}
         self.last_scheduled_date = None
         self.last_five_metre_readings = []
@@ -45,12 +46,14 @@ class BatteryScheduler:
         self.battery_original_charging_powers = {}
         self.project_phase = phase
         self.project_mode = project_mode
+        self.sample_interval = 120
         self.sn_types = self.read_yaml_settings(config).get('battery', {})
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
     def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
         if scheduler_type == 'PeakValley':
-            self.scheduler = PeakValleyScheduler()
+            self.scheduler = PeakValleyScheduler(
+                sample_interval=self.sample_interval)
             self.scheduler.init_price_history(self.monitor.get_price_history())
         elif scheduler_type == 'AIScheduler':
             self.scheduler = AIScheduler(
@@ -76,7 +79,7 @@ class BatteryScheduler:
 
         return self.scheduler.step(**kwargs)
 
-    def _start(self, interval=900):
+    def _start(self, interval=120):
         if not self.is_running:
             return
 
@@ -105,7 +108,7 @@ class BatteryScheduler:
 
         for sn in self.sn_list:
             battery_schedule = schedule.get(sn, {})
-            last_battery_schedule = self.last_schedule.get(sn, {})
+            last_battery_schedule = self.last_schedule_ai.get(sn, {})
             if all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in battery_schedule) and all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in last_battery_schedule):
                 # logging.info(f"Schedule for {sn} is the same as the last one, skip sending command.")
                 continue
@@ -117,7 +120,7 @@ class BatteryScheduler:
                 logging.error(f"Error sending battery command: {e}")
                 continue
 
-        self.last_schedule = copy.deepcopy(schedule)
+        self.last_schedule_ai = copy.deepcopy(schedule)
 
     def _process_peak_valley_scheduler(self):
         current_price = self.get_current_price()
@@ -132,13 +135,16 @@ class BatteryScheduler:
             command = self._get_battery_command(
                 current_price=current_price, current_usage=current_usage,
                 current_time=current_time, current_soc=current_soc, current_pv=current_pv, device_type=device_type)
+            if all(command.get(k) == self.last_schedule_peakvalley.get(sn, {}).get(k) for k in command) and all(command.get(k) == self.last_schedule_peakvalley.get(sn, {}).get(k) for k in self.last_schedule_peakvalley.get(sn, {})):
+                continue
             self.send_battery_command(command=command, sn=sn)
+            self.last_schedule_peakvalley[sn] = command
             logging.info(f"--AmberModel {sn} Setting--\n")
 
     def start(self):
         self.is_running = True
         try:
-            self._start()
+            self._start(interval=self.sample_interval)
             self.s.run()
         except KeyboardInterrupt:
             logging.info("Stopped.")
@@ -199,7 +205,7 @@ class BaseScheduler:
 
 
 class PeakValleyScheduler(BaseScheduler):
-    def __init__(self, batnum=1):
+    def __init__(self, batnum=1, sample_interval=120):
         # Constants and Initializations
         self.BatNum = batnum
         self.BatMaxCapacity = 5
@@ -216,10 +222,11 @@ class PeakValleyScheduler(BaseScheduler):
         self.SellPct = 80
         self.PeakPct = 90
         self.PeakPrice = 200
-        self.LookBackBars = 2 * 48
-        self.ChgStart1 = '04:00'
-        self.ChgEnd1 = '16:00'
-        self.DisChgStart2 = '16:05'
+        self.LookBackDays = 1
+        self.LookBackBars = 24*60/(sample_interval/60) * self.LookBackDays
+        self.ChgStart1 = '06:00'
+        self.ChgEnd1 = '17:00'
+        self.DisChgStart2 = '17:00'
         self.DisChgEnd2 = '23:55'
         self.DisChgStart1 = '0:00'
         self.DisChgEnd1 = '04:00'
@@ -234,6 +241,7 @@ class PeakValleyScheduler(BaseScheduler):
         self.solar = None
         self.soc = self.BatSocMin
         self.bat_cap = self.soc * self.BatCap
+        self.sample_interval = sample_interval
 
         # Convert start and end times to datetime.time
         self.t_chg_start1 = datetime.strptime(
@@ -254,7 +262,11 @@ class PeakValleyScheduler(BaseScheduler):
             self.PeakEnd, '%H:%M').time()
 
     def init_price_history(self, price_history):
-        self.price_history = price_history
+        self.price_history = np.interp(
+            np.linspace(0, 1, int(self.LookBackBars)),
+            np.linspace(0, 1, len(price_history)),
+            price_history
+        ).tolist()
 
     def _get_solar(self, interval=0.5, test_mode=False, max_solar_power=5000):
         max_solar = max_solar_power
@@ -298,7 +310,7 @@ class PeakValleyScheduler(BaseScheduler):
         # Update battery state
         self.bat_cap = current_soc * self.BatCap
 
-        # Update price history every five minutes
+        # Update price history
         current_time = datetime.strptime(
             current_time, '%H:%M').time()
         if self.last_updated_time is None or current_time.minute != self.last_updated_time.minute:
@@ -307,6 +319,12 @@ class PeakValleyScheduler(BaseScheduler):
 
         if len(self.price_history) > self.LookBackBars:
             self.price_history.pop(0)
+
+        # Set current_price to the median of the last five minutes
+        sample_points_per_minute = 60 / self.sample_interval
+        if current_price < self.PeakPrice:
+            current_price = np.median(self.price_history[-5 *
+                                                            sample_points_per_minute:])
 
         # Buy and sell price based on historical data
         buy_price, sell_price = np.percentile(
@@ -339,7 +357,7 @@ class PeakValleyScheduler(BaseScheduler):
                 self.price_history, self.PeakPct) else True
             # Additional logic line below from Jonathan, comment me in the future
             anti_backflow = True if current_price <= 50 else anti_backflow
-            
+
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': anti_backflow}
 
