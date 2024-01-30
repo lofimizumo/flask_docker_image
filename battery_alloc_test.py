@@ -137,7 +137,7 @@ class BatteryScheduler:
                 current_time=current_time, current_soc=current_soc, current_pv=current_pv, device_type=device_type)
             if all(command.get(k) == self.last_schedule_peakvalley.get(sn, {}).get(k) for k in command) and all(command.get(k) == self.last_schedule_peakvalley.get(sn, {}).get(k) for k in self.last_schedule_peakvalley.get(sn, {})):
                 continue
-            # self.send_battery_command(command=command, sn=sn)
+            self.send_battery_command(command=command, sn=sn)
             self.last_schedule_peakvalley[sn] = command
             logging.info(f"--AmberModel {sn} Setting--\n")
 
