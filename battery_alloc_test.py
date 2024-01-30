@@ -46,7 +46,7 @@ class BatteryScheduler:
         self.battery_original_charging_powers = {}
         self.project_phase = phase
         self.project_mode = project_mode
-        self.sample_interval = 120
+        self.sample_interval = 5
         self.sn_types = self.read_yaml_settings(config).get('battery', {})
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
@@ -91,10 +91,10 @@ class BatteryScheduler:
                 self._process_peak_valley_scheduler()
             if self.test_mode:
                 interval = 0.1
-            self.event = self.s.enter(interval, 1, self._start)
+            self.event = self.s.enter(self.sample_interval, 1, self._start)
         except Exception as e:
             logging.error(f"Scheduling error: {e}")
-            self.event = self.s.enter(interval, 1, self._start)
+            self.event = self.s.enter(self.sample_interval, 1, self._start)
 
     def _process_ai_scheduler(self):
         schedule = self._get_battery_command()
