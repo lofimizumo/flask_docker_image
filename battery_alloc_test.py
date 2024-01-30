@@ -344,7 +344,7 @@ class PeakValleyScheduler(BaseScheduler):
                 logging.info(
                     f"Increase charging power due to excess solar: {excess_solar}, adjusted power: {power}")
             else:
-                power = min(max((5000 - current_usage), 0), maxpower)
+                power = min(max((5000 - 1000*current_usage), 0), maxpower)
             command = {'command': 'Charge', 'power': power,
                        'grid_charge': True if current_pv <= current_usage else False}
 
