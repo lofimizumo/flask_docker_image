@@ -226,7 +226,7 @@ class PeakValleyScheduler(BaseScheduler):
         self.LookBackBars = 24*60/(sample_interval/60) * self.LookBackDays
         self.ChgStart1 = '06:00'
         self.ChgEnd1 = '17:00'
-        self.DisChgStart2 = '17:00'
+        self.DisChgStart2 = '17:30'
         self.DisChgEnd2 = '23:55'
         self.DisChgStart1 = '0:00'
         self.DisChgEnd1 = '04:00'

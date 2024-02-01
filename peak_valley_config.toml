@@ -1,0 +1,25 @@
+[default]
+BatNum = 1
+BatMaxCapacity = 5
+BatChgMaxMultiplier = 1.5
+BatDisMaxMultiplier = 2.5
+BatSocMin = 0.1
+HrMin = 0.5
+SellDiscount = 0.12
+SpikeLevel = 300
+SolarCharge = 0
+SellBack = 0
+BuyPct = 30
+SellPct = 80
+PeakPct = 90
+PeakPrice = 200
+LookBackDays = 1
+SampleInterval = 120
+ChgStart1 = "06:00"
+ChgEnd1 = "17:00"
+DisChgStart2 = "17:30"
+DisChgEnd2 = "23:55"
+DisChgStart1 = "00:00"
+DisChgEnd1 = "04:00"
+PeakStart = "18:00"
+PeakEnd = "20:00"
