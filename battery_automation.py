@@ -17,9 +17,11 @@ def load_config(file_path):
         config = tomli.load(file)
     return config
 
+
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S')
+
 
 class BatteryScheduler:
 
@@ -60,9 +62,11 @@ class BatteryScheduler:
         if scheduler_type == 'PeakValley':
             self.scheduler = PeakValleyScheduler()
             self.scheduler.init_price_history(self.monitor.get_price_history())
-            self.sample_interval = self.config.get('peakvalley', {}).get('SampleInterval', 120)
+            self.sample_interval = self.config.get(
+                'peakvalley', {}).get('SampleInterval', 120)
         elif scheduler_type == 'AIScheduler':
-            self.sample_interval = self.config.get('shawsbay', {}).get('SampleInterval', 900)
+            self.sample_interval = self.config.get(
+                'shawsbay', {}).get('SampleInterval', 900)
             self.scheduler = AIScheduler(
                 sn_list=self.sn_list, api_version=api_version, pv_sn=pv_sn,
                 phase=self.project_phase,
@@ -123,24 +127,30 @@ class BatteryScheduler:
 
     def _process_peak_valley_scheduler(self):
         current_price = self.get_current_price()
-        current_time = self.get_current_time(
-            time_zone='Australia/Brisbane')
+        current_time = self.get_current_time(time_zone='Australia/Brisbane')
+        c_time = datetime.strptime(current_time, '%H:%M')
+
         for sn in self.sn_list:
             bat_stats = self.get_current_battery_stats(sn)
             current_usage = bat_stats['loadP'] if bat_stats else 0
             current_soc = bat_stats['soc'] / 100.0 if bat_stats else 0
             current_pv = bat_stats['ppv'] if bat_stats else 0
             device_type = self.sn_types.get(sn, '2505')
+
             command = self._get_battery_command(
                 current_price=current_price, current_usage=current_usage,
                 current_time=current_time, current_soc=current_soc, current_pv=current_pv, device_type=device_type)
-            if all(command.get(k) == self.last_schedule_peakvalley.get(sn, {}).get(k) for k in command) and all(command.get(k) == self.last_schedule_peakvalley.get(sn, {}).get(k) for k in self.last_schedule_peakvalley.get(sn, {})):
-                c_time = datetime.strptime(current_time, '%H:%M') 
-                if c_time - self.last_command_time < timedelta(minutes=30):
-                    continue
+
+            last_command = self.last_schedule_peakvalley.get(sn, {})
+
+            if command == last_command and (c_time - self.last_command_time.get(sn, datetime.min)) < timedelta(minutes=30):
+                continue
+
             self.send_battery_command(command=command, sn=sn)
-            self.last_command_time = datetime.strptime(current_time, '%H:%M')
+            # Store the command time for each sn
+            self.last_command_time[sn] = c_time
             self.last_schedule_peakvalley[sn] = command
+
             logging.info(f"--AmberModel {sn} Setting--\n")
 
     def start(self):
@@ -225,7 +235,8 @@ class PeakValleyScheduler(BaseScheduler):
         self.PeakPrice = config['PeakPrice']
         self.LookBackDays = config['LookBackDays']
         self.sample_interval = config['SampleInterval']
-        self.LookBackBars = 24 * 60 / (self.sample_interval / 60) * self.LookBackDays
+        self.LookBackBars = 24 * 60 / \
+            (self.sample_interval / 60) * self.LookBackDays
         self.ChgStart1 = config['ChgStart1']
         self.ChgEnd1 = config['ChgEnd1']
         self.DisChgStart2 = config['DisChgStart2']
@@ -300,7 +311,7 @@ class PeakValleyScheduler(BaseScheduler):
         return gaus_y*max_solar
 
     def step(self, current_price, current_time, current_usage, current_soc, current_pv, device_type):
-        ### Solar data is not needed for now
+        # Solar data is not needed for now
         # if self.date != datetime.now(tz=pytz.timezone('Australia/Brisbane')).day or self.solar is None:
         #     self.solar = self._get_solar()
         #     self.date = datetime.now(
@@ -319,7 +330,8 @@ class PeakValleyScheduler(BaseScheduler):
         # Set current_price to the median of the last five minutes
         sample_points_per_minute = 60 / self.sample_interval
         if current_price < self.PeakPrice:
-            current_price = np.mean(self.price_history[int(-5 * sample_points_per_minute):])
+            current_price = np.mean(
+                self.price_history[int(-5 * sample_points_per_minute):])
 
         # Buy and sell price based on historical data
         buy_price, sell_price = np.percentile(
