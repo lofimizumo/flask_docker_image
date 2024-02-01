@@ -139,7 +139,7 @@ class BatteryScheduler:
                 if c_time - self.last_command_time < timedelta(minutes=30):
                     continue
             self.send_battery_command(command=command, sn=sn)
-            self.last_command_time = c_time
+            self.last_command_time = datetime.strptime(current_time, '%H:%M')
             self.last_schedule_peakvalley[sn] = command
             logging.info(f"--AmberModel {sn} Setting--\n")
 
