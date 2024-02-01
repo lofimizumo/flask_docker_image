@@ -1,4 +1,4 @@
-[default]
+[peakvalley]
 BatNum = 1
 BatMaxCapacity = 5
 BatChgMaxMultiplier = 1.5
@@ -10,16 +10,21 @@ SpikeLevel = 300
 SolarCharge = 0
 SellBack = 0
 BuyPct = 30
-SellPct = 80
+SellPct = 70
 PeakPct = 90
-PeakPrice = 200
+PeakPrice = 1000
 LookBackDays = 1
 SampleInterval = 120
-ChgStart1 = "06:00"
-ChgEnd1 = "17:00"
+ChgStart1 = "07:00"
+ChgEnd1 = "16:00"
 DisChgStart2 = "17:30"
 DisChgEnd2 = "23:55"
 DisChgStart1 = "00:00"
 DisChgEnd1 = "04:00"
 PeakStart = "18:00"
 PeakEnd = "20:00"
+[shawsbay]
+SampleInterval = 900
+[battery_types]
+011LOKG080015B = '5000'
+011LOKL140058B = '5000'

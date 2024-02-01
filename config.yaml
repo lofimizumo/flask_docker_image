@@ -1,5 +1,0 @@
-# Battery Scheduler Configuration
-battery:
-  011LOKG080015B: '5000'
-  011LOKL140058B: '5000'
-

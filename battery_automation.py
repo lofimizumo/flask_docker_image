@@ -6,15 +6,21 @@ import copy
 import util
 import pytz
 import logging
+import toml
 import yaml
 from threading import Thread
 import pickle
 from solar_prediction import WeatherInfoFetcher
 
+
+def load_config(file_path):
+    with open(file_path, 'r') as file:
+        config = toml.load(file)
+    return config
+
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S')
-
 
 class BatteryScheduler:
 
@@ -24,9 +30,10 @@ class BatteryScheduler:
                  api_version='dev3',
                  pv_sn=None,
                  phase=2,
-                 config='config.yaml',
+                 config='config.toml',
                  project_mode='normal'
                  ):
+        self.config = load_config(config)
         self.s = sched.scheduler(time.time, time.sleep)
         self.scheduler = None
         self.monitor = util.PriceAndLoadMonitor(
@@ -46,27 +53,22 @@ class BatteryScheduler:
         self.battery_original_charging_powers = {}
         self.project_phase = phase
         self.project_mode = project_mode
-        self.sample_interval = 120
-        self.sn_types = self.read_yaml_settings(config).get('battery', {})
+        self.sn_types = self.config.get('battery_types', {})
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
     def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
         if scheduler_type == 'PeakValley':
-            self.scheduler = PeakValleyScheduler(
-                sample_interval=self.sample_interval)
+            self.scheduler = PeakValleyScheduler()
             self.scheduler.init_price_history(self.monitor.get_price_history())
+            self.sample_interval = self.config.get('peakvalley', {}).get('SampleInterval', 120)
         elif scheduler_type == 'AIScheduler':
+            self.sample_interval = self.config.get('shawsbay', {}).get('SampleInterval', 900)
             self.scheduler = AIScheduler(
                 sn_list=self.sn_list, api_version=api_version, pv_sn=pv_sn,
                 phase=self.project_phase,
                 mode=self.project_mode)
         else:
             raise ValueError(f"Unknown scheduler type: {scheduler_type}")
-
-    def read_yaml_settings(self, file_path):
-        with open(file_path, 'r') as file:
-            settings = yaml.safe_load(file)
-        return settings
 
     def _get_battery_command(self, **kwargs):
         if not self.scheduler:
@@ -79,18 +81,15 @@ class BatteryScheduler:
 
         return self.scheduler.step(**kwargs)
 
-    def _start(self, interval=120):
+    def _start(self):
         if not self.is_running:
             return
 
         try:
             if isinstance(self.scheduler, AIScheduler):
-                interval = 360
                 self._process_ai_scheduler()
             elif isinstance(self.scheduler, PeakValleyScheduler):
                 self._process_peak_valley_scheduler()
-            if self.test_mode:
-                interval = 0.1
             self.event = self.s.enter(self.sample_interval, 1, self._start)
         except Exception as e:
             logging.error(f"Scheduling error: {e}")
@@ -144,7 +143,7 @@ class BatteryScheduler:
     def start(self):
         self.is_running = True
         try:
-            self._start(interval=self.sample_interval)
+            self._start()
             self.s.run()
         except KeyboardInterrupt:
             logging.info("Stopped.")
@@ -205,33 +204,33 @@ class BaseScheduler:
 
 
 class PeakValleyScheduler(BaseScheduler):
-    def __init__(self, batnum=1, sample_interval=120):
-        # Constants and Initializations
-        self.BatNum = batnum
-        self.BatMaxCapacity = 5
+    def __init__(self, config_path='config.toml'):
+        config = load_config(config_path)['peakvalley']
+        self.BatNum = config['BatNum']
+        self.BatMaxCapacity = config['BatMaxCapacity']
         self.BatCap = self.BatNum * self.BatMaxCapacity
-        self.BatChgMax = self.BatNum * 1.5
-        self.BatDisMax = self.BatNum * 2.5
-        self.BatSocMin = 0.1
-        self.HrMin = 30 / 60
-        self.SellDiscount = 0.12
-        self.SpikeLevel = 300
-        self.SolarCharge = 0
-        self.SellBack = 0
-        self.BuyPct = 30
-        self.SellPct = 80
-        self.PeakPct = 90
-        self.PeakPrice = 200
-        self.LookBackDays = 1
-        self.LookBackBars = 24*60/(sample_interval/60) * self.LookBackDays
-        self.ChgStart1 = '06:00'
-        self.ChgEnd1 = '17:00'
-        self.DisChgStart2 = '17:30'
-        self.DisChgEnd2 = '23:55'
-        self.DisChgStart1 = '0:00'
-        self.DisChgEnd1 = '04:00'
-        self.PeakStart = '18:00'
-        self.PeakEnd = '20:00'
+        self.BatChgMax = self.BatNum * config['BatChgMaxMultiplier']
+        self.BatDisMax = self.BatNum * config['BatDisMaxMultiplier']
+        self.HrMin = config['HrMin']
+        self.SellDiscount = config['SellDiscount']
+        self.SpikeLevel = config['SpikeLevel']
+        self.SolarCharge = config['SolarCharge']
+        self.SellBack = config['SellBack']
+        self.BuyPct = config['BuyPct']
+        self.SellPct = config['SellPct']
+        self.PeakPct = config['PeakPct']
+        self.PeakPrice = config['PeakPrice']
+        self.LookBackDays = config['LookBackDays']
+        self.sample_interval = config['SampleInterval']
+        self.LookBackBars = 24 * 60 / (self.sample_interval / 60) * self.LookBackDays
+        self.ChgStart1 = config['ChgStart1']
+        self.ChgEnd1 = config['ChgEnd1']
+        self.DisChgStart2 = config['DisChgStart2']
+        self.DisChgEnd2 = config['DisChgEnd2']
+        self.DisChgStart1 = config['DisChgStart1']
+        self.DisChgEnd1 = config['DisChgEnd1']
+        self.PeakStart = config['PeakStart']
+        self.PeakEnd = config['PeakEnd']
 
         self.date = None
         self.last_updated_time = None
@@ -239,9 +238,6 @@ class PeakValleyScheduler(BaseScheduler):
         # Initial data containers and setup
         self.price_history = None
         self.solar = None
-        self.soc = self.BatSocMin
-        self.bat_cap = self.soc * self.BatCap
-        self.sample_interval = sample_interval
 
         # Convert start and end times to datetime.time
         self.t_chg_start1 = datetime.strptime(
@@ -301,14 +297,11 @@ class PeakValleyScheduler(BaseScheduler):
         return gaus_y*max_solar
 
     def step(self, current_price, current_time, current_usage, current_soc, current_pv, device_type):
-        # Update solar data each day
-        if self.date != datetime.now(tz=pytz.timezone('Australia/Brisbane')).day or self.solar is None:
-            self.solar = self._get_solar()
-            self.date = datetime.now(
-                tz=pytz.timezone('Australia/Brisbane')).day
-
-        # Update battery state
-        self.bat_cap = current_soc * self.BatCap
+        ### Solar data is not needed for now
+        # if self.date != datetime.now(tz=pytz.timezone('Australia/Brisbane')).day or self.solar is None:
+        #     self.solar = self._get_solar()
+        #     self.date = datetime.now(
+        #         tz=pytz.timezone('Australia/Brisbane')).day
 
         # Update price history
         current_time = datetime.strptime(
@@ -323,14 +316,12 @@ class PeakValleyScheduler(BaseScheduler):
         # Set current_price to the median of the last five minutes
         sample_points_per_minute = 60 / self.sample_interval
         if current_price < self.PeakPrice:
-            current_price = np.median(self.price_history[int(-5 * sample_points_per_minute):])
+            current_price = np.mean(self.price_history[int(-5 * sample_points_per_minute):])
 
         # Buy and sell price based on historical data
         buy_price, sell_price = np.percentile(
             self.price_history, [self.BuyPct, self.SellPct])
 
-        # peak_price = np.percentile(self.price_history, self.PeakPct)
-        # use hard coded peak price for now
         peak_price = self.PeakPrice
 
         command = {"command": "Idle"}
@@ -350,13 +341,9 @@ class PeakValleyScheduler(BaseScheduler):
 
         # Discharging logic
         power = 5000 if device_type == "5000" else 2500
-        # Additional logic "current_price >= 30" below from Jonathan, comment me in the future
-        if self._is_discharging_period(current_time) and (current_price >= sell_price) and (current_price >= 30):
+        if self._is_discharging_period(current_time) and (current_price >= sell_price):
             anti_backflow = False if current_price > np.percentile(
                 self.price_history, self.PeakPct) else True
-            # Additional logic line below from Jonathan, comment me in the future
-            anti_backflow = True if current_price <= 50 else anti_backflow
-
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': anti_backflow}
 
