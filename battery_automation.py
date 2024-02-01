@@ -53,6 +53,7 @@ class BatteryScheduler:
         self.project_phase = phase
         self.project_mode = project_mode
         self.sn_types = self.config.get('battery_types', {})
+        self.last_command_time = datetime.strptime('00:00', '%H:%M')
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
     def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
@@ -134,7 +135,11 @@ class BatteryScheduler:
                 current_price=current_price, current_usage=current_usage,
                 current_time=current_time, current_soc=current_soc, current_pv=current_pv, device_type=device_type)
             if all(command.get(k) == self.last_schedule_peakvalley.get(sn, {}).get(k) for k in command) and all(command.get(k) == self.last_schedule_peakvalley.get(sn, {}).get(k) for k in self.last_schedule_peakvalley.get(sn, {})):
-                continue
+                c_time = datetime.strptime(current_time, '%H:%M') 
+                if c_time - self.last_command_time < timedelta(minutes=30):
+                    continue
+                else:
+                    self.last_command_time = c_time
             self.send_battery_command(command=command, sn=sn)
             self.last_schedule_peakvalley[sn] = command
             logging.info(f"--AmberModel {sn} Setting--\n")
