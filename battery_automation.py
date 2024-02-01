@@ -55,7 +55,7 @@ class BatteryScheduler:
         self.project_phase = phase
         self.project_mode = project_mode
         self.sn_types = self.config.get('battery_types', {})
-        self.last_command_time = datetime.strptime('00:00', '%H:%M')
+        self.last_command_time = {} 
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
     def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
