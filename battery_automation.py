@@ -6,16 +6,15 @@ import copy
 import util
 import pytz
 import logging
-import toml
-import yaml
+import tomli
 from threading import Thread
 import pickle
 from solar_prediction import WeatherInfoFetcher
 
 
 def load_config(file_path):
-    with open(file_path, 'r') as file:
-        config = toml.load(file)
+    with open(file_path, 'rb') as file:
+        config = tomli.load(file)
     return config
 
 logging.basicConfig(level=logging.INFO,

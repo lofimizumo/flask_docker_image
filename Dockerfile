@@ -14,6 +14,7 @@ RUN pip install flask
 RUN pip install pytz
 RUN pip install requests
 RUN pip install pandas
+RUN pip install tomli
 
 # The code to run when container is started
 COPY . .
