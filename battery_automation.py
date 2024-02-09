@@ -143,7 +143,7 @@ class BatteryScheduler:
 
             last_command = self.last_schedule_peakvalley.get(sn, {})
 
-            if command == last_command and (c_time - self.last_command_time.get(sn, datetime.min)) < timedelta(minutes=30):
+            if command == last_command and (c_time - self.last_command_time.get(sn, datetime.min)) < timedelta(minutes=5):
                 continue
 
             self.send_battery_command(command=command, sn=sn)
