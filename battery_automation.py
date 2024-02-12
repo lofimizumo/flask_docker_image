@@ -1100,7 +1100,7 @@ class AIScheduler(BaseScheduler):
             logging.info(
                 f'Updating schedule: day {current_day}, time: {datetime.now(tz=pytz.timezone("Australia/Sydney"))}, last_scheduled_date: {self.last_scheduled_date}')
             demand, price = self._get_demand_and_price()
-            logging.info(f'demand: {demand}, price: {price}')
+            logging.info(f'demand: {demand}')
             stats = self._get_battery_status()
             self.schedule = self.generate_schedule(
                 demand, price, self.battery_max_capacity_kwh, self.num_batteries, stats, self.price_weight)
