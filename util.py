@@ -306,13 +306,20 @@ class PriceAndLoadMonitor:
             'Australia/Sydney')).strftime("%Y_%m_%d")
         data = {'date': date_today, 'gridID': grid_ID, 'phase': phase}
         headers = {'token': self.get_token()}
-        response = self.api.send_request(
-            "grid/get_prediction", method='POST', json=data, headers=headers)
-        if response.get('data', None) is None:
-            response = self.api.send_request(
-                "grid/get_prediction_v2", method='POST', json=data, headers=headers)
-            if response.get('data', None) is None:
-                raise Exception('Get prediction API failed') 
+        max_retries = 3
+        response = {}
+
+        for retry_count in range(max_retries):
+            if response.get('data') is not None:
+                break
+
+            response = self.api.send_request("grid/get_prediction", method='POST', json=data, headers=headers)
+
+            if response.get('data') is None:
+                response = self.api.send_request("grid/get_prediction_v2", method='POST', json=data, headers=headers)
+
+            if response.get('data') is None:
+                time.sleep(180)
         prediction_average = [
             (int(x['predictionLower']) + int(x['predictionUpper']))/2 for x in response['data']]
         self.get_project_stats_call_count += 1
