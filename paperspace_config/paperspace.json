@@ -1,10 +1,13 @@
 {
-    "enabled": true,
-    "image": "bellakira0717/flask-battery-scheduler:main",
-    "name": "shawsbay-ai",
-    "port": 5000,
-    "resources": {
-      "instanceType": "C4",
-      "replicas": 1
-    }
+  "apiVersion": "v1",
+  "image": "bellakira0717/flask-battery-scheduler:latest",
+  "name": "shawsbay-ai",
+  "enabled": true,
+  "resources": {
+    "machineType": "C4",
+    "replicas": 1,
+    "ports": [
+      5000
+    ]
+  }
   }
