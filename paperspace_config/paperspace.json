@@ -4,7 +4,7 @@
     "name": "flask-battery-scheduler",
     "port": 5000,
     "resources": {
-      "instanceType": "C4",
+      "instanceType": "C5",
       "replicas": 1
     }
   }
