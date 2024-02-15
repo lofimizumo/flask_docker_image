@@ -147,7 +147,6 @@ class BatteryScheduler:
                 continue
 
             self.send_battery_command(command=command, sn=sn)
-            # Store the command time for each sn
             self.last_command_time[sn] = c_time
             self.last_schedule_peakvalley[sn] = command
 
