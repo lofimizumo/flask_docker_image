@@ -319,6 +319,7 @@ class PriceAndLoadMonitor:
                 response = self.api.send_request("grid/get_prediction_v2", method='POST', json=data, headers=headers)
 
             if response.get('data') is None:
+                logging.error(f"Failed to get prediction data, retrying... Attempt {retry_count + 1}")
                 time.sleep(180)
         prediction_average = [
             (int(x['predictionLower']) + int(x['predictionUpper']))/2 for x in response['data']]
