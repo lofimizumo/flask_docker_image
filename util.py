@@ -369,7 +369,36 @@ class PriceAndLoadMonitor:
             response = None
         return response
         
-    def set_register(self, data):
+    def set_min_register(self, data):
+        key_register_map = {
+            'chargeStart1': 9,
+            'chargeEnd1': 11,
+            'dischargeStart1': 13,
+            'dischargeEnd1': 15,
+        }
+
+        try:
+            headers = {'token': self.get_token()}
+            sn = data.get('deviceSn', None)
+            for key, value in data.items():
+                if key in key_register_map:
+                    minute = int(value.split(':')[1])
+                    response = self.api.send_request(
+                        "device/set_register", method='POST', json={
+                            "deviceSn":sn, 
+                            "addr": key_register_map[key],
+                            "value": minute
+                        },
+                        headers=headers
+                    )
+        except ConnectionError as e:
+            logging.error(f"Connection error occurred: {e}")
+            response = None
+        except Exception as e:
+            logging.error(f"An unexpected error occurred: {e}")
+            response = None
+        return response
+    def set_hour_register(self, data):
         key_register_map = {
             'chargeStart1': 8,
             'chargeEnd1': 10,
@@ -499,8 +528,16 @@ class PriceAndLoadMonitor:
         # Send the data
         try:
             headers = {'token': self.get_token()}
-            # self.set_register(data)
+            # Here we have a bit hack
+            # We need to set the hour and minute register because the set_params API does not work
+            # After we set the hour and minute register, we need to remove the charge/discharge key value in the data
+            self.set_hour_register(data)
+            self.set_min_register(data)
             self.set_antibackflow_register(data)
+            data.pop('chargeStart1', None)
+            data.pop('chargeEnd1', None)
+            data.pop('dischargeStart1', None)
+            data.pop('dischargeEnd1', None)
             response = self.api.send_request(
                 "device/set_params", method='POST', json=data, headers=headers)
             # logging.info(f'Successfully Sent command {command} to battery {sn}, response: {response}')

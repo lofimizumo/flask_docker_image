@@ -342,14 +342,16 @@ class PeakValleyScheduler(BaseScheduler):
 
         # Charging logic
         if self._is_charging_period(current_time) and (current_price <= buy_price or current_pv > current_usage):
-            maxpower = 2000 if device_type == "5000" else 900
+            maxpower = 2500 if device_type == "5000" else 1500
+            minpower = 1250 if device_type == "5000" else 700
+            power = minpower
             excess_solar = 1000*(current_pv - current_usage)
             if excess_solar > 0:
-                power = min(maxpower, excess_solar)
+                power = min(max(minpower, excess_solar), maxpower)
                 # logging.info(
                 #     f"Increase charging power due to excess solar: {excess_solar}, adjusted power: {power}")
             else:
-                power = min(max((5000 - 1000*current_usage), 0), maxpower)
+                power = minpower
             command = {'command': 'Charge', 'power': power,
                        'grid_charge': True if current_pv <= current_usage else False}
 
@@ -1118,13 +1120,13 @@ class AIScheduler(BaseScheduler):
 
 if __name__ == '__main__':
     # For Phase 2
-    scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler',
-        battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'],
-        test_mode=False,
-        api_version='redx',
-        pv_sn=['RX2505ACA10J0A170033'],
-        phase=2)
+    # scheduler = BatteryScheduler(
+    #     scheduler_type='AIScheduler',
+    #     battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'],
+    #     test_mode=False,
+    #     api_version='redx',
+    #     pv_sn=['RX2505ACA10J0A170033'],
+    #     phase=2)
 
     # For Phase 3
     # scheduler = BatteryScheduler(
@@ -1136,6 +1138,6 @@ if __name__ == '__main__':
     #     phase=3)
 
     # For Amber Model
-    # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=[
-                                #  'RX2505ACA10J0A180003', 'RX2505ACA10J0A160016', '011LOKL140058B'], test_mode=False, api_version='redx')
+    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=[
+                                 'RX2505ACA10J0A180003', 'RX2505ACA10J0A160016', '011LOKL140058B'], test_mode=False, api_version='redx')
     scheduler.start()
