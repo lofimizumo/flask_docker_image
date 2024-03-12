@@ -1,9 +1,11 @@
 import sched
 from datetime import datetime, timedelta
+from datetime import time as dtime
 import time
 import numpy as np
 import copy
 import util
+import math
 import pytz
 import logging
 import tomli
@@ -55,7 +57,7 @@ class BatteryScheduler:
         self.project_phase = phase
         self.project_mode = project_mode
         self.sn_types = self.config.get('battery_types', {})
-        self.last_command_time = {} 
+        self.last_command_time = {}
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
     def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
@@ -309,22 +311,27 @@ class PeakValleyScheduler(BaseScheduler):
         _, gaus_y = gaussian_mixture(interval)
         return gaus_y*max_solar
 
-    def step(self, current_price, current_time, current_usage, current_soc, current_pv, device_type):
-        # Solar data is not needed for now
-        # if self.date != datetime.now(tz=pytz.timezone('Australia/Brisbane')).day or self.solar is None:
-        #     self.solar = self._get_solar()
-        #     self.date = datetime.now(
-        #         tz=pytz.timezone('Australia/Brisbane')).day
+    def _discharge_confidence(self, current_price):
+        """
+        Calculate the discharge confidence level based on the current price.
 
+        Parameters:
+        current_price (float): The current price value.
+
+        Returns:
+        float (0-1): The discharge confidence level.
+        """
+        conf_level = 0.97 - 0.8824 * math.exp(-0.033 * current_price)
+        return conf_level
+
+    def step(self, current_price, current_time, current_usage, current_soc, current_pv, device_type):
         # Update price history
-        current_time = datetime.strptime(
-            current_time, '%H:%M').time()
+        current_time = datetime.strptime(current_time, '%H:%M').time()
         if self.last_updated_time is None or current_time.minute != self.last_updated_time.minute:
             self.last_updated_time = current_time
             self.price_history.append(current_price)
-
-        if len(self.price_history) > self.LookBackBars:
-            self.price_history.pop(0)
+            if len(self.price_history) > self.LookBackBars:
+                self.price_history.pop(0)
 
         # Set current_price to the median of the last five minutes
         sample_points_per_minute = 60 / self.sample_interval
@@ -335,41 +342,60 @@ class PeakValleyScheduler(BaseScheduler):
         # Buy and sell price based on historical data
         buy_price, sell_price = np.percentile(
             self.price_history, [self.BuyPct, self.SellPct])
-
         peak_price = self.PeakPrice
 
         command = {"command": "Idle"}
 
         # Charging logic
-        if self._is_charging_period(current_time) and (current_price <= buy_price or current_pv > current_usage):
-            maxpower = 2500 if device_type == "5000" else 1500
-            minpower = 1250 if device_type == "5000" else 700
-            power = minpower
-            excess_solar = 1000*(current_pv - current_usage)
-            if excess_solar > 0:
-                power = min(max(minpower, excess_solar), maxpower)
-                # logging.info(
-                #     f"Increase charging power due to excess solar: {excess_solar}, adjusted power: {power}")
-            else:
-                power = minpower
-            command = {'command': 'Charge', 'power': power,
-                       'grid_charge': True if current_pv <= current_usage else False}
+        if self._is_charging_period(current_time) and ((current_price <= buy_price) or (current_pv > current_usage)):
+            maxpower, minpower = self._get_power_limits(device_type)
+            power, grid_charge = self._calculate_charging_power(
+                current_time, current_pv, current_usage, minpower, maxpower)
+            command = {'command': 'Charge',
+                       'power': power, 'grid_charge': grid_charge}
 
         # Discharging logic
-        power = 5000 if device_type == "5000" else 2500
         if self._is_discharging_period(current_time) and (current_price >= sell_price):
-            anti_backflow = False if current_price > np.percentile(
-                self.price_history, self.PeakPct) else True
+            power = 5000 if device_type == "5000" else 2500
+            anti_backflow_threshold = np.percentile(
+                self.price_history, self.PeakPct)
+            anti_backflow = current_price <= anti_backflow_threshold
+            conf_level = self._discharge_confidence(
+                current_price - anti_backflow_threshold)
+            power = max(min(power * conf_level + 900, 2500), 1000)
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': anti_backflow}
 
-        if current_price > peak_price and current_pv < current_usage:
-            command = {'command': 'Discharge',
-                       'power': power, 'anti_backflow': False}
-
-        logging.info(f"AmberModel :price: {current_price}, sell price:{sell_price}, peak_price{peak_price} ,usage: {current_usage}, "
+        logging.info(f"AmberModel: price: {current_price}, sell price: {sell_price}, peak_price: {peak_price}, usage: {current_usage}, "
                      f"time: {current_time}, command: {command}")
+        
+        # Debugging
+        command = {'command': 'Charge',
+                    'power': 800, 'grid_charge': False}
         return command
+
+    def _get_power_limits(self, device_type):
+        maxpower = 2500 if device_type == "5000" else 1500
+        minpower = 1250 if device_type == "5000" else 700
+        return maxpower, minpower
+
+    def _calculate_charging_power(self, current_time, current_pv, current_usage, minpower, maxpower):
+        power = minpower
+        grid_charge = True
+        excess_solar = 1000 * (current_pv - current_usage)
+
+        if excess_solar > minpower:
+            power = maxpower
+            grid_charge = False
+        else:
+            power = minpower
+            grid_charge = True
+
+        if current_time <= dtime(9, 0) and current_time >= dtime(6, 0):
+            power = maxpower
+            grid_charge = False
+
+        return power, grid_charge
 
     def _is_charging_period(self, t):
         return t >= self.t_chg_start1 and t <= self.t_chg_end1

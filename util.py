@@ -10,6 +10,7 @@ logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S')
 
+
 def api_status_check(max_retries=10, delay=10):
     """
     A decorator function that checks the status of a device after executing a command.
@@ -66,7 +67,8 @@ def api_status_check(max_retries=10, delay=10):
                 else:
                     # logging.info("Status successfully changed!")
                     return response
-            logging.error("Max retry limit reached! Stopping further attempts.")
+            logging.error(
+                "Max retry limit reached! Stopping further attempts.")
             return response
 
         def check_response(response):
@@ -75,6 +77,7 @@ def api_status_check(max_retries=10, delay=10):
                 return False
                 # raise ValueError("Invalid response: None or not a dictionary.")
             return True
+
         def check_status(args, kwargs):
             is_TestMode = args[0].test_mode
             if is_TestMode:
@@ -111,8 +114,9 @@ class PriceAndLoadMonitor:
         else:
             self.api = ApiCommunicator(
                 base_url="https://redxpower.com/restapi")
-        self.token = None 
-        self.token_last_updated = datetime.now(tz=pytz.timezone('Australia/Sydney'))
+        self.token = None
+        self.token_last_updated = datetime.now(
+            tz=pytz.timezone('Australia/Sydney'))
         # Test Mode is for testing the battery control without sending command to the actual battery
         self.test_mode = test_mode
         self.get_project_stats_call_count = 0
@@ -120,7 +124,8 @@ class PriceAndLoadMonitor:
 
     def get_realtime_price(self):
         url = 'https://api.amber.com.au/v1/sites/01HDN4PXKQ1MR29SWJPHBQE8M8/prices/current?next=0&previous=0&resolution=30'
-        header = {'accept': 'application/json','Authorization': 'Bearer psk_2d5030fe84a68769b6f48ab73bd48ebf'}
+        header = {'accept': 'application/json',
+                  'Authorization': 'Bearer psk_2d5030fe84a68769b6f48ab73bd48ebf'}
         r = requests.get(url, headers=header)
         prices = [x['perKwh'] for x in r.json()]
         return prices[0]
@@ -128,9 +133,12 @@ class PriceAndLoadMonitor:
     def get_price_history(self):
         api_key = 'psk_2d5030fe84a68769b6f48ab73bd48ebf'
         fetcher = AmberFetcher(api_key)
-        yesterday_date = (datetime.now(tz=pytz.timezone('Australia/Sydney')) - timedelta(days=1)).strftime("%Y-%m-%d")
-        day_before_yesterday_date = (datetime.now(tz=pytz.timezone('Australia/Sydney')) - timedelta(days=2)).strftime("%Y-%m-%d")
-        response = fetcher.get_prices(day_before_yesterday_date, yesterday_date, resolution=30)
+        yesterday_date = (datetime.now(tz=pytz.timezone(
+            'Australia/Sydney')) - timedelta(days=1)).strftime("%Y-%m-%d")
+        day_before_yesterday_date = (datetime.now(tz=pytz.timezone(
+            'Australia/Sydney')) - timedelta(days=2)).strftime("%Y-%m-%d")
+        response = fetcher.get_prices(
+            day_before_yesterday_date, yesterday_date, resolution=30)
         prices = [x[1] for x in response]
         return prices
 
@@ -261,7 +269,8 @@ class PriceAndLoadMonitor:
         else:
             response = self.api.send_request("user/token", method='POST', data={
                 'user_account': 'yetao_admin', 'secret': 'a~L$o8dJ246c'}, headers={'Content-Type': 'application/x-www-form-urlencoded'})
-        self.token_last_updated = datetime.now(tz=pytz.timezone('Australia/Sydney'))
+        self.token_last_updated = datetime.now(
+            tz=pytz.timezone('Australia/Sydney'))
         if response is None:
             raise Exception('API failed: get_token')
         return response['data']['token']
@@ -283,7 +292,7 @@ class PriceAndLoadMonitor:
             "device/get_params", method='POST', json=data, headers=headers)
         vpp = response.get('data', {}).get('operatingMode', 0)
         return True if vpp == '1' else False
-    
+
     def get_project_stats(self, grid_ID=1, phase=2):
         '''
         Currently we have only one project, shawsbay, so we hard code the gridID as 1.
@@ -313,13 +322,16 @@ class PriceAndLoadMonitor:
             if response.get('data') is not None:
                 break
 
-            response = self.api.send_request("grid/get_prediction", method='POST', json=data, headers=headers)
+            response = self.api.send_request(
+                "grid/get_prediction", method='POST', json=data, headers=headers)
 
             if response.get('data') is None:
-                response = self.api.send_request("grid/get_prediction_v2", method='POST', json=data, headers=headers)
+                response = self.api.send_request(
+                    "grid/get_prediction_v2", method='POST', json=data, headers=headers)
 
             if response.get('data') is None:
-                logging.error(f"Failed to get prediction data, retrying... Attempt {retry_count + 1}")
+                logging.error(
+                    f"Failed to get prediction data, retrying... Attempt {retry_count + 1}")
                 time.sleep(180)
         prediction_average = [
             (int(x['predictionLower']) + int(x['predictionUpper']))/2 for x in response['data']]
@@ -338,9 +350,10 @@ class PriceAndLoadMonitor:
         '''
         if self.test_mode:
             return next(self.sim_time_iter).strftime("%H:%M")
-        local_time = datetime.now(tz=pytz.timezone(time_zone)).strftime("%H:%M")
+        local_time = datetime.now(
+            tz=pytz.timezone(time_zone)).strftime("%H:%M")
         return local_time
-    
+
     def get_params(self, sn):
         try:
             headers = {'token': self.get_token()}
@@ -351,14 +364,14 @@ class PriceAndLoadMonitor:
         except ConnectionError as e:
             logging.error(f"Connection error occurred: {e}")
             return None
-    
+
     def set_antibackflow_register(self, data):
         try:
             headers = {'token': self.get_token()}
             sn = data.get('deviceSn', None)
             response = self.api.send_request(
                 "device/set_register", method='POST', json={
-                    "deviceSn":sn, 
+                    "deviceSn": sn,
                     "addr": 58,
                     "value": 0
                 },
@@ -368,7 +381,7 @@ class PriceAndLoadMonitor:
             logging.error(f"Set Anti-backflow: unexpected error occurred: {e}")
             response = None
         return response
-        
+
     def set_min_register(self, data):
         key_register_map = {
             'chargeStart1': 9,
@@ -385,7 +398,7 @@ class PriceAndLoadMonitor:
                     minute = int(value.split(':')[1])
                     response = self.api.send_request(
                         "device/set_register", method='POST', json={
-                            "deviceSn":sn, 
+                            "deviceSn": sn,
                             "addr": key_register_map[key],
                             "value": minute
                         },
@@ -398,6 +411,7 @@ class PriceAndLoadMonitor:
             logging.error(f"An unexpected error occurred: {e}")
             response = None
         return response
+
     def set_hour_register(self, data):
         key_register_map = {
             'chargeStart1': 8,
@@ -414,7 +428,7 @@ class PriceAndLoadMonitor:
                     hour = int(value.split(':')[0])
                     response = self.api.send_request(
                         "device/set_register", method='POST', json={
-                            "deviceSn":sn, 
+                            "deviceSn": sn,
                             "addr": key_register_map[key],
                             "value": hour
                         },
@@ -430,17 +444,8 @@ class PriceAndLoadMonitor:
 
     @api_status_check(max_retries=3, delay=60)
     def send_battery_command(self, peak_valley_command=None, json=None, sn=None):
-        def _convert_floats_to_ints(d):
-            for key, value in d.items():
-                if isinstance(value, float):
-                    d[key] = int(value)
-                elif isinstance(value, dict):
-                    d[key] = _convert_floats_to_ints(value)
-            return d
-        
         if self.test_mode:
             return
-        
 
         command_map = {
             'Idle': 3,
@@ -460,77 +465,95 @@ class PriceAndLoadMonitor:
             True: 1,
             False: 0,
         }
-        # command is only used for peakvalley model, json is used for AI model
-        if peak_valley_command:
-            command = peak_valley_command.get('command', None)
-            anti_backflow = peak_valley_command.get('anti_backflow', True)
+
+        grid_charge_map = {
+            True: 1,
+            False: 0,
+        }
+
+        def _convert_floats_to_ints(d):
+            for key, value in d.items():
+                if isinstance(value, float):
+                    d[key] = int(value)
+                elif isinstance(value, dict):
+                    d[key] = _convert_floats_to_ints(value)
+            return d
+
+        def _get_amber_command(command, peak_valley_command, sn):
             from datetime import datetime, timedelta
             data = {}
-            current_time_str = self.get_current_time(time_zone='Australia/Brisbane')
+            current_time_str = self.get_current_time(
+                time_zone='Australia/Brisbane')
             current_time = datetime.strptime(current_time_str, '%H:%M')
             empty_time = '00:00'
+
             if command == 'Charge':
-                # current_charge_end = self.get_params(sn)['data']['chargeEnd1']
-                # if current_time < datetime.strptime(current_charge_end, '%H:%M'):
-                    # return {'result': 'skipped'}
-                start_time = self.get_current_time(time_zone='Australia/Brisbane')
+                grid_charge = peak_valley_command.get('grid_charge', False)
+                grid_charge = grid_charge_map[grid_charge]
+                start_time = self.get_current_time(
+                    time_zone='Australia/Brisbane')
                 end_time = (datetime.strptime(start_time, '%H:%M') +
                             timedelta(minutes=40)).strftime("%H:%M")
-                data = {'deviceSn': sn,
-                        'controlCommand': command_map[command],
-                        'operatingMode': mode_map['Time'],
-                        'chargeStart1': start_time,
-                        'chargeEnd1': end_time,
-                        'dischargeStart1': empty_time,
-                        'dischargeEnd1': empty_time,
-                        'chargePower1': peak_valley_command.get('power', 800),
-                        'enableGridCharge1': peak_valley_command.get('grid_charge', 0)
-                        }
+                data = {
+                    'deviceSn': sn,
+                    'controlCommand': command_map[command],
+                    'operatingMode': mode_map['Time'],
+                    'chargeStart1': start_time,
+                    'chargeEnd1': end_time,
+                    'dischargeStart1': empty_time,
+                    'dischargeEnd1': empty_time,
+                    'chargePower1': peak_valley_command.get('power', 800),
+                    'enableGridCharge1': grid_charge
+                }
 
             elif command == 'Discharge':
-                # current_discharge_end = self.get_params(sn)['data']['dischargeEnd1']
-                # if current_time < datetime.strptime(current_discharge_end, '%H:%M'):
-                #     return {'result': 'skipped'}
-                start_time = self.get_current_time(time_zone='Australia/Brisbane')
+                start_time = self.get_current_time(
+                    time_zone='Australia/Brisbane')
                 end_time = (datetime.strptime(start_time, '%H:%M') +
                             timedelta(minutes=40)).strftime("%H:%M")
-                data = {'deviceSn': sn,
-                        'controlCommand': command_map[command],
-                        'operatingMode': mode_map['Time'],
-                        'dischargeStart1': start_time,
-                        'dischargeEnd1': end_time,
-                        'chargeStart1': empty_time,
-                        'chargeEnd1': empty_time,
-                        'antiBackflowSW': anti_backflow_map[anti_backflow],
-                        'dischargePower1': peak_valley_command.get('power', 2500)
-                        }
-            elif command == 'Idle':
-                data = {'deviceSn': sn,
-                        'controlCommand': command_map[command],
-                        'operatingMode': mode_map['Time'],
-                        'dischargeStart1': empty_time,
-                        'dischargeEnd1': empty_time,
-                        'chargeStart1': empty_time,
-                        'chargeEnd1': empty_time, }
-        
-        # AI model pass JSON directly
-        if json:
-            data = json
-        data = _convert_floats_to_ints(data)
+                data = {
+                    'deviceSn': sn,
+                    'controlCommand': command_map[command],
+                    'operatingMode': mode_map['Time'],
+                    'dischargeStart1': start_time,
+                    'dischargeEnd1': end_time,
+                    'chargeStart1': empty_time,
+                    'chargeEnd1': empty_time,
+                    'antiBackflowSW': anti_backflow_map[peak_valley_command.get('anti_backflow', True)],
+                    'dischargePower1': peak_valley_command.get('power', 2500)
+                }
 
-        # Skip the devices on VPP mode
-        is_VPP_on = self.is_VPP_on(sn)
-        if is_VPP_on:
+            elif command == 'Idle':
+                data = {
+                    'deviceSn': sn,
+                    'controlCommand': command_map[command],
+                    'operatingMode': mode_map['Time'],
+                    'dischargeStart1': empty_time,
+                    'dischargeEnd1': empty_time,
+                    'chargeStart1': empty_time,
+                    'chargeEnd1': empty_time,
+                }
+
+            return data
+
+        # Check if the device is on VPP mode
+        if self.is_VPP_on(sn):
             logging.info(f"Device {sn} is on VPP mode, skipping...")
             return None
 
+        data = {}
 
-        # Send the data
+        if peak_valley_command:
+            command = peak_valley_command.get('command', None)
+            data = _get_amber_command(command, peak_valley_command, sn)
+
+        if json:
+            data = json
+
+        data = _convert_floats_to_ints(data)
+
         try:
             headers = {'token': self.get_token()}
-            # Here we have a bit hack
-            # We need to set the hour and minute register because the set_params API does not work
-            # After we set the hour and minute register, we need to remove the charge/discharge key value in the data
             self.set_hour_register(data)
             self.set_min_register(data)
             self.set_antibackflow_register(data)
@@ -540,13 +563,10 @@ class PriceAndLoadMonitor:
             data.pop('dischargeEnd1', None)
             response = self.api.send_request(
                 "device/set_params", method='POST', json=data, headers=headers)
-            # logging.info(f'Successfully Sent command {command} to battery {sn}, response: {response}')
-        except ConnectionError as e:
-            logging.error(f"Connection error occurred: {e}")
-            response = None 
         except Exception as e:
-            logging.error(f"An unexpected error occurred: {e}")
-            response = None 
+            logging.error(f"An unexpected error occurred at sending command: {e}")
+            response = None
+
         return response
 
 
@@ -592,20 +612,24 @@ class ApiCommunicator:
             raise ValueError(f"Command {command} failed to execute.")
         return True
 
+
 class AmberFetcher:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = f"https://api.amber.com.au/v1"
-        self.site_id = None 
+        self.site_id = None
+
     def get_site(self):
-        header = {'Authorization': f'Bearer {self.api_key}','accept': 'application/json'}
+        header = {'Authorization': f'Bearer {self.api_key}',
+                  'accept': 'application/json'}
         response = requests.get(f"{self.base_url}/sites", headers=header)
         return response.json()[0]['id']
-    
+
     def get_prices(self, start_date, end_date, resolution=30):
         if not self.site_id:
             self.site_id = self.get_site()
-        header = {'Authorization': f'Bearer {self.api_key}','accept': 'application/json'}
+        header = {'Authorization': f'Bearer {self.api_key}',
+                  'accept': 'application/json'}
         url = f"{self.base_url}/sites/{self.site_id}/prices?startDate={start_date}&endDate={end_date}&resolution={resolution}"
         response = requests.get(url, headers=header)
         data = response.json()
