@@ -370,8 +370,8 @@ class PeakValleyScheduler(BaseScheduler):
                      f"time: {current_time}, command: {command}")
         
         # Debugging
-        command = {'command': 'Charge',
-                    'power': 800, 'grid_charge': False}
+        # command = {'command': 'Charge',
+        #             'power': 800, 'grid_charge': False}
         return command
 
     def _get_power_limits(self, device_type):
