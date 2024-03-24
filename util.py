@@ -544,11 +544,12 @@ class PriceAndLoadMonitor:
         data = {}
 
         if peak_valley_command:
-            command = peak_valley_command.get('command', None)
-            data = _get_amber_command(command, peak_valley_command, sn)
+            cmd = peak_valley_command.copy()
+            command = cmd.get('command', None)
+            data = _get_amber_command(command, cmd, sn)
 
         if json:
-            data = json
+            data = json.copy()
 
         data = _convert_floats_to_ints(data)
 
