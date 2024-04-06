@@ -62,6 +62,7 @@ class BatteryScheduler:
         self.sn_locations = self.config.get('battery_locations', {})
         self.last_command_time = {}
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
+        self.executor = concurrent.futures.ThreadPoolExecutor()
 
     def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
         if scheduler_type == 'PeakValley':
@@ -135,9 +136,8 @@ class BatteryScheduler:
             current_prices[loc]['buy'], current_prices[loc]['feedin'] = self.get_current_price(location=loc)
             current_times[loc] = self.get_current_time(state=loc)
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [executor.submit(process_collect_location_info, loc) for loc in locations]
-            concurrent.futures.wait(futures)
+        futures = [self.executor.submit(process_collect_location_info, loc) for loc in locations]
+        concurrent.futures.wait(futures)
 
         def process_send_cmd_each_sn(sn):
             bat_stats = self.get_current_battery_stats(sn)
@@ -172,9 +172,8 @@ class BatteryScheduler:
                 self.last_schedule_peakvalley[sn] = command
                 logging.info(f"Successfully sent command for {sn}: {command}")
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [executor.submit(process_send_cmd_each_sn, sn) for sn in self.sn_list]
-            concurrent.futures.wait(futures) 
+        futures = [self.executor.submit(process_send_cmd_each_sn, sn) for sn in self.sn_list]
+        concurrent.futures.wait(futures)
 
     def start(self):
         self.is_running = True
@@ -193,6 +192,7 @@ class BatteryScheduler:
     def add_amber_device(self, sn):
         if sn not in self.sn_list:
             self.sn_list.append(sn)
+            self._process_peak_valley_scheduler() 
 
     def remove_amber_device(self, sn):
         if sn in self.sn_list:
