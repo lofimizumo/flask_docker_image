@@ -192,8 +192,6 @@ class BatteryScheduler:
     def add_amber_device(self, sn):
         if sn not in self.sn_list:
             self.sn_list.append(sn)
-            thread = Thread(target=self._process_peak_valley_scheduler)
-            thread.start()
 
     def remove_amber_device(self, sn):
         if sn in self.sn_list:
