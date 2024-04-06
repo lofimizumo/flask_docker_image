@@ -13,6 +13,7 @@ import tomli
 from threading import Thread
 import pickle
 from solar_prediction import WeatherInfoFetcher
+import concurrent.futures
 
 
 def load_config(file_path):
@@ -129,16 +130,19 @@ class BatteryScheduler:
         current_prices = {loc: {'buy': 0.0, 'feedin': 0.0} for loc in locations}
         current_times = {loc: '' for loc in locations}
 
-        for loc in locations:
+        def process_collect_location_info(loc):
             current_prices[loc]['buy'], current_prices[loc]['feedin'] = self.get_current_price(location=loc)
             current_times[loc] = self.get_current_time(state=loc)
 
-        for sn in self.sn_list:
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = [executor.submit(process_collect_location_info, loc) for loc in locations]
+            concurrent.futures.wait(futures)
+
+        def process_send_cmd_each_sn(sn):
             bat_stats = self.get_current_battery_stats(sn)
             current_usage = bat_stats.get('loadP', 0) if bat_stats else 0
             current_soc = bat_stats.get('soc', 0) / 100.0 if bat_stats else 0
             current_pv = bat_stats.get('ppv', 0) if bat_stats else 0
-
             device_type = self.sn_types.get(sn, '2505')
             device_location = self.sn_locations.get(sn, 'qld')
             algo_type = 'sell_to_grid' if device_location == 'qld' else 'cover_usage'
@@ -163,8 +167,11 @@ class BatteryScheduler:
                 self.send_battery_command(command=command, sn=sn)
                 self.last_command_time[sn] = c_datetime
                 self.last_schedule_peakvalley[sn] = command
+                logging.info(f"Successfully sent command for {sn}: {command}")
 
-            logging.info(f"--AmberModel {sn} Setting--\n")
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = [executor.submit(process_send_cmd_each_sn, sn) for sn in self.sn_list]
+            concurrent.futures.wait(futures) 
 
     def start(self):
         self.is_running = True
