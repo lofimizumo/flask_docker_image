@@ -35,8 +35,8 @@ RX2505ACA10J0A180003 = 'qld'
 RX2505ACA10J0A160016 = 'qld'
 011LOKL140104B = 'nsw'
 [apikey_varnames]
-apikey_varname_qld = 'API_AMBER_QLD'
-apikey_varname_nsw = 'API_AMBER_NSW'
+apikey_varname_qld = 'secrets:<API_AMBER_QLD>'
+apikey_varname_nsw = 'secrets:<API_AMBER_NSW>'
 [apiurls]
 apiurl_qld = 'https://api.amber.com.au/v1/sites/01HDN4PXKQ1MR29SWJPHBQE8M8/prices/current?next=0&previous=0&resolution=30'
 apiurl_nsw = 'https://api.amber.com.au/v1/sites/01HRDW17W9MVRM5PZCD5CNM0X6/prices/current?next=0&previous=0&resolution=30'
