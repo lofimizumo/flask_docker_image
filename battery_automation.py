@@ -175,7 +175,6 @@ class BatteryScheduler:
             futures = [executor.submit(process_send_cmd_each_sn, sn) for sn in self.sn_list]
             concurrent.futures.wait(futures)
 
-
     def start(self):
         self.is_running = True
         try:
