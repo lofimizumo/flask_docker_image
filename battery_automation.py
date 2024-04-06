@@ -166,7 +166,7 @@ class BatteryScheduler:
             last_command_time = self.last_command_time.get(sn, datetime.min)
 
             if command != last_command or (c_datetime - last_command_time) >= timedelta(minutes=5):
-                self.send_battery_command(command=command, sn=sn)
+                # self.send_battery_command(command=command, sn=sn)
                 self.last_command_time[sn] = c_datetime
                 self.last_schedule_peakvalley[sn] = command
                 logging.info(f"Successfully sent command for {sn}: {command}")
@@ -273,7 +273,7 @@ class PeakValleyScheduler(BaseScheduler):
         self.PeakEnd = config['PeakEnd']
 
         self.date = None
-        self.last_updated_time = None
+        self.last_updated_times = {}
         self.last_soc = None
 
         # Initial data containers and setup
@@ -364,8 +364,9 @@ class PeakValleyScheduler(BaseScheduler):
         # Update price history
         current_time = datetime.strptime(current_time, '%H:%M').time()
         price_history = self.price_historys[device_sn]
-        if self.last_updated_time is None or current_time.minute != self.last_updated_time.minute:
-            self.last_updated_time = current_time
+        last_updated_time = self.last_updated_times.get(device_sn, None)
+        if last_updated_time is None or current_time.minute != last_updated_time.minute:
+            self.last_updated_times[device_sn] = current_time
             price_history.append(current_buy_price)
             if len(price_history) > self.LookBackBars:
                 price_history.pop(0)
@@ -412,8 +413,9 @@ class PeakValleyScheduler(BaseScheduler):
         # Update price history
         current_time = datetime.strptime(current_time, '%H:%M').time()
         price_history = self.price_historys[device_sn]
-        if self.last_updated_time is None or current_time.minute != self.last_updated_time.minute:
-            self.last_updated_time = current_time
+        last_updated_time = self.last_updated_times.get(device_sn, None)
+        if last_updated_time is None or current_time.minute != last_updated_time.minute:
+            self.last_updated_times[device_sn] = current_time
             price_history.append(current_buy_price)
             if len(price_history) > self.LookBackBars:
                 price_history.pop(0)
