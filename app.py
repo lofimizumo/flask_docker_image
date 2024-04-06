@@ -31,7 +31,7 @@ def basic_scheduler():
         return jsonify(status='error', message='Scheduler already exists for this deviceSn'), 400
     if scheduler_amber is None:
         scheduler_amber = BatteryScheduler(
-            scheduler_type='PeakValley', battery_sn=sn, api_version='redx')
+            scheduler_type='PeakValley', api_version='redx')
         thread = Thread(target=scheduler_amber.start)
         thread.daemon = True  # This will make sure the thread exits when the main program exits
         thread.start()
