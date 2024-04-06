@@ -166,15 +166,15 @@ class BatteryScheduler:
             last_command_time = self.last_command_time.get(sn, datetime.min)
 
             if command != last_command or (c_datetime - last_command_time) >= timedelta(minutes=5):
-                # self.send_battery_command(command=command, sn=sn)
+                self.send_battery_command(command=command, sn=sn)
                 self.last_command_time[sn] = c_datetime
                 self.last_schedule_peakvalley[sn] = command
                 logging.info(f"Successfully sent command for {sn}: {command}")
 
-        threads = []
-        for sn in self.sn_list:
-            thread = Thread(target=process_send_cmd_each_sn, args=(sn,))
-            thread.start()
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = [executor.submit(process_send_cmd_each_sn, sn) for sn in self.sn_list]
+            concurrent.futures.wait(futures)
+
 
     def start(self):
         self.is_running = True
@@ -193,8 +193,6 @@ class BatteryScheduler:
     def add_amber_device(self, sn):
         if sn not in self.sn_list:
             self.sn_list.append(sn)
-            thread = Thread(target=self._process_peak_valley_scheduler)
-            thread.start()
 
     def remove_amber_device(self, sn):
         if sn in self.sn_list:
@@ -1270,8 +1268,7 @@ if __name__ == '__main__':
     #     phase=3)
 
     # For Amber Johnathan (QLD) 
-    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=[
-                                 'RX2505ACA10J0A180003', ], test_mode=False, api_version='redx')
+    scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['011LOKL140104B'], test_mode=False, api_version='redx')
     scheduler.start()
