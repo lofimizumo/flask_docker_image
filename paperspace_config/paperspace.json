@@ -9,5 +9,15 @@
     "ports": [
       5000
     ]
-  }
-  }
+  },
+  "env": [
+    {
+      "name": "API_AMBER_QLD",
+      "value": "secret:API_AMBER_QLD"
+    },
+    {
+      "name": "API_AMBER_NSW",
+      "value": "secret:API_AMBER_NSW"
+    }
+  ]
+}
