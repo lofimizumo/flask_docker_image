@@ -1269,7 +1269,7 @@ if __name__ == '__main__':
 
     # For Amber Johnathan (QLD) 
     scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=[
-                                 'RX2505ACA10J0A180003', '011LOKL140104B'], test_mode=False, api_version='redx')
+                                 'RX2505ACA10J0A180003', 'RX2505ACA10J0A160016', '011LOKL140058B','011LOKL140104B'], test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['011LOKL140104B'], test_mode=False, api_version='redx')
     scheduler.start()
