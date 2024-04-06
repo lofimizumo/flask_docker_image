@@ -5,6 +5,13 @@ from datetime import datetime, timedelta
 import pytz
 from itertools import cycle
 import logging
+import tomli
+import os
+
+def load_config(file_path='config.toml'):
+    with open(file_path, 'rb') as file:
+        config = tomli.load(file)
+    return config
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -105,6 +112,7 @@ def api_status_check(max_retries=10, delay=10):
 
 class PriceAndLoadMonitor:
     def __init__(self,  test_mode=False, api_version='dev3'):
+        self.config = load_config()
         self.sim_load_iter = self.get_sim_load_iter()
         self.sim_time_iter = self.get_sim_time_iter()
         self.api = None
@@ -121,17 +129,29 @@ class PriceAndLoadMonitor:
         self.test_mode = test_mode
         self.get_project_stats_call_count = 0
         self.get_meter_reading_stats_call_count = 0
+        self.amber_api_url_qld = self.config.get('apiurls', {}).get('apiurl_qld', None)
+        self.amber_api_url_nsw = self.config.get('apiurls', {}).get('apiurl_nsw', None)
+        self.amber_api_key_qld = os.getenv(self.config.get('apikey_varnames', {}).get('apikey_varname_qld', None))
+        self.amber_api_key_nsw = os.getenv(self.config.get('apikey_varnames', {}).get('apikey_varname_nsw', None))
 
-    def get_realtime_price(self):
-        url = 'https://api.amber.com.au/v1/sites/01HDN4PXKQ1MR29SWJPHBQE8M8/prices/current?next=0&previous=0&resolution=30'
+    def get_realtime_price(self, location='qld'):
+        if location == 'qld':
+            url = self.amber_api_url_qld
+            api_key = self.amber_api_key_qld
+        elif location == 'nsw':
+            url = self.amber_api_url_nsw
+            api_key = self.amber_api_key_nsw
         header = {'accept': 'application/json',
-                  'Authorization': 'Bearer psk_2d5030fe84a68769b6f48ab73bd48ebf'}
-        r = requests.get(url, headers=header)
+                  'Authorization': f'Bearer {api_key}'}
+        r = requests.get(url, headers=header, timeout=5)
         prices = [x['perKwh'] for x in r.json()]
-        return prices[0]
+        return (prices[0], -prices[1]) # prices[1] is the feed in price, so we return the negative value
 
-    def get_price_history(self):
-        api_key = 'psk_2d5030fe84a68769b6f48ab73bd48ebf'
+    def get_price_history(self, location='qld'):
+        if location == 'qld':
+            api_key = self.amber_api_key_qld
+        elif location == 'nsw':
+            api_key = self.amber_api_key_nsw
         fetcher = AmberFetcher(api_key)
         yesterday_date = (datetime.now(tz=pytz.timezone(
             'Australia/Sydney')) - timedelta(days=1)).strftime("%Y-%m-%d")

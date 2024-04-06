@@ -1,6 +1,7 @@
 import sched
 from datetime import datetime, timedelta
 from datetime import time as dtime
+from typing import Dict
 import time
 import numpy as np
 import copy
@@ -57,6 +58,7 @@ class BatteryScheduler:
         self.project_phase = phase
         self.project_mode = project_mode
         self.sn_types = self.config.get('battery_types', {})
+        self.sn_locations = self.config.get('battery_locations', {})
         self.last_command_time = {}
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
@@ -79,11 +81,6 @@ class BatteryScheduler:
     def _get_battery_command(self, **kwargs):
         if not self.scheduler:
             raise ValueError("Scheduler not set. Use set_scheduler() first.")
-
-        required_data = self.scheduler.required_data()
-        if not all(key in kwargs for key in required_data):
-            raise ValueError(
-                f"Data missing for {self.scheduler.__class__.__name__}. Required: {required_data}")
 
         return self.scheduler.step(**kwargs)
 
@@ -128,29 +125,44 @@ class BatteryScheduler:
         self.last_schedule_ai = copy.deepcopy(schedule)
 
     def _process_peak_valley_scheduler(self):
-        current_price = self.get_current_price()
-        current_time = self.get_current_time(time_zone='Australia/Brisbane')
-        c_time = datetime.strptime(current_time, '%H:%M')
+        locations = ['qld', 'nsw']
+        current_prices = {loc: {'buy': 0.0, 'feedin': 0.0} for loc in locations}
+        current_times = {loc: '' for loc in locations}
+
+        for loc in locations:
+            current_prices[loc]['buy'], current_prices[loc]['feedin'] = self.get_current_price(location=loc)
+            current_times[loc] = self.get_current_time(state=loc)
 
         for sn in self.sn_list:
             bat_stats = self.get_current_battery_stats(sn)
-            current_usage = bat_stats['loadP'] if bat_stats else 0
-            current_soc = bat_stats['soc'] / 100.0 if bat_stats else 0
-            current_pv = bat_stats['ppv'] if bat_stats else 0
+            current_usage = bat_stats.get('loadP', 0) if bat_stats else 0
+            current_soc = bat_stats.get('soc', 0) / 100.0 if bat_stats else 0
+            current_pv = bat_stats.get('ppv', 0) if bat_stats else 0
+
             device_type = self.sn_types.get(sn, '2505')
+            device_location = self.sn_locations.get(sn, 'qld')
+            algo_type = 'sell_to_grid' if device_location == 'qld' else 'cover_usage'
 
             command = self._get_battery_command(
-                current_price=current_price, current_usage=current_usage,
-                current_time=current_time, current_soc=current_soc, current_pv=current_pv, device_type=device_type)
+                current_buy_price=current_prices[device_location]['buy'],
+                current_feedin_price=current_prices[device_location]['feedin'],
+                current_usage=current_usage,
+                current_time=current_times[device_location],
+                current_soc=current_soc,
+                current_pv=current_pv,
+                device_type=device_type,
+                device_sn=sn,
+                algo_type=algo_type
+            )
 
             last_command = self.last_schedule_peakvalley.get(sn, {})
+            c_datetime = datetime.strptime(current_times[device_location], '%H:%M')
+            last_command_time = self.last_command_time.get(sn, datetime.min)
 
-            if command == last_command and (c_time - self.last_command_time.get(sn, datetime.min)) < timedelta(minutes=5):
-                continue
-
-            self.send_battery_command(command=command, sn=sn)
-            self.last_command_time[sn] = c_time
-            self.last_schedule_peakvalley[sn] = command
+            if command != last_command or (c_datetime - last_command_time) >= timedelta(minutes=5):
+                self.send_battery_command(command=command, sn=sn)
+                self.last_command_time[sn] = c_datetime
+                self.last_schedule_peakvalley[sn] = command
 
             logging.info(f"--AmberModel {sn} Setting--\n")
 
@@ -176,11 +188,15 @@ class BatteryScheduler:
         if sn in self.sn_list:
             self.sn_list.remove(sn)
 
-    def get_current_price(self):
-        return self.monitor.get_realtime_price()
+    def get_current_price(self, location = 'qld'):
+        return self.monitor.get_realtime_price(location=location)
 
-    def get_current_time(self, time_zone='Australia/Sydney') -> str:
-        return self.monitor.get_current_time(time_zone)
+    def get_current_time(self, state='qld') -> str:
+        state_timezone_map = {
+            'qld': 'Australia/Brisbane',
+            'nsw': 'Australia/Sydney'
+        }
+        return self.monitor.get_current_time(state_timezone_map[state])
 
     def get_project_status(self, project_id: int = 1, phase: int = 2) -> float:
         if len(self.last_five_metre_readings) >= 2:
@@ -249,9 +265,11 @@ class PeakValleyScheduler(BaseScheduler):
 
         self.date = None
         self.last_updated_time = None
+        self.last_soc = None
 
         # Initial data containers and setup
         self.price_history = None
+        self.charging_costs = {} 
         self.solar = None
 
         # Convert start and end times to datetime.time
@@ -278,6 +296,14 @@ class PeakValleyScheduler(BaseScheduler):
             np.linspace(0, 1, len(price_history)),
             price_history
         ).tolist()
+    
+    def init_device_charge_cost(self, device_sn):
+        self.charging_costs[device_sn] = {
+            'last_soc': 10,
+            'charging_costs': [],
+            'actual_charged_soc': [],
+            'weighted_charging_cost': 5
+        }
 
     def _get_solar(self, interval=0.5, test_mode=False, max_solar_power=5000):
         max_solar = max_solar_power
@@ -324,19 +350,19 @@ class PeakValleyScheduler(BaseScheduler):
         conf_level = 0.97 - 0.8824 * math.exp(-0.033 * current_price)
         return conf_level
 
-    def step(self, current_price, current_time, current_usage, current_soc, current_pv, device_type):
+    def algo_sell_to_grid(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type):
         # Update price history
         current_time = datetime.strptime(current_time, '%H:%M').time()
         if self.last_updated_time is None or current_time.minute != self.last_updated_time.minute:
             self.last_updated_time = current_time
-            self.price_history.append(current_price)
+            self.price_history.append(current_buy_price)
             if len(self.price_history) > self.LookBackBars:
                 self.price_history.pop(0)
 
         # Set current_price to the median of the last five minutes
         sample_points_per_minute = 60 / self.sample_interval
-        if current_price < self.PeakPrice:
-            current_price = np.mean(
+        if current_buy_price < self.PeakPrice:
+            current_buy_price = np.mean(
                 self.price_history[int(-5 * sample_points_per_minute):])
 
         # Buy and sell price based on historical data
@@ -347,7 +373,7 @@ class PeakValleyScheduler(BaseScheduler):
         command = {"command": "Idle"}
 
         # Charging logic
-        if self._is_charging_period(current_time) and ((current_price <= buy_price) or (current_pv > current_usage)):
+        if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pv > current_usage)):
             maxpower, minpower = self._get_power_limits(device_type)
             power, grid_charge = self._calculate_charging_power(
                 current_time, current_pv, current_usage, minpower, maxpower)
@@ -355,24 +381,88 @@ class PeakValleyScheduler(BaseScheduler):
                        'power': power, 'grid_charge': grid_charge}
 
         # Discharging logic
-        if self._is_discharging_period(current_time) and (current_price >= sell_price):
+        if self._is_discharging_period(current_time) and (current_buy_price >= sell_price):
             power = 5000 if device_type == "5000" else 2500
             anti_backflow_threshold = np.percentile(
                 self.price_history, self.PeakPct)
-            anti_backflow = current_price <= anti_backflow_threshold
+            anti_backflow = current_buy_price <= anti_backflow_threshold
             conf_level = self._discharge_confidence(
-                current_price - anti_backflow_threshold)
+                current_buy_price - anti_backflow_threshold)
             power = max(min(power * conf_level + 900, 2500), 1000)
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': anti_backflow}
 
-        logging.info(f"AmberModel: price: {current_price}, sell price: {sell_price}, peak_price: {peak_price}, usage: {current_usage}, "
+        logging.info(f"AmberModel: price: {current_buy_price}, sell price: {sell_price}, usage: {current_usage}, "
                      f"time: {current_time}, command: {command}")
-        
-        # Debugging
-        # command = {'command': 'Charge',
-        #             'power': 800, 'grid_charge': False}
+
         return command
+
+    def algo_cover_usage(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn):
+        # Update price history
+        current_time = datetime.strptime(current_time, '%H:%M').time()
+        if self.last_updated_time is None or current_time.minute != self.last_updated_time.minute:
+            self.last_updated_time = current_time
+            self.price_history.append(current_buy_price)
+            if len(self.price_history) > self.LookBackBars:
+                self.price_history.pop(0)
+
+        # Set current_price to the median of the last five minutes
+        sample_points_per_minute = 60 / self.sample_interval
+        if current_buy_price < self.PeakPrice:
+            current_buy_price = np.mean(
+                self.price_history[int(-5 * sample_points_per_minute):])
+
+        # Buy and sell price based on historical data
+        buy_price, sell_price = np.percentile(
+            self.price_history, [self.BuyPct, self.SellPct])
+        peak_price = self.PeakPrice
+
+        command = {"command": "Idle"}
+
+        # Charging logic
+        # Init the WeightedPrice (Charging Cost) for the device
+        if device_sn not in self.charging_costs:
+            self.init_device_charge_cost(device_sn)
+        if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pv > current_usage)):
+            maxpower, minpower = self._get_power_limits(device_type)
+            power, grid_charge = self._calculate_charging_power(
+                current_time, current_pv, current_usage, minpower, maxpower)
+            command = {'command': 'Charge',
+                       'power': power, 'grid_charge': grid_charge}
+            # Update the weighted charging costs
+            device_charge_cost = self.charging_costs.get(device_sn, None)
+            actual_charged = current_soc - device_charge_cost['last_soc']
+            device_charge_cost['last_soc'] = current_soc
+            max_length = 150  # Set the maximum length of the arrays
+            if len(device_charge_cost['charging_costs']) == max_length:
+                device_charge_cost['charging_costs'].pop(0)
+                device_charge_cost['actual_charged_soc'].pop(0)
+            device_charge_cost['charging_costs'].append(current_buy_price)
+            device_charge_cost['actual_charged_soc'].append(actual_charged)
+            device_charge_cost['weighted_charging_cost'] = np.dot(
+                device_charge_cost['charging_costs'], device_charge_cost['actual_charged_soc']) / (sum(device_charge_cost['actual_charged_soc'])+1e-6)
+
+        # Discharging logic
+        if self._is_discharging_period(current_time) and (current_buy_price >= sell_price):
+            power = 5000 if device_type == "5000" else 2500
+            device_charge_cost = self.charging_costs.get(device_sn, None)
+            if current_feedin_price < device_charge_cost['weighted_charging_cost']:
+                return command
+            command = {'command': 'Discharge', 'power': power,
+                       'anti_backflow': True}
+
+        logging.info(f"AmberModel: price: {current_buy_price}, sell price: {sell_price}, usage: {current_usage}, "
+                     f"time: {current_time}, command: {command}")
+
+        return command
+
+    def step(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn, algo_type='sell_to_grid'):
+        if algo_type == 'sell_to_grid':
+            return self.algo_sell_to_grid(
+                current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type)
+        else:
+            return self.algo_cover_usage(
+                current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn)
 
     def _get_power_limits(self, device_type):
         maxpower = 2500 if device_type == "5000" else 1500
@@ -1155,15 +1245,18 @@ if __name__ == '__main__':
     #     phase=2)
 
     # For Phase 3
-    scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler',
-        battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'],
-        test_mode=False,
-        api_version='redx',
-        pv_sn=['RX2505ACA10J0A170033','RX2505ACA10J0A170019'],
-        phase=3)
+    # scheduler = BatteryScheduler(
+    #     scheduler_type='AIScheduler',
+    #     battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002',
+    #                 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019', 'RX2505ACA10J0A150008'],
+    #     test_mode=False,
+    #     api_version='redx',
+    #     pv_sn=['RX2505ACA10J0A170033', 'RX2505ACA10J0A170019'],
+    #     phase=3)
 
-    # For Amber Model
-    # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=[
-    #                              'RX2505ACA10J0A180003', 'RX2505ACA10J0A160016', '011LOKL140058B'], test_mode=False, api_version='redx')
+    # For Amber Johnathan (QLD) 
+    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=[
+                                 'RX2505ACA10J0A180003', 'RX2505ACA10J0A160016', '011LOKL140058B'], test_mode=False, api_version='redx')
+    # For Amber Dion (NSW)
+    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['011LOKL140104B'], test_mode=False, api_version='redx')
     scheduler.start()
