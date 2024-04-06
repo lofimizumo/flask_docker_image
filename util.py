@@ -133,6 +133,8 @@ class PriceAndLoadMonitor:
         self.amber_api_url_nsw = self.config.get('apiurls', {}).get('apiurl_nsw', None)
         self.amber_api_key_qld = os.getenv(self.config.get('apikey_varnames', {}).get('apikey_varname_qld', None))
         self.amber_api_key_nsw = os.getenv(self.config.get('apikey_varnames', {}).get('apikey_varname_nsw', None))
+        logging.info(f"API URL QLD Loaded: {self.amber_api_url_qld}")
+        logging.info(f"API URL NSW Loaded: {self.amber_api_url_nsw}")
 
     def get_realtime_price(self, location='qld'):
         if location == 'qld':
