@@ -518,12 +518,12 @@ class PriceAndLoadMonitor:
                             timedelta(minutes=40)).strftime("%H:%M")
                 data = {
                     'deviceSn': sn,
-                    'controlCommand': command_map[command],
-                    'operatingMode': mode_map['Time'],
+                    # 'controlCommand': command_map[command],
+                    # 'operatingMode': mode_map['Time'],
                     'chargeStart1': start_time,
                     'chargeEnd1': end_time,
-                    'dischargeStart1': empty_time,
-                    'dischargeEnd1': empty_time,
+                    # 'dischargeStart1': empty_time,
+                    # 'dischargeEnd1': empty_time,
                     'chargePower1': peak_valley_command.get('power', 800),
                     'enableGridCharge1': grid_charge
                 }
@@ -535,12 +535,12 @@ class PriceAndLoadMonitor:
                             timedelta(minutes=40)).strftime("%H:%M")
                 data = {
                     'deviceSn': sn,
-                    'controlCommand': command_map[command],
-                    'operatingMode': mode_map['Time'],
+                    # 'controlCommand': command_map[command],
+                    # 'operatingMode': mode_map['Time'],
                     'dischargeStart1': start_time,
                     'dischargeEnd1': end_time,
-                    'chargeStart1': empty_time,
-                    'chargeEnd1': empty_time,
+                    # 'chargeStart1': empty_time,
+                    # 'chargeEnd1': empty_time,
                     'antiBackflowSW': anti_backflow_map[peak_valley_command.get('anti_backflow', True)],
                     'dischargePower1': peak_valley_command.get('power', 2500)
                 }
@@ -548,8 +548,8 @@ class PriceAndLoadMonitor:
             elif command == 'Idle':
                 data = {
                     'deviceSn': sn,
-                    'controlCommand': command_map[command],
-                    'operatingMode': mode_map['Time'],
+                    # 'controlCommand': command_map[command],
+                    # 'operatingMode': mode_map['Time'],
                     'dischargeStart1': empty_time,
                     'dischargeEnd1': empty_time,
                     'chargeStart1': empty_time,
@@ -624,7 +624,7 @@ class ApiCommunicator:
                 # Assuming JSON response. Modify as needed.
                 return response.json()
             except requests.RequestException as e:
-                logging.error(f"Error occurred: {e}. Retrying...")
+                logging.error(f"HTTP Error occurred sending {command}. Retrying...")
 
         raise ConnectionError(
             f"Failed to connect to {url} after {retries} attempts.")

@@ -140,6 +140,7 @@ class BatteryScheduler:
 
         def process_send_cmd_each_sn(sn):
             bat_stats = self.get_current_battery_stats(sn)
+            current_batP = bat_stats.get('batP', 0) if bat_stats else 0
             current_usage = bat_stats.get('loadP', 0) if bat_stats else 0
             current_soc = bat_stats.get('soc', 0) / 100.0 if bat_stats else 0
             current_pv = bat_stats.get('ppv', 0) if bat_stats else 0
@@ -156,6 +157,7 @@ class BatteryScheduler:
                 current_time=current_times[device_location],
                 current_soc=current_soc,
                 current_pv=current_pv,
+                current_batP=current_batP,
                 device_type=device_type,
                 device_sn=sn,
                 algo_type=algo_type
@@ -409,7 +411,7 @@ class PeakValleyScheduler(BaseScheduler):
 
         return command
 
-    def algo_cover_usage(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn):
+    def algo_cover_usage(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn):
         # Update price history
         current_time = datetime.strptime(current_time, '%H:%M').time()
         price_history = self.price_historys[device_sn]
@@ -445,11 +447,9 @@ class PeakValleyScheduler(BaseScheduler):
                        'power': power, 'grid_charge': grid_charge}
             # Update the weighted charging costs
             device_charge_cost = self.charging_costs.get(device_sn, None)
-            grid_charged = power/1000
-            if not grid_charge:
-                grid_charged = (current_usage - current_pv) if current_pv < current_usage else 0
-            device_charge_cost['last_soc'] = current_soc
-            max_length = 10  # Set the maximum length of the arrays
+            excess_energy = max(0, current_pv - current_usage)
+            grid_charged = max(0, current_batP - excess_energy)
+            max_length = 60  # Set the maximum length of the arrays (5 hours)
             if len(device_charge_cost['charging_costs']) == max_length:
                 device_charge_cost['charging_costs'].pop(0)
                 device_charge_cost['grid_charged'].pop(0)
@@ -475,13 +475,13 @@ class PeakValleyScheduler(BaseScheduler):
 
         return command
 
-    def step(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn, algo_type='sell_to_grid'):
+    def step(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn, algo_type='sell_to_grid'):
         if algo_type == 'sell_to_grid':
             return self.algo_sell_to_grid(
                 current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn)
         else:
             return self.algo_cover_usage(
-                current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn)
+                current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn)
 
     def _get_power_limits(self, device_type):
         maxpower = 2500 if device_type == "5000" else 1500
