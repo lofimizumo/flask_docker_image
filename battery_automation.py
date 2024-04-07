@@ -269,6 +269,8 @@ class PeakValleyScheduler(BaseScheduler):
         self.ChgEnd1 = config['ChgEnd1']
         self.DisChgStart2 = config['DisChgStart2']
         self.DisChgEnd2 = config['DisChgEnd2']
+        self.DisChgStartTest = config['DisChgStartTest']
+        self.DisChgEndTest = config['DisChgEndTest']
         self.DisChgStart1 = config['DisChgStart1']
         self.DisChgEnd1 = config['DisChgEnd1']
         self.PeakStart = config['PeakStart']
@@ -296,6 +298,10 @@ class PeakValleyScheduler(BaseScheduler):
             self.DisChgStart1, '%H:%M').time()
         self.t_dis_end1 = datetime.strptime(
             self.DisChgEnd1, '%H:%M').time()
+        self.t_dis_start_test = datetime.strptime(
+            self.DisChgStartTest, '%H:%M').time()
+        self.t_dis_end_test = datetime.strptime(
+            self.DisChgEndTest, '%H:%M').time()
         self.t_peak_start = datetime.strptime(
             self.PeakStart, '%H:%M').time()
         self.t_peak_end = datetime.strptime(
@@ -463,7 +469,8 @@ class PeakValleyScheduler(BaseScheduler):
         weighted_price = device_charge_cost['weighted_charging_cost'] if device_charge_cost else None
 
         # Discharging logic
-        if self._is_discharging_period(current_time) and (current_buy_price >= sell_price):
+        # Turn off the debug flag to use the actual discharging period
+        if self._is_discharging_period(current_time, debug=True) and (current_buy_price >= sell_price):
             power = 5000 if device_type == "5000" else 2500
             device_charge_cost = self.charging_costs.get(device_sn, None)
             if current_feedin_price < device_charge_cost['weighted_charging_cost']:
@@ -485,7 +492,7 @@ class PeakValleyScheduler(BaseScheduler):
                 current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn)
 
     def _get_power_limits(self, device_type):
-        maxpower = 2500 if device_type == "5000" else 1500
+        maxpower = 3000 if device_type == "5000" else 1500
         minpower = 1250 if device_type == "5000" else 700
         return maxpower, minpower
 
@@ -510,8 +517,10 @@ class PeakValleyScheduler(BaseScheduler):
     def _is_charging_period(self, t):
         return t >= self.t_chg_start1 and t <= self.t_chg_end1
 
-    def _is_discharging_period(self, t):
+    def _is_discharging_period(self, t, debug=False):
         # return True
+        if debug:
+            return t >= self.t_dis_start_test and t <= self.t_dis_end_test
         return (t >= self.t_dis_start2 and t <= self.t_dis_end2) or (t >= self.t_dis_start1 and t <= self.t_dis_end1)
 
     def _is_peak_period(self, t):
