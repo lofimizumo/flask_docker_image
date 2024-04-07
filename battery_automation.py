@@ -445,16 +445,21 @@ class PeakValleyScheduler(BaseScheduler):
                        'power': power, 'grid_charge': grid_charge}
             # Update the weighted charging costs
             device_charge_cost = self.charging_costs.get(device_sn, None)
-            actual_charged = current_soc - device_charge_cost['last_soc']
+            grid_charged = power/1000
+            if not grid_charge:
+                grid_charged = (current_usage - current_pv) if current_pv < current_usage else 0
             device_charge_cost['last_soc'] = current_soc
-            max_length = 150  # Set the maximum length of the arrays
+            max_length = 10  # Set the maximum length of the arrays
             if len(device_charge_cost['charging_costs']) == max_length:
                 device_charge_cost['charging_costs'].pop(0)
-                device_charge_cost['actual_charged_soc'].pop(0)
+                device_charge_cost['grid_charged'].pop(0)
             device_charge_cost['charging_costs'].append(current_buy_price)
-            device_charge_cost['actual_charged_soc'].append(actual_charged)
-            device_charge_cost['weighted_charging_cost'] = np.dot(
-                device_charge_cost['charging_costs'], device_charge_cost['actual_charged_soc']) / (sum(device_charge_cost['actual_charged_soc'])+1e-6)
+            device_charge_cost['grid_charged'].append(grid_charged)
+            device_charge_cost['total_charged'].append(current_usage)
+            device_charge_cost['weighted_charging_cost'] = np.multiply(np.array(device_charge_cost['charging_costs']), np.array(device_charge_cost['grid_charged'])).sum()/(np.array(device_charge_cost['total_charged']).sum()+1e-6)
+
+        device_charge_cost = self.charging_costs.get(device_sn, None)
+        weighted_price = device_charge_cost['weighted_charging_cost'] if device_charge_cost else None
 
         # Discharging logic
         if self._is_discharging_period(current_time) and (current_buy_price >= sell_price):
@@ -465,7 +470,7 @@ class PeakValleyScheduler(BaseScheduler):
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': True}
 
-        logging.info(f"AmberModel: price: {current_buy_price}, sell price: {sell_price}, usage: {current_usage}, "
+        logging.info(f"AmberModel: price: {current_buy_price}, WeightedPrice: {weighted_price}, usage: {current_usage}, "
                      f"time: {current_time}, command: {command}")
 
         return command
