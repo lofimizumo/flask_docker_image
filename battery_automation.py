@@ -306,7 +306,8 @@ class PeakValleyScheduler(BaseScheduler):
         self.charging_costs[device_sn] = {
             'last_soc': 10,
             'charging_costs': [],
-            'actual_charged_soc': [],
+            'grid_charged': [],
+            'total_charged': [],
             'weighted_charging_cost': 5
         }
     
@@ -1274,9 +1275,9 @@ if __name__ == '__main__':
     #     phase=3)
 
     # For Amber Johnathan (QLD) 
-    scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
+    # scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
-    # scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['011LOKL140104B'], test_mode=False, api_version='redx')
+    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['011LOKL140104B'], test_mode=False, api_version='redx')
     scheduler.start()
     time.sleep(3)
     scheduler.add_amber_device('011LOKL140058B')
