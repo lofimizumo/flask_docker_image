@@ -624,7 +624,7 @@ class ApiCommunicator:
                 # Assuming JSON response. Modify as needed.
                 return response.json()
             except requests.RequestException as e:
-                logging.error(f"HTTP Error occurred sending {command}. Retrying...")
+                logging.error(f"HTTP Error occurred sending {command}. data{data}, Retrying...")
 
         raise ConnectionError(
             f"Failed to connect to {url} after {retries} attempts.")
