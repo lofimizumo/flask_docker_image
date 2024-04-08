@@ -453,16 +453,17 @@ class PeakValleyScheduler(BaseScheduler):
             command = {'command': 'Charge',
                        'power': power, 'grid_charge': grid_charge}
             # Update the weighted charging costs
+            charge_power = -current_batP
             device_charge_cost = self.charging_costs.get(device_sn, None)
             excess_energy = max(0, current_pv - current_usage)
-            grid_charged = max(0, current_batP - excess_energy)
+            grid_charged = max(0, charge_power - excess_energy)
             max_length = 60  # Set the maximum length of the arrays (5 hours)
             if len(device_charge_cost['charging_costs']) == max_length:
                 device_charge_cost['charging_costs'].pop(0)
                 device_charge_cost['grid_charged'].pop(0)
             device_charge_cost['charging_costs'].append(current_buy_price)
             device_charge_cost['grid_charged'].append(grid_charged)
-            device_charge_cost['total_charged'].append(current_usage)
+            device_charge_cost['total_charged'].append(charge_power)
             device_charge_cost['weighted_charging_cost'] = np.multiply(np.array(device_charge_cost['charging_costs']), np.array(device_charge_cost['grid_charged'])).sum()/(np.array(device_charge_cost['total_charged']).sum()+1e-6)
 
         device_charge_cost = self.charging_costs.get(device_sn, None)
