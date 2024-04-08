@@ -499,7 +499,7 @@ class PeakValleyScheduler(BaseScheduler):
         return maxpower, minpower
 
     def _calculate_charging_power(self, current_time, current_pv, current_usage, minpower, maxpower, low_price=False):
-        power = minpower
+        power = 0
         grid_charge = True
         excess_solar = 1000 * (current_pv - current_usage)
 
