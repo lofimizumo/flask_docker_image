@@ -461,6 +461,7 @@ class PeakValleyScheduler(BaseScheduler):
             if len(device_charge_cost['charging_costs']) == max_length:
                 device_charge_cost['charging_costs'].pop(0)
                 device_charge_cost['grid_charged'].pop(0)
+                device_charge_cost['total_charged'].pop(0)
             device_charge_cost['charging_costs'].append(current_buy_price)
             device_charge_cost['grid_charged'].append(grid_charged)
             device_charge_cost['total_charged'].append(charge_power)
