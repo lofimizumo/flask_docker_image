@@ -409,7 +409,7 @@ class PeakValleyScheduler(BaseScheduler):
             anti_backflow = current_buy_price <= anti_backflow_threshold
             conf_level = self._discharge_confidence(
                 current_buy_price - anti_backflow_threshold)
-            power = max(min(power * conf_level + 900, 2500), 1000)
+            power = max(min(power * conf_level + 900, power), 1000)
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': anti_backflow}
 
