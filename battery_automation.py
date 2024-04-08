@@ -397,7 +397,7 @@ class PeakValleyScheduler(BaseScheduler):
         if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pv > current_usage)):
             maxpower, minpower = self._get_power_limits(device_type)
             power, grid_charge = self._calculate_charging_power(
-                current_time, current_pv, current_usage, minpower, maxpower)
+                current_time, current_pv, current_usage, minpower, maxpower, current_buy_price <= buy_price)
             command = {'command': 'Charge',
                        'power': power, 'grid_charge': grid_charge}
 
@@ -449,7 +449,7 @@ class PeakValleyScheduler(BaseScheduler):
         if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pv > current_usage)):
             maxpower, minpower = self._get_power_limits(device_type)
             power, grid_charge = self._calculate_charging_power(
-                current_time, current_pv, current_usage, minpower, maxpower)
+                current_time, current_pv, current_usage, minpower, maxpower, current_buy_price <= buy_price)
             command = {'command': 'Charge',
                        'power': power, 'grid_charge': grid_charge}
             # Update the weighted charging costs
@@ -498,7 +498,7 @@ class PeakValleyScheduler(BaseScheduler):
         minpower = 1250 if device_type == "5000" else 700
         return maxpower, minpower
 
-    def _calculate_charging_power(self, current_time, current_pv, current_usage, minpower, maxpower):
+    def _calculate_charging_power(self, current_time, current_pv, current_usage, minpower, maxpower, low_price=False):
         power = minpower
         grid_charge = True
         excess_solar = 1000 * (current_pv - current_usage)
