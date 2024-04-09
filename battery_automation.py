@@ -30,7 +30,8 @@ logging.basicConfig(level=logging.INFO,
 class BatteryScheduler:
 
     def __init__(self, scheduler_type='PeakValley',
-                 battery_sn=['011LOKL140058B','011LOKL140104B','RX2505ACA10J0A180003','RX2505ACA10J0A160016'],
+                 battery_sn=['011LOKL140058B', '011LOKL140104B',
+                             'RX2505ACA10J0A180003', 'RX2505ACA10J0A160016'],
                  test_mode=False,
                  api_version='dev3',
                  pv_sn=None,
@@ -65,9 +66,9 @@ class BatteryScheduler:
 
     def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
         if scheduler_type == 'PeakValley':
-            self.scheduler = PeakValleyScheduler()
+            self.scheduler = PeakValleyScheduler(monitor=self.monitor)
             for sn in self.sn_list:
-                self.scheduler.init_price_history(sn, self.monitor.get_price_history())
+                self.scheduler.init_price_history(sn)
             self.sample_interval = self.config.get(
                 'peakvalley', {}).get('SampleInterval', 120)
         elif scheduler_type == 'AIScheduler':
@@ -128,11 +129,13 @@ class BatteryScheduler:
 
     def _process_peak_valley_scheduler(self):
         locations = ['qld', 'nsw']
-        current_prices = {loc: {'buy': 0.0, 'feedin': 0.0} for loc in locations}
+        current_prices = {loc: {'buy': 0.0, 'feedin': 0.0}
+                          for loc in locations}
         current_times = {loc: '' for loc in locations}
 
         def process_collect_location_info(loc):
-            current_prices[loc]['buy'], current_prices[loc]['feedin'] = self.get_current_price(location=loc)
+            current_prices[loc]['buy'], current_prices[loc]['feedin'] = self.get_current_price(
+                location=loc)
             current_times[loc] = self.get_current_time(state=loc)
 
         for loc in locations:
@@ -164,7 +167,8 @@ class BatteryScheduler:
             )
 
             last_command = self.last_schedule_peakvalley.get(sn, {})
-            c_datetime = datetime.strptime(current_times[device_location], '%H:%M')
+            c_datetime = datetime.strptime(
+                current_times[device_location], '%H:%M')
             last_command_time = self.last_command_time.get(sn, datetime.min)
 
             if command != last_command or (c_datetime - last_command_time) >= timedelta(minutes=5):
@@ -174,18 +178,22 @@ class BatteryScheduler:
                 logging.info(f"Successfully sent command for {sn}: {command}")
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [executor.submit(process_send_cmd_each_sn, sn) for sn in self.sn_list]
+            futures = [executor.submit(process_send_cmd_each_sn, sn)
+                       for sn in self.sn_list]
             concurrent.futures.wait(futures)
 
     def start(self):
         self.is_running = True
         try:
-            self._start()
-            self.s.run()
-        except KeyboardInterrupt:
-            logging.info("Stopped.")
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(self._run_scheduler)
+            logging.info(f"Scheduler started.")
         except Exception as e:
-            logging.error(f"Error in start: {e}")
+            logging.error(f"Error starting scheduler: {e}")
+
+    def _run_scheduler(self):
+        self._start()
+        self.s.run()
 
     def stop(self):
         self.is_runing = False
@@ -194,12 +202,14 @@ class BatteryScheduler:
     def add_amber_device(self, sn):
         if sn not in self.sn_list:
             self.sn_list.append(sn)
+            logging.info(f"Added device {sn} to the scheduler.")
 
     def remove_amber_device(self, sn):
         if sn in self.sn_list:
             self.sn_list.remove(sn)
+            logging.info(f"Removed device {sn} from the scheduler.")
 
-    def get_current_price(self, location = 'qld'):
+    def get_current_price(self, location='qld'):
         return self.monitor.get_realtime_price(location=location)
 
     def get_current_time(self, state='qld') -> str:
@@ -245,36 +255,37 @@ class BaseScheduler:
 
 
 class PeakValleyScheduler(BaseScheduler):
-    def __init__(self, config_path='config.toml'):
-        config = load_config(config_path)['peakvalley']
-        self.BatNum = config['BatNum']
-        self.BatMaxCapacity = config['BatMaxCapacity']
+    def __init__(self, config_path='config.toml', monitor=None):
+        self.config = load_config(config_path)['peakvalley']
+        self.monitor = monitor
+        self.BatNum = self.config['BatNum']
+        self.BatMaxCapacity = self.config['BatMaxCapacity']
         self.BatCap = self.BatNum * self.BatMaxCapacity
-        self.BatChgMax = self.BatNum * config['BatChgMaxMultiplier']
-        self.BatDisMax = self.BatNum * config['BatDisMaxMultiplier']
-        self.HrMin = config['HrMin']
-        self.SellDiscount = config['SellDiscount']
-        self.SpikeLevel = config['SpikeLevel']
-        self.SolarCharge = config['SolarCharge']
-        self.SellBack = config['SellBack']
-        self.BuyPct = config['BuyPct']
-        self.SellPct = config['SellPct']
-        self.PeakPct = config['PeakPct']
-        self.PeakPrice = config['PeakPrice']
-        self.LookBackDays = config['LookBackDays']
-        self.sample_interval = config['SampleInterval']
+        self.BatChgMax = self.BatNum * self.config['BatChgMaxMultiplier']
+        self.BatDisMax = self.BatNum * self.config['BatDisMaxMultiplier']
+        self.HrMin = self.config['HrMin']
+        self.SellDiscount = self.config['SellDiscount']
+        self.SpikeLevel = self.config['SpikeLevel']
+        self.SolarCharge = self.config['SolarCharge']
+        self.SellBack = self.config['SellBack']
+        self.BuyPct = self.config['BuyPct']
+        self.SellPct = self.config['SellPct']
+        self.PeakPct = self.config['PeakPct']
+        self.PeakPrice = self.config['PeakPrice']
+        self.LookBackDays = self.config['LookBackDays']
+        self.sample_interval = self.config['SampleInterval']
         self.LookBackBars = 24 * 60 / \
             (self.sample_interval / 60) * self.LookBackDays
-        self.ChgStart1 = config['ChgStart1']
-        self.ChgEnd1 = config['ChgEnd1']
-        self.DisChgStart2 = config['DisChgStart2']
-        self.DisChgEnd2 = config['DisChgEnd2']
-        self.DisChgStartTest = config['DisChgStartTest']
-        self.DisChgEndTest = config['DisChgEndTest']
-        self.DisChgStart1 = config['DisChgStart1']
-        self.DisChgEnd1 = config['DisChgEnd1']
-        self.PeakStart = config['PeakStart']
-        self.PeakEnd = config['PeakEnd']
+        self.ChgStart1 = self.config['ChgStart1']
+        self.ChgEnd1 = self.config['ChgEnd1']
+        self.DisChgStart2 = self.config['DisChgStart2']
+        self.DisChgEnd2 = self.config['DisChgEnd2']
+        self.DisChgStartTest = self.config['DisChgStartTest']
+        self.DisChgEndTest = self.config['DisChgEndTest']
+        self.DisChgStart1 = self.config['DisChgStart1']
+        self.DisChgEnd1 = self.config['DisChgEnd1']
+        self.PeakStart = self.config['PeakStart']
+        self.PeakEnd = self.config['PeakEnd']
 
         self.date = None
         self.last_updated_times = {}
@@ -282,7 +293,7 @@ class PeakValleyScheduler(BaseScheduler):
 
         # Initial data containers and setup
         self.price_historys = {}
-        self.charging_costs = {} 
+        self.charging_costs = {}
         self.solar = None
 
         # Convert start and end times to datetime.time
@@ -307,7 +318,6 @@ class PeakValleyScheduler(BaseScheduler):
         self.t_peak_end = datetime.strptime(
             self.PeakEnd, '%H:%M').time()
 
-    
     def init_device_charge_cost(self, device_sn):
         self.charging_costs[device_sn] = {
             'last_soc': 10,
@@ -316,8 +326,10 @@ class PeakValleyScheduler(BaseScheduler):
             'total_charged': [],
             'weighted_charging_cost': 5
         }
-    
-    def init_price_history(self, sn, price_history):
+
+    def init_price_history(self, sn):
+        price_history = self.monitor.get_price_history(
+            location=self.config.get('battery_locations', {}).get(sn, 'qld'))
         self.price_historys[sn] = np.interp(
             np.linspace(0, 1, int(self.LookBackBars)),
             np.linspace(0, 1, len(price_history)),
@@ -372,7 +384,10 @@ class PeakValleyScheduler(BaseScheduler):
     def algo_sell_to_grid(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn):
         # Update price history
         current_time = datetime.strptime(current_time, '%H:%M').time()
-        price_history = self.price_historys[device_sn]
+        price_history = self.price_historys.get(device_sn, None)
+        if price_history is None:
+            self.init_price_history(device_sn)
+            price_history = self.price_historys[device_sn]
         last_updated_time = self.last_updated_times.get(device_sn, None)
         if last_updated_time is None or current_time.minute != last_updated_time.minute:
             self.last_updated_times[device_sn] = current_time
@@ -422,6 +437,9 @@ class PeakValleyScheduler(BaseScheduler):
         # Update price history
         current_time = datetime.strptime(current_time, '%H:%M').time()
         price_history = self.price_historys[device_sn]
+        if price_history is None:
+            self.init_price_history(device_sn)
+            price_history = self.price_historys[device_sn]
         last_updated_time = self.last_updated_times.get(device_sn, None)
         if last_updated_time is None or current_time.minute != last_updated_time.minute:
             self.last_updated_times[device_sn] = current_time
@@ -465,7 +483,8 @@ class PeakValleyScheduler(BaseScheduler):
             device_charge_cost['charging_costs'].append(current_buy_price)
             device_charge_cost['grid_charged'].append(grid_charged)
             device_charge_cost['total_charged'].append(charge_power)
-            device_charge_cost['weighted_charging_cost'] = np.multiply(np.array(device_charge_cost['charging_costs']), np.array(device_charge_cost['grid_charged'])).sum()/(np.array(device_charge_cost['total_charged']).sum()+1e-6)
+            device_charge_cost['weighted_charging_cost'] = np.multiply(np.array(device_charge_cost['charging_costs']), np.array(
+                device_charge_cost['grid_charged'])).sum()/(np.array(device_charge_cost['total_charged']).sum()+1e-6)
 
         device_charge_cost = self.charging_costs.get(device_sn, None)
         weighted_price = device_charge_cost['weighted_charging_cost'] if device_charge_cost else None
@@ -507,11 +526,11 @@ class PeakValleyScheduler(BaseScheduler):
             power = maxpower
             grid_charge = False
             return power, grid_charge
-        
+
         if low_price:
             power = minpower
             grid_charge = True
-            return power, grid_charge 
+            return power, grid_charge
 
         if current_time <= time(9, 0) and current_time >= time(6, 0):
             power = maxpower
@@ -1288,12 +1307,18 @@ if __name__ == '__main__':
     #     pv_sn=['RX2505ACA10J0A170033', 'RX2505ACA10J0A170019'],
     #     phase=3)
 
-    # For Amber Johnathan (QLD) 
+    # For Amber Johnathan (QLD)
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
-    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=['011LOKL140104B'], test_mode=False, api_version='redx')
+    scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=[
+                                 '011LOKL140058B'], test_mode=False, api_version='redx')
     scheduler.start()
-    time.sleep(3)
-    scheduler.add_amber_device('011LOKL140058B')
-    time.sleep(3)
-    scheduler.add_amber_device('RX2505ACA10J0A160016')
+    time.sleep(300)
+    # print('Scheduler started')
+    # time.sleep(3)
+    # scheduler.add_amber_device('011LOKL140058B')
+    # time.sleep(3)
+    # scheduler.add_amber_device('RX2505ACA10J0A160016')
+    # time.sleep(3)
+    # scheduler.remove_amber_device('011LOKL140058B')
+    # time.sleep(300)
