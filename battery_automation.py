@@ -256,36 +256,37 @@ class BaseScheduler:
 
 class PeakValleyScheduler(BaseScheduler):
     def __init__(self, config_path='config.toml', monitor=None):
-        self.config = load_config(config_path)['peakvalley']
+        peak_valley_config = load_config(config_path)['peakvalley']
+        self.config = load_config(config_path)
         self.monitor = monitor
-        self.BatNum = self.config['BatNum']
-        self.BatMaxCapacity = self.config['BatMaxCapacity']
+        self.BatNum = peak_valley_config['BatNum']
+        self.BatMaxCapacity = peak_valley_config['BatMaxCapacity']
         self.BatCap = self.BatNum * self.BatMaxCapacity
-        self.BatChgMax = self.BatNum * self.config['BatChgMaxMultiplier']
-        self.BatDisMax = self.BatNum * self.config['BatDisMaxMultiplier']
-        self.HrMin = self.config['HrMin']
-        self.SellDiscount = self.config['SellDiscount']
-        self.SpikeLevel = self.config['SpikeLevel']
-        self.SolarCharge = self.config['SolarCharge']
-        self.SellBack = self.config['SellBack']
-        self.BuyPct = self.config['BuyPct']
-        self.SellPct = self.config['SellPct']
-        self.PeakPct = self.config['PeakPct']
-        self.PeakPrice = self.config['PeakPrice']
-        self.LookBackDays = self.config['LookBackDays']
-        self.sample_interval = self.config['SampleInterval']
+        self.BatChgMax = self.BatNum * peak_valley_config['BatChgMaxMultiplier']
+        self.BatDisMax = self.BatNum * peak_valley_config['BatDisMaxMultiplier']
+        self.HrMin = peak_valley_config['HrMin']
+        self.SellDiscount = peak_valley_config['SellDiscount']
+        self.SpikeLevel = peak_valley_config['SpikeLevel']
+        self.SolarCharge = peak_valley_config['SolarCharge']
+        self.SellBack = peak_valley_config['SellBack']
+        self.BuyPct = peak_valley_config['BuyPct']
+        self.SellPct = peak_valley_config['SellPct']
+        self.PeakPct = peak_valley_config['PeakPct']
+        self.PeakPrice = peak_valley_config['PeakPrice']
+        self.LookBackDays = peak_valley_config['LookBackDays']
+        self.sample_interval = peak_valley_config['SampleInterval']
         self.LookBackBars = 24 * 60 / \
             (self.sample_interval / 60) * self.LookBackDays
-        self.ChgStart1 = self.config['ChgStart1']
-        self.ChgEnd1 = self.config['ChgEnd1']
-        self.DisChgStart2 = self.config['DisChgStart2']
-        self.DisChgEnd2 = self.config['DisChgEnd2']
-        self.DisChgStartTest = self.config['DisChgStartTest']
-        self.DisChgEndTest = self.config['DisChgEndTest']
-        self.DisChgStart1 = self.config['DisChgStart1']
-        self.DisChgEnd1 = self.config['DisChgEnd1']
-        self.PeakStart = self.config['PeakStart']
-        self.PeakEnd = self.config['PeakEnd']
+        self.ChgStart1 = peak_valley_config['ChgStart1']
+        self.ChgEnd1 = peak_valley_config['ChgEnd1']
+        self.DisChgStart2 = peak_valley_config['DisChgStart2']
+        self.DisChgEnd2 = peak_valley_config['DisChgEnd2']
+        self.DisChgStartTest = peak_valley_config['DisChgStartTest']
+        self.DisChgEndTest = peak_valley_config['DisChgEndTest']
+        self.DisChgStart1 = peak_valley_config['DisChgStart1']
+        self.DisChgEnd1 = peak_valley_config['DisChgEnd1']
+        self.PeakStart = peak_valley_config['PeakStart']
+        self.PeakEnd = peak_valley_config['PeakEnd']
 
         self.date = None
         self.last_updated_times = {}
@@ -1311,7 +1312,7 @@ if __name__ == '__main__':
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
     scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=[
-                                 '011LOKL140058B'], test_mode=False, api_version='redx')
+                                 '011LOKL140104B'], test_mode=False, api_version='redx')
     scheduler.start()
     time.sleep(300)
     # print('Scheduler started')
