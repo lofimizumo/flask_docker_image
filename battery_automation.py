@@ -14,6 +14,7 @@ from threading import Thread
 import pickle
 from solar_prediction import WeatherInfoFetcher
 import concurrent.futures
+import traceback
 
 
 def load_config(file_path):
@@ -30,8 +31,9 @@ logging.basicConfig(level=logging.INFO,
 class BatteryScheduler:
 
     def __init__(self, scheduler_type='PeakValley',
-                 battery_sn=['011LOKL140058B', '011LOKL140104B',
-                             'RX2505ACA10J0A180003', 'RX2505ACA10J0A160016'],
+                 battery_sn=['011LOKL140058B',
+                             'RX2505ACA10J0A180003', 
+                             'RX2505ACA10J0A160016'],
                  test_mode=False,
                  api_version='dev3',
                  pv_sn=None,
@@ -99,6 +101,7 @@ class BatteryScheduler:
             self.event = self.s.enter(self.sample_interval, 1, self._start)
         except Exception as e:
             logging.error(f"Scheduling error: {e}")
+            logging.error(f"Traceback: {traceback.format_exc()}")
             self.event = self.s.enter(self.sample_interval, 1, self._start)
 
     def _process_ai_scheduler(self):

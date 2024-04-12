@@ -8,10 +8,12 @@ import logging
 import tomli
 import os
 
+
 def load_config(file_path='config.toml'):
     with open(file_path, 'rb') as file:
         config = tomli.load(file)
     return config
+
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -129,10 +131,14 @@ class PriceAndLoadMonitor:
         self.test_mode = test_mode
         self.get_project_stats_call_count = 0
         self.get_meter_reading_stats_call_count = 0
-        self.amber_api_url_qld = self.config.get('apiurls', {}).get('apiurl_qld', None)
-        self.amber_api_url_nsw = self.config.get('apiurls', {}).get('apiurl_nsw', None)
-        self.amber_api_key_qld = os.getenv(self.config.get('apikey_varnames', {}).get('apikey_varname_qld', None))
-        self.amber_api_key_nsw = os.getenv(self.config.get('apikey_varnames', {}).get('apikey_varname_nsw', None))
+        self.amber_api_url_qld = self.config.get(
+            'apiurls', {}).get('apiurl_qld', None)
+        self.amber_api_url_nsw = self.config.get(
+            'apiurls', {}).get('apiurl_nsw', None)
+        self.amber_api_key_qld = os.getenv(self.config.get(
+            'apikey_varnames', {}).get('apikey_varname_qld', None))
+        self.amber_api_key_nsw = os.getenv(self.config.get(
+            'apikey_varnames', {}).get('apikey_varname_nsw', None))
         logging.info(f"API KEY QLD: {self.amber_api_key_qld}")
         logging.info(f"API KEY NSW: {self.amber_api_key_nsw}")
 
@@ -147,7 +153,8 @@ class PriceAndLoadMonitor:
                   'Authorization': f'Bearer {api_key}'}
         r = requests.get(url, headers=header, timeout=5)
         prices = [x['perKwh'] for x in r.json()]
-        return (prices[0], -prices[1]) # prices[1] is the feed in price, so we return the negative value
+        # prices[1] is the feed in price, so we return the negative value
+        return (prices[0], -prices[1])
 
     def get_price_history(self, location='qld'):
         if location == 'qld':
@@ -509,6 +516,8 @@ class PriceAndLoadMonitor:
             current_time = datetime.strptime(current_time_str, '%H:%M')
             empty_time = '00:00'
 
+
+            # Prepare the data for the command to be sent
             if command == 'Charge':
                 grid_charge = peak_valley_command.get('grid_charge', False)
                 grid_charge = grid_charge_map[grid_charge]
@@ -556,6 +565,18 @@ class PriceAndLoadMonitor:
                     'chargeEnd1': empty_time,
                 }
 
+            # Sometimes the device will lost all the settings, so we need to set the settings every 30 minutes in case of the settings lost
+            if not hasattr(self, 'last_command_time'):
+                self.last_command_time = None
+
+            if self.last_command_time is None or (current_time - self.last_command_time).total_seconds() >= 1800:
+                data['controlCommand'] = command_map['Idle']
+                data['operatingMode'] = mode_map['Time']
+                data['antiBackflowSW'] = anti_backflow_map[True] 
+                data['globalMaxSOC'] = "100"
+                data['globalMinSOC'] = "10"
+                self.last_command_time = current_time
+
             return data
 
         # Check if the device is on VPP mode
@@ -587,7 +608,8 @@ class PriceAndLoadMonitor:
             response = self.api.send_request(
                 "device/set_params", method='POST', json=data, headers=headers)
         except Exception as e:
-            logging.error(f"An unexpected error occurred at sending command: {e}")
+            logging.error(
+                f"An unexpected error occurred at sending command: {e}")
             response = None
 
         return response
@@ -624,7 +646,8 @@ class ApiCommunicator:
                 # Assuming JSON response. Modify as needed.
                 return response.json()
             except requests.RequestException as e:
-                logging.error(f"HTTP Error occurred sending {command}. JSON:{json}, Retrying...")
+                logging.error(
+                    f"HTTP Error occurred sending {command}. JSON:{json}, Retrying...")
 
         raise ConnectionError(
             f"Failed to connect to {url} after {retries} attempts.")
