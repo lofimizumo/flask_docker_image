@@ -471,7 +471,7 @@ class PriceAndLoadMonitor:
             response = None
         return response
 
-    @api_status_check(max_retries=3, delay=60)
+    @api_status_check(max_retries=2, delay=60)
     def send_battery_command(self, peak_valley_command=None, json=None, sn=None):
         if self.test_mode:
             return
@@ -565,17 +565,17 @@ class PriceAndLoadMonitor:
                     'chargeEnd1': empty_time,
                 }
 
-            # Sometimes the device will lost all the settings, so we need to set the settings every 30 minutes in case of the settings lost
+            # Sometimes the device will lose all the settings, so we need to set the settings every 30 minutes in case of the settings lost
             if not hasattr(self, 'last_command_time'):
-                self.last_command_time = None
+                self.last_command_time = {}
 
-            if self.last_command_time is None or (current_time - self.last_command_time).total_seconds() >= 1800:
+            if sn not in self.last_command_time or self.last_command_time[sn] is None or (current_time - self.last_command_time[sn]).total_seconds() >= 1800:
                 data['controlCommand'] = command_map['Idle']
                 data['operatingMode'] = mode_map['Time']
-                data['antiBackflowSW'] = anti_backflow_map[True] 
+                data['antiBackflowSW'] = anti_backflow_map[True]
                 data['globalMaxSOC'] = "100"
                 data['globalMinSOC'] = "10"
-                self.last_command_time = current_time
+                self.last_command_time[sn] = current_time
 
             return data
 
@@ -620,7 +620,7 @@ class ApiCommunicator:
         self.base_url = base_url
         self.session = requests.Session()
 
-    def send_request(self, command, method="GET", data=None, json=None, headers=None, retries=3):
+    def send_request(self, command, method="GET", data=None, json=None, headers=None, retries=2):
         """
         Send a request to the API.
 
