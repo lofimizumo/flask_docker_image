@@ -142,7 +142,22 @@ class PriceAndLoadMonitor:
         logging.info(f"API KEY QLD: {self.amber_api_key_qld}")
         logging.info(f"API KEY NSW: {self.amber_api_key_nsw}")
 
-    def get_realtime_price(self, location='qld'):
+    def get_realtime_price(self, location = 'qld', retailer = 'amber'):
+        if retailer == 'amber':
+            return self._get_amber_price(location)
+        elif retailer == 'lv':
+            return self._get_lv_price(location)
+    
+    def _get_lv_price(self, location = 'qld'):
+        # TODO: replace the API key with the device's API key and partner ID
+        url = "https://api.localvolts.com/v1/customer/interval?NMI=*"
+        header = {'Authorization': 'apikey 21b831bc02410319571a27250d49b4c4', 'partner': '25370'}
+        r = requests.get(url, headers=header, timeout=5)
+        prices = [(x['costsAllVarRate'], x['earningsAllVarRate']) for x in r.json()]
+        cast_prices = [float(x) for x in prices[0]]
+        return cast_prices
+    
+    def _get_amber_price(self, location='qld'):
         if location == 'qld':
             url = self.amber_api_url_qld
             api_key = self.amber_api_key_qld

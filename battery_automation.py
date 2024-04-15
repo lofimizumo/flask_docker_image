@@ -32,8 +32,10 @@ class BatteryScheduler:
 
     def __init__(self, scheduler_type='PeakValley',
                  battery_sn=['011LOKL140058B',
-                             'RX2505ACA10J0A180003', 
-                             'RX2505ACA10J0A160016'],
+                             'RX2505ACA10J0A180003',
+                             'RX2505ACA10J0A160016',
+                             'RX2505ACA10JOA160037',
+                             'RX2505ACA10J0A160010'],
                  test_mode=False,
                  api_version='dev3',
                  pv_sn=None,
@@ -63,6 +65,7 @@ class BatteryScheduler:
         self.project_mode = project_mode
         self.sn_types = self.config.get('battery_types', {})
         self.sn_locations = self.config.get('battery_locations', {})
+        self.sn_retailers = self.config.get('battery_retailers', {})
         self.last_command_time = {}
         self._set_scheduler(scheduler_type, api_version, pv_sn=pv_sn)
 
@@ -131,18 +134,24 @@ class BatteryScheduler:
         self.last_schedule_ai = copy.deepcopy(schedule)
 
     def _process_peak_valley_scheduler(self):
-        locations = ['qld', 'nsw']
-        current_prices = {loc: {'buy': 0.0, 'feedin': 0.0}
-                          for loc in locations}
-        current_times = {loc: '' for loc in locations}
+        current_prices = {sn: {'buy': 0.0, 'feedin': 0.0}
+                          for sn in self.sn_list}
+        current_times = {sn: '' for sn in self.sn_list}
 
-        def process_collect_location_info(loc):
-            current_prices[loc]['buy'], current_prices[loc]['feedin'] = self.get_current_price(
-                location=loc)
-            current_times[loc] = self.get_current_time(state=loc)
+        def process_collect_info_per_sn(retailer='amber', location='qld', sn=None):
+            if retailer == 'amber':
+                current_prices[sn]['buy'], current_prices[sn]['feedin'] = self.get_current_price(
+                    location=location, retailer='amber')
+            elif retailer == 'lv':
+                current_prices[sn]['buy'], current_prices[sn]['feedin'] = self.get_current_price(
+                    location=location, retailer='lv')
+            current_times[sn] = self.get_current_time(state=location)
 
-        for loc in locations:
-            process_collect_location_info(loc)
+        for sn in self.sn_list:
+            retailer = self.sn_retailers.get(sn, 'amber')
+            location = self.sn_locations.get(sn, 'qld')
+            process_collect_info_per_sn(
+                retailer=retailer, location=location, sn=sn)
 
         def process_send_cmd_each_sn(sn):
             bat_stats = self.get_current_battery_stats(sn)
@@ -152,15 +161,15 @@ class BatteryScheduler:
             current_pv = bat_stats.get('ppv', 0) if bat_stats else 0
             device_type = self.sn_types.get(sn, '2505')
             device_location = self.sn_locations.get(sn, 'qld')
-            buy_price = current_prices[device_location]['buy']
-            feedin_price = current_prices[device_location]['feedin']
+            buy_price = current_prices[sn]['buy']
+            feedin_price = current_prices[sn]['feedin']
             algo_type = 'sell_to_grid' if device_location == 'qld' else 'cover_usage'
 
             command = self._get_battery_command(
                 current_buy_price=buy_price,
                 current_feedin_price=feedin_price,
                 current_usage=current_usage,
-                current_time=current_times[device_location],
+                current_time=current_times[sn],
                 current_soc=current_soc,
                 current_pv=current_pv,
                 current_batP=current_batP,
@@ -171,7 +180,7 @@ class BatteryScheduler:
 
             last_command = self.last_schedule_peakvalley.get(sn, {})
             c_datetime = datetime.strptime(
-                current_times[device_location], '%H:%M')
+                current_times[sn], '%H:%M')
             last_command_time = self.last_command_time.get(sn, datetime.min)
 
             if command != last_command or (c_datetime - last_command_time) >= timedelta(minutes=5):
@@ -212,8 +221,8 @@ class BatteryScheduler:
             self.sn_list.remove(sn)
             logging.info(f"Removed device {sn} from the scheduler.")
 
-    def get_current_price(self, location='qld'):
-        return self.monitor.get_realtime_price(location=location)
+    def get_current_price(self, location='qld', retailer='amber'):
+        return self.monitor.get_realtime_price(location=location, retailer=retailer)
 
     def get_current_time(self, state='qld') -> str:
         state_timezone_map = {
@@ -265,8 +274,10 @@ class PeakValleyScheduler(BaseScheduler):
         self.BatNum = peak_valley_config['BatNum']
         self.BatMaxCapacity = peak_valley_config['BatMaxCapacity']
         self.BatCap = self.BatNum * self.BatMaxCapacity
-        self.BatChgMax = self.BatNum * peak_valley_config['BatChgMaxMultiplier']
-        self.BatDisMax = self.BatNum * peak_valley_config['BatDisMaxMultiplier']
+        self.BatChgMax = self.BatNum * \
+            peak_valley_config['BatChgMaxMultiplier']
+        self.BatDisMax = self.BatNum * \
+            peak_valley_config['BatDisMaxMultiplier']
         self.HrMin = peak_valley_config['HrMin']
         self.SellDiscount = peak_valley_config['SellDiscount']
         self.SpikeLevel = peak_valley_config['SpikeLevel']
@@ -1315,7 +1326,7 @@ if __name__ == '__main__':
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
     scheduler = BatteryScheduler(scheduler_type='PeakValley', battery_sn=[
-                                 '011LOKL140104B'], test_mode=False, api_version='redx')
+                                 'RX2505ACA10J0A160016'], test_mode=False, api_version='redx')
     scheduler.start()
     time.sleep(300)
     # print('Scheduler started')
