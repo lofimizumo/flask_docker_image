@@ -44,7 +44,7 @@ class BatteryScheduler:
                  project_mode='normal'
                  ):
         self.config = load_config(config)
-        self.s = sched.scheduler(time.time, time.sleep)
+        self.battery_sched = sched.scheduler(time.time, time.sleep)
         self.scheduler = None
         self.monitor = util.PriceAndLoadMonitor(
             test_mode=test_mode, api_version=api_version)
@@ -95,45 +95,41 @@ class BatteryScheduler:
         return self.scheduler.step(**kwargs)
 
     def _make_battery_decision(self):
-        if not self.is_running:
-            return
+        while True:
+            if not self.is_running:
+                return
 
-        try:
-            if isinstance(self.scheduler, AIScheduler):
-                self._process_ai_scheduler()
-            elif isinstance(self.scheduler, PeakValleyScheduler):
-                self._process_peak_valley_scheduler()
-            self.event = self.s.enter(
-                self.sample_interval, 1, self._make_battery_decision)
-        except Exception as e:
-            logging.error(f"Scheduling error: {e}")
-            logging.error(f"Traceback: {traceback.format_exc()}")
-            self.event = self.s.enter(
-                self.sample_interval, 1, self._make_battery_decision)
+            try:
+                if isinstance(self.scheduler, AIScheduler):
+                    self._process_ai_scheduler()
+                elif isinstance(self.scheduler, PeakValleyScheduler):
+                    self._process_peak_valley_scheduler()
+                time.sleep(self.sample_interval)
+            except Exception as e:
+                logging.error(f"Scheduling error: {e}")
+                logging.error(f"Traceback: {traceback.format_exc()}")
+                time.sleep(self.sample_interval)
+                self._make_battery_decision()
 
     def _collect_amber_prices(self):
-        logging.info("Updating Amber Prices...")
-        self._update_prices('amber')
-        self._schedule_next_amber()
-
-    def _schedule_next_amber(self):
-        now = time.time()
-        next_two_minute = (now // 120 + 1) * 120
-        delay = next_two_minute - now
-        self.event = self.s.enter(delay, 1, self._collect_amber_prices)
+        while True:
+            logging.info("Updating Amber Prices...")
+            self._update_prices('amber')
+            now = time.time()
+            next_two_minute = (now // 120 + 1) * 120
+            delay = next_two_minute - now
+            time.sleep(delay)
 
     def _collect_localvolts_prices(self):
-        logging.info("Updating LocalVolts Prices...")
-        logging.info("Now: " + str(datetime.now()))
-        self._update_prices('lv')
-        self._schedule_next_localvolts()
-
-    def _schedule_next_localvolts(self):
-        now = time.time()
-        next_five_min = (now // 60 + 5) * 60
-        # add 30 seconds to make sure the price is updated on Local Volts
-        delay = next_five_min - now + 30
-        self.event = self.s.enter(delay, 1, self._collect_localvolts_prices)
+        while True:
+            logging.info("Updating LocalVolts Prices...")
+            logging.info("Now: " + str(datetime.now()))
+            self._update_prices('lv')
+            now = time.time()
+            next_five_min = (now // 60 + 5) * 60
+            # add 30 seconds to make sure the price is updated on Local Volts
+            delay = next_five_min - now + 30
+            time.sleep(delay)
 
     def _update_prices(self, target_retailer):
         def _update_prices_per_sn(retailer, location='qld', sn=None):
@@ -224,6 +220,8 @@ class BatteryScheduler:
                 self.last_command_time[sn] = c_datetime
                 self.last_schedule_peakvalley[sn] = command
                 logging.info(f"Successfully sent command for {sn}: {command}")
+            else:
+                logging.info(f"Debug: Command: {command}, Last Command: {last_command}, Time: {c_datetime}, Last Time: {last_command_time}")
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = [executor.submit(_process_send_cmd_each_sn, sn)
@@ -247,11 +245,11 @@ class BatteryScheduler:
         2. Collect LocalVolts prices Per 5 minutes
         3. Make battery decision Periondically (Check SampleInterval in the config.toml file)
         '''
-        if isinstance(self.scheduler, PeakValleyScheduler):
-            self.s.enter(1, 1, self._collect_amber_prices)
-            self.s.enter(1, 1, self._collect_localvolts_prices)
-        self.s.enter(1, 1, self._make_battery_decision)
-        self.s.run()
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            if isinstance(self.scheduler, PeakValleyScheduler):
+                executor.submit(self._collect_amber_prices)
+                executor.submit(self._collect_localvolts_prices)
+            executor.submit(self._make_battery_decision)
 
     def stop(self):
         self.is_runing = False
