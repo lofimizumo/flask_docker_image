@@ -139,8 +139,6 @@ class PriceAndLoadMonitor:
             'apikey_varnames', {}).get('apikey_varname_qld', None))
         self.amber_api_key_nsw = os.getenv(self.config.get(
             'apikey_varnames', {}).get('apikey_varname_nsw', None))
-        logging.info(f"API KEY QLD: {self.amber_api_key_qld}")
-        logging.info(f"API KEY NSW: {self.amber_api_key_nsw}")
 
     def get_realtime_price(self, location = 'qld', retailer = 'amber'):
         if retailer == 'amber':
@@ -597,7 +595,7 @@ class PriceAndLoadMonitor:
         # Check if the device is on VPP mode
         if self.is_VPP_on(sn):
             logging.info(f"Device {sn} is on VPP mode, skipping...")
-            return None
+            return {'status': 'VPP mode', 'message': 'Device is on VPP mode, skipping...'}
 
         data = {}
 
@@ -682,9 +680,14 @@ class AmberFetcher:
 
     def get_site(self):
         header = {'Authorization': f'Bearer {self.api_key}',
-                  'accept': 'application/json'}
+                'accept': 'application/json'}
         response = requests.get(f"{self.base_url}/sites", headers=header)
-        return response.json()[0]['id']
+        response.raise_for_status()  
+        data = response.json()
+        if data:
+            return data[0]['id']
+        else:
+            raise ValueError("No site found in the response")
 
     def get_prices(self, start_date, end_date, resolution=30):
         if not self.site_id:
