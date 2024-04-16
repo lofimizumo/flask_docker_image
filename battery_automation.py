@@ -32,6 +32,7 @@ class BatteryScheduler:
 
     def __init__(self, scheduler_type='PeakValley',
                  battery_sn=['011LOKL140058B',
+                             '011LOKL140104B',
                              'RX2505ACA10J0A180003',
                              'RX2505ACA10J0A160016',
                              'RX2505ACA10JOA160037',
@@ -118,7 +119,7 @@ class BatteryScheduler:
 
     def _schedule_next_amber(self):
         now = time.time()
-        next_two_minute = (now // 10 + 1) * 10
+        next_two_minute = (now // 120 + 1) * 120
         delay = next_two_minute - now
         self.event = self.s.enter(delay, 1, self._collect_amber_prices)
 
@@ -130,8 +131,9 @@ class BatteryScheduler:
 
     def _schedule_next_localvolts(self):
         now = time.time()
-        next_five_min = (now // 10 + 1) * 10
-        delay = next_five_min - now  # add 30 seconds to make sure the price is updated on Local Volts
+        next_five_min = (now // 60 + 5) * 60
+        # add 30 seconds to make sure the price is updated on Local Volts
+        delay = next_five_min - now + 30
         self.event = self.s.enter(delay, 1, self._collect_localvolts_prices)
 
     def _update_prices(self, target_retailer):
@@ -1382,8 +1384,9 @@ if __name__ == '__main__':
     # print('Scheduler started')
     time.sleep(3)
     scheduler.add_amber_device('011LOKL140104B')
-    time.sleep(3)
-    scheduler.add_amber_device('RX2505ACA10J0A160016')
+    time.sleep(300)
+    # time.sleep(3)
+    # scheduler.add_amber_device('RX2505ACA10J0A160016')
     # time.sleep(3)
     # scheduler.remove_amber_device('011LOKL140058B')
     # time.sleep(300)
