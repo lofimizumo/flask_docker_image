@@ -118,7 +118,7 @@ class BatteryScheduler:
 
     def _schedule_next_amber(self):
         now = time.time()
-        next_two_minute = (now // 120 + 1) * 120
+        next_two_minute = (now // 10 + 1) * 10
         delay = next_two_minute - now
         self.event = self.s.enter(delay, 1, self._collect_amber_prices)
 
@@ -130,8 +130,8 @@ class BatteryScheduler:
 
     def _schedule_next_localvolts(self):
         now = time.time()
-        next_five_min = (now // 60 + 5) * 60
-        delay = next_five_min - now + 30 # add 30 seconds to make sure the price is updated on Local Volts
+        next_five_min = (now // 10 + 1) * 10
+        delay = next_five_min - now  # add 30 seconds to make sure the price is updated on Local Volts
         self.event = self.s.enter(delay, 1, self._collect_localvolts_prices)
 
     def _update_prices(self, target_retailer):
@@ -246,8 +246,9 @@ class BatteryScheduler:
         2. Collect LocalVolts prices Per 5 minutes
         3. Make battery decision Periondically (Check SampleInterval in the config.toml file)
         '''
-        self.s.enter(1, 1, self._collect_amber_prices)
-        self.s.enter(1, 1, self._collect_localvolts_prices)
+        if isinstance(self.scheduler, PeakValleyScheduler):
+            self.s.enter(1, 1, self._collect_amber_prices)
+            self.s.enter(1, 1, self._collect_localvolts_prices)
         self.s.enter(1, 1, self._make_battery_decision)
         self.s.run()
 
@@ -257,6 +258,7 @@ class BatteryScheduler:
 
     def _init_device_profiles(self, sn):
         self.current_prices[sn] = {'buy': 0.0, 'feedin': 0.0}
+        self.last_schedule_peakvalley[sn] = {'command': 'Idle'}
 
     def add_amber_device(self, sn):
         if sn not in self.sn_list:
@@ -1376,12 +1378,12 @@ if __name__ == '__main__':
     scheduler = BatteryScheduler(
         scheduler_type='PeakValley', test_mode=False, api_version='redx')
     scheduler.start()
-    time.sleep(300)
+    # time.sleep(300)
     # print('Scheduler started')
-    # time.sleep(3)
-    # scheduler.add_amber_device('011LOKL140058B')
-    # time.sleep(3)
-    # scheduler.add_amber_device('RX2505ACA10J0A160016')
+    time.sleep(3)
+    scheduler.add_amber_device('011LOKL140104B')
+    time.sleep(3)
+    scheduler.add_amber_device('RX2505ACA10J0A160016')
     # time.sleep(3)
     # scheduler.remove_amber_device('011LOKL140058B')
     # time.sleep(300)
