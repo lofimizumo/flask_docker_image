@@ -31,8 +31,7 @@ logging.basicConfig(level=logging.INFO,
 class BatteryScheduler:
 
     def __init__(self, scheduler_type='PeakValley',
-                 battery_sn=['011LOKL140058B',
-                             '011LOKL140104B',
+                 battery_sn=['011LOKL140104B',
                              'RX2505ACA10J0A180003',
                              'RX2505ACA10J0A160016',
                              'RX2505ACA10JOA160037',
@@ -1378,7 +1377,7 @@ if __name__ == '__main__':
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
     scheduler = BatteryScheduler(
-        scheduler_type='PeakValley', test_mode=False, api_version='redx')
+        scheduler_type='PeakValley', battery_sn=['011LOKL140104B'], test_mode=False, api_version='redx')
     scheduler.start()
     # time.sleep(300)
     # print('Scheduler started')
