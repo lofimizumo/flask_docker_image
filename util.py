@@ -334,7 +334,10 @@ class PriceAndLoadMonitor:
         headers = {'token': self.get_token()}
         response = self.api.send_request(
             "device/get_params", method='POST', json=data, headers=headers)
-        vpp = response.get('data', {}).get('operatingMode', 0)
+        try:
+            vpp = response.get('data', {}).get('operatingMode', 0)
+        except Exception as e:
+            return False 
         return True if vpp == '1' else False
 
     def get_project_stats(self, grid_ID=1, phase=2):

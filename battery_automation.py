@@ -115,10 +115,22 @@ class BatteryScheduler:
         while True:
             logging.info("Updating Amber Prices...")
             self._update_prices('amber')
-            now = time.time()
-            next_two_minute = (now // 120 + 1) * 120
-            delay = next_two_minute - now
+            # Amber updates prices every 2 minutes
+            delay = self._seconds_to_next_n_minutes(n=2)
             time.sleep(delay)
+
+    def _seconds_to_next_n_minutes(self, n=5):
+        current_time = datetime.datetime.now()
+        next_n_minutes = (current_time.minute // n + 1) * n
+        next_time = current_time.replace(minute=next_n_minutes, second=0, microsecond=0)
+
+        if next_time <= current_time:
+            next_time += datetime.timedelta(minutes=n)
+
+        time_diff = next_time - current_time
+        seconds_to_wait = time_diff.total_seconds()
+
+        return int(seconds_to_wait)
 
     def _collect_localvolts_prices(self):
         while True:
@@ -126,10 +138,10 @@ class BatteryScheduler:
             logging.info("Now: " + str(datetime.now()))
             quality = self._update_prices('lv')
             if quality:
-                now = time.time()
-                next_five_min = (now // 60 + 5) * 60
+                # Local Volts updates prices every 5 minutes
+                delay = self._seconds_to_next_n_minutes(n=5)
                 # add 30 seconds to make sure the price is updated on Local Volts
-                delay = next_five_min - now + 30
+                delay = delay + 30
                 time.sleep(delay)
             else:
                 logging.info("Quality is not good or Error happened, waiting for 10 seconds...")
@@ -1399,12 +1411,12 @@ if __name__ == '__main__':
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
     scheduler = BatteryScheduler(
-        scheduler_type='PeakValley', battery_sn=['RX2505ACA10J0A160010'], test_mode=False, api_version='redx')
+        scheduler_type='PeakValley', battery_sn=['011LOKL140058B'], test_mode=False, api_version='redx')
     scheduler.start()
     # time.sleep(300)
     # print('Scheduler started')
-    time.sleep(3)
-    scheduler.add_amber_device('011LOKL140104B')
+    # time.sleep(3)
+    # scheduler.add_amber_device('011LOKL140104B')
     time.sleep(300)
     # time.sleep(3)
     # scheduler.add_amber_device('RX2505ACA10J0A160016')
