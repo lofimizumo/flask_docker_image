@@ -150,10 +150,14 @@ class PriceAndLoadMonitor:
         # TODO: replace the API key with the device's API key and partner ID
         url = "https://api.localvolts.com/v1/customer/interval?NMI=*"
         header = {'Authorization': 'apikey 21b831bc02410319571a27250d49b4c4', 'partner': '25370'}
-        r = requests.get(url, headers=header, timeout=5)
-        prices = [(x['costsFlexUp'], x['earningsFlexUp']) for x in r.json()]
-        cast_prices = [float(x) for x in prices[0]]
-        is_expected_data = r.json()[0]['quality'] == 'Exp'
+        try:
+            r = requests.get(url, headers=header, timeout=5)
+            prices = [(x['costsFlexUp'], x['earningsFlexUp']) for x in r.json()]
+            cast_prices = [float(x) for x in prices[0]]
+            is_expected_data = r.json()[0]['quality'] == 'Exp'
+        except Exception as e:
+            logging.error(f"Failed to get price data: {e}")
+            return None, False
         return cast_prices, is_expected_data
     
     def _get_amber_price(self, location='qld'):

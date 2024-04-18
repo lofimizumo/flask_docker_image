@@ -43,6 +43,16 @@ class BatteryScheduler:
                  config='config.toml',
                  project_mode='normal'
                  ):
+        '''
+        Args:
+        pv_sn: str, the serial number of the PV device in a Project
+        battery_sn: list, a list of serial numbers of the battery devices
+        test_mode: bool, if True, the scheduler will use the test mode for debugging
+        api_version: str, the version of the API, e.g., 'dev3', 'redx'
+        phase: int, the phase of the project
+        config: str, the path to the config file, config file should be in TOML format, see config.toml for an example
+        project_mode: str, the mode of the project of AI scheduler, e.g., 'Peak Shaving', 'Money Saving', 'Normal'
+        '''
         self.config = load_config(config)
         self.scheduler = None
         self.monitor = util.PriceAndLoadMonitor(
@@ -67,8 +77,8 @@ class BatteryScheduler:
         self.last_command_time = {}
         self.current_prices = {sn: {'buy': 0.0, 'feedin': 0.0}
                                for sn in self.sn_list}
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            executor.submit(self._set_scheduler, scheduler_type, api_version, pv_sn)
+
+        self.init_params = (scheduler_type, api_version, pv_sn)
 
     def _set_scheduler(self, scheduler_type, api_version, pv_sn=None):
         if scheduler_type == 'PeakValley':
@@ -111,41 +121,57 @@ class BatteryScheduler:
                 self._make_battery_decision()
 
     def _seconds_to_next_n_minutes(self, n=5):
+        # logging.info(
+        #     f"Calculating seconds until the next {n}-minute interval...")
         current_time = datetime.now(tz=pytz.timezone('Australia/Brisbane'))
         next_n_minutes = (current_time.minute // n + 1) * n
-        next_time = current_time.replace(minute=next_n_minutes, second=0, microsecond=0)
-
-        if next_time <= current_time:
-            next_time += timedelta(minutes=n)
-
+        if next_n_minutes == 60:
+            next_time = current_time.replace(
+                hour=current_time.hour + 1, minute=0, second=0, microsecond=0)
+        else:
+            next_time = current_time.replace(
+                minute=next_n_minutes, second=0, microsecond=0)
         time_diff = next_time - current_time
         seconds_to_wait = time_diff.total_seconds()
-
+        # logging.info(
+        #     f"Next {n}-minute interval is in {int(seconds_to_wait)} seconds.")
         return int(seconds_to_wait)
 
     def _collect_amber_prices(self):
         while True:
-            logging.info("Updating Amber Prices...")
-            self._update_prices('amber')
-            # Amber updates prices every 2 minutes
-            delay = self._seconds_to_next_n_minutes(n=2)
-            time.sleep(delay)
+            try:
+                logging.info("Updating Amber Prices...")
+                self._update_prices('amber')
+                # Amber updates prices every 2 minutes
+                delay = self._seconds_to_next_n_minutes(n=2)
+                time.sleep(delay)
+            except Exception as e:
+                logging.error(
+                    f"An exception occurred while updating Amber Prices: {str(e)}")
+                time.sleep(5)  
 
     def _collect_localvolts_prices(self):
         while True:
-            logging.info("Updating LocalVolts Prices...")
-            logging.info("Now: " + str(datetime.now()))
-            quality = self._update_prices('lv')
-            if quality:
-                # Local Volts updates prices every 5 minutes
-                delay = self._seconds_to_next_n_minutes(n=5)
-                # add 30 seconds to make sure the price is updated on Local Volts
-                delay = delay + 30
-                logging.info(f"Next Price Update at: {datetime.now() + timedelta(seconds=delay)}")
-                time.sleep(delay)
-            else:
-                logging.info("Quality is not good or Error happened, waiting for 10 seconds...")
-                time.sleep(10) # wait for 10 seconds and try again
+            try:
+                logging.info("Updating LocalVolts Prices...")
+                logging.info("Now: " + str(datetime.now()))
+                quality = self._update_prices('lv')
+                if quality:
+                    # Local Volts updates prices every 5 minutes
+                    delay = self._seconds_to_next_n_minutes(n=5)
+                    # add 30 seconds to make sure the price is updated on Local Volts
+                    delay = delay + 30
+                    logging.info(
+                        f"Next Price Update at: {datetime.now() + timedelta(seconds=delay)}")
+                    time.sleep(delay)
+                else:
+                    logging.info(
+                        "Quality is not good or Error happened, waiting for 10 seconds...")
+                    time.sleep(10)  
+            except Exception as e:
+                logging.error(
+                    f"An exception occurred while updating LocalVolts Prices: {str(e)}")
+                time.sleep(5)
 
     def _update_prices(self, target_retailer):
         """
@@ -153,14 +179,17 @@ class BatteryScheduler:
         e.g., if target_retailer is 'amber', only update prices for devices that are using Amber.
         """
         def _update_prices_per_sn(retailer, location, sn):
-            data, quality = self.get_current_price(location=location, retailer=retailer)
-            
+            data, quality = self.get_current_price(
+                location=location, retailer=retailer)
+
             if data and quality:
                 self.current_prices[sn]['buy'], self.current_prices[sn]['feedin'] = data
-                logging.info(f'Price for {sn}({retailer}) updated: {self.current_prices[sn]}')
+                logging.info(
+                    f'Price for {sn}({retailer}) updated: {self.current_prices[sn]}')
                 return True
             else:
-                logging.info(f'Bad Quality: Got forecasted or invalid price for {sn}({retailer}) or price update failed, e.g. too many requests.')
+                logging.info(
+                    f'Bad Quality: Got forecasted or invalid price for {sn}({retailer}) or price update failed, e.g. too many requests.')
                 return False
 
         try:
@@ -177,8 +206,6 @@ class BatteryScheduler:
         except Exception as e:
             logging.error(f"Error updating prices: {e}")
             return False
-
-
 
     def _process_ai_scheduler(self):
         schedule = self._get_battery_command()
@@ -244,12 +271,12 @@ class BatteryScheduler:
             last_command_time = self.last_command_time.get(sn, datetime.min)
 
             if command != last_command or (c_datetime - last_command_time) >= timedelta(minutes=5):
-                self.send_battery_command(command=command, sn=sn)
+                # self.send_battery_command(command=command, sn=sn)
                 self.last_command_time[sn] = c_datetime
                 self.last_schedule_peakvalley[sn] = command
                 logging.info(f"Successfully sent command for {sn}: {command}")
-            else:
-                logging.info(f"Debug: Command: {command}, Last Command: {last_command}, Time: {c_datetime}, Last Time: {last_command_time}")
+            # else:
+                # logging.info(f"Debug: Command: {command}, Last Command: {last_command}, Time: {c_datetime}, Last Time: {last_command_time}")
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = [executor.submit(_process_send_cmd_each_sn, sn)
@@ -265,6 +292,7 @@ class BatteryScheduler:
         3. Make battery decision Periondically (Check SampleInterval in the config.toml file)
         '''
         self.is_running = True
+        self._set_scheduler(*self.init_params)
         with concurrent.futures.ThreadPoolExecutor() as executor:
             if isinstance(self.scheduler, PeakValleyScheduler):
                 executor.submit(self._collect_amber_prices)
@@ -1377,8 +1405,11 @@ if __name__ == '__main__':
     # For Amber Johnathan (QLD)
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
+    now = datetime.now()
+    print(now)
     scheduler = BatteryScheduler(
-        scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037','RX2505ACA10J0A160010'], test_mode=False, api_version='redx')
+        scheduler_type='PeakValley', battery_sn=['011LOKL140104B'], test_mode=False, api_version='redx')
+    print(f'time passed (seconds): {datetime.now()-now}')
     scheduler.start()
     # time.sleep(300)
     # print('Scheduler started')
