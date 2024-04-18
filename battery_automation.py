@@ -110,14 +110,6 @@ class BatteryScheduler:
                 time.sleep(self.sample_interval)
                 self._make_battery_decision()
 
-    def _collect_amber_prices(self):
-        while True:
-            logging.info("Updating Amber Prices...")
-            self._update_prices('amber')
-            # Amber updates prices every 2 minutes
-            delay = self._seconds_to_next_n_minutes(n=2)
-            time.sleep(delay)
-
     def _seconds_to_next_n_minutes(self, n=5):
         current_time = datetime.now(tz=pytz.timezone('Australia/Brisbane'))
         next_n_minutes = (current_time.minute // n + 1) * n
@@ -130,6 +122,14 @@ class BatteryScheduler:
         seconds_to_wait = time_diff.total_seconds()
 
         return int(seconds_to_wait)
+
+    def _collect_amber_prices(self):
+        while True:
+            logging.info("Updating Amber Prices...")
+            self._update_prices('amber')
+            # Amber updates prices every 2 minutes
+            delay = self._seconds_to_next_n_minutes(n=2)
+            time.sleep(delay)
 
     def _collect_localvolts_prices(self):
         while True:
@@ -148,45 +148,37 @@ class BatteryScheduler:
                 time.sleep(10) # wait for 10 seconds and try again
 
     def _update_prices(self, target_retailer):
-        '''
+        """
         Update prices for only the devices that are using the target retailer.
-
         e.g., if target_retailer is 'amber', only update prices for devices that are using Amber.
-        '''
-        def _update_prices_per_sn(retailer, location='qld', sn=None):
-            if retailer == 'amber':
-                self.current_prices[sn]['buy'], self.current_prices[sn]['feedin'] = self.get_current_price(
-                    location=location, retailer='amber')[0]
-                logging.info(
-                    f'Price for {sn}({retailer}) updated: {self.current_prices[sn]}')
+        """
+        def _update_prices_per_sn(retailer, location, sn):
+            data, quality = self.get_current_price(location=location, retailer=retailer)
+            
+            if data and quality:
+                self.current_prices[sn]['buy'], self.current_prices[sn]['feedin'] = data
+                logging.info(f'Price for {sn}({retailer}) updated: {self.current_prices[sn]}')
                 return True
-            elif retailer == 'lv':
-                (buy_price, feedin_price), quality = self.get_current_price(location=location, retailer='lv')
-                self.current_prices[sn]['buy'], self.current_prices[sn]['feedin'] = buy_price, feedin_price
-                if quality:
-                    logging.info(
-                        f'Price for {sn}({retailer}) updated: {self.current_prices[sn]}')
-                    return True
-                else:
-                    logging.info(
-                        f'Got forecasted price for {sn}({retailer}), quality is not good.')
-                    return False
+            else:
+                logging.info(f'Bad Quality: Got forecasted or invalid price for {sn}({retailer}) or price update failed, e.g. too many requests.')
+                return False
 
         try:
             for sn in self.sn_list:
                 sn_retailer_type = self.sn_retailers.get(sn, 'amber')
                 if target_retailer != sn_retailer_type:
                     continue
+
                 location = self.sn_locations.get(sn, 'qld')
-                quality = _update_prices_per_sn(
-                    retailer=sn_retailer_type, location=location, sn=sn)
-                # If any device got a bad quality price, means we need to wait more time for the remote price to update. So we return False.
-                if not quality:
+                if not _update_prices_per_sn(retailer=sn_retailer_type, location=location, sn=sn):
                     return False
+
             return True
         except Exception as e:
             logging.error(f"Error updating prices: {e}")
             return False
+
+
 
     def _process_ai_scheduler(self):
         schedule = self._get_battery_command()
@@ -1386,7 +1378,7 @@ if __name__ == '__main__':
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
     scheduler = BatteryScheduler(
-        scheduler_type='PeakValley', battery_sn=['RX2505ACA10J0A160016'], test_mode=False, api_version='redx')
+        scheduler_type='PeakValley', battery_sn=['RX2505ACA10JOA160037','RX2505ACA10J0A160010'], test_mode=False, api_version='redx')
     scheduler.start()
     # time.sleep(300)
     # print('Scheduler started')

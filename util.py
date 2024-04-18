@@ -165,11 +165,15 @@ class PriceAndLoadMonitor:
             api_key = self.amber_api_key_nsw
         header = {'accept': 'application/json',
                   'Authorization': f'Bearer {api_key}'}
-        r = requests.get(url, headers=header, timeout=5)
-        prices = [x['perKwh'] for x in r.json()]
+        try:
+            r = requests.get(url, headers=header, timeout=5)
+            prices = [x['perKwh'] for x in r.json()]
         # prices[1] is the feed in price, so we return the negative value
         # True means it's expected data, Amber doesn't have forecast data, so we always return True
-        return (prices[0], -prices[1]), True
+            return (prices[0], -prices[1]), True
+        except Exception as e:
+            logging.error(f"Failed to get price data: {e}")
+            return None, False
 
     def get_price_history(self, location='qld'):
         if location == 'qld':
