@@ -44,12 +44,10 @@ class BatteryScheduler:
                  project_mode='normal'
                  ):
         self.config = load_config(config)
-        self.battery_sched = sched.scheduler(time.time, time.sleep)
         self.scheduler = None
         self.monitor = util.PriceAndLoadMonitor(
             test_mode=test_mode, api_version=api_version)
         self.test_mode = test_mode
-        self.event = None
         self.is_runing = False
         self.pv_sn = pv_sn
         self.sn_list = battery_sn if type(battery_sn) == list else [
@@ -121,7 +119,7 @@ class BatteryScheduler:
             time.sleep(delay)
 
     def _seconds_to_next_n_minutes(self, n=5):
-        current_time = datetime.now()
+        current_time = datetime.now(tz=pytz.timezone('Australia/Brisbane'))
         next_n_minutes = (current_time.minute // n + 1) * n
         next_time = current_time.replace(minute=next_n_minutes, second=0, microsecond=0)
 
@@ -254,7 +252,7 @@ class BatteryScheduler:
             last_command_time = self.last_command_time.get(sn, datetime.min)
 
             if command != last_command or (c_datetime - last_command_time) >= timedelta(minutes=5):
-                self.send_battery_command(command=command, sn=sn)
+                # self.send_battery_command(command=command, sn=sn)
                 self.last_command_time[sn] = c_datetime
                 self.last_schedule_peakvalley[sn] = command
                 logging.info(f"Successfully sent command for {sn}: {command}")
@@ -267,15 +265,6 @@ class BatteryScheduler:
             concurrent.futures.wait(futures)
 
     def start(self):
-        self.is_running = True
-        try:
-            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-            future = executor.submit(self._run_scheduler)
-            logging.info(f"Scheduler started.")
-        except Exception as e:
-            logging.error(f"Error starting scheduler: {e}")
-
-    def _run_scheduler(self):
         '''
         Main loop for the battery scheduler.
         Steps:
@@ -283,6 +272,7 @@ class BatteryScheduler:
         2. Collect LocalVolts prices Per 5 minutes
         3. Make battery decision Periondically (Check SampleInterval in the config.toml file)
         '''
+        self.is_running = True
         with concurrent.futures.ThreadPoolExecutor() as executor:
             if isinstance(self.scheduler, PeakValleyScheduler):
                 executor.submit(self._collect_amber_prices)
@@ -336,24 +326,7 @@ class BatteryScheduler:
             peak_valley_command=command, json=json, sn=sn)
 
 
-class BaseScheduler:
-
-    def step(self, **kwargs):
-        """
-        Execute one scheduling step and return a battery command.
-        Override this method in the derived class.
-        """
-        raise NotImplementedError
-
-    def required_data(self):
-        """
-        Return a list of data fields required by the scheduler.
-        Override this method in the derived class.
-        """
-        raise NotImplementedError
-
-
-class PeakValleyScheduler(BaseScheduler):
+class PeakValleyScheduler():
     def __init__(self, config_path='config.toml', monitor=None):
         peak_valley_config = load_config(config_path)['peakvalley']
         self.config = load_config(config_path)
@@ -656,7 +629,7 @@ class PeakValleyScheduler(BaseScheduler):
         return ['current_price', 'current_time', 'current_usage', 'current_soc', 'current_pv']
 
 
-class AIScheduler(BaseScheduler):
+class AIScheduler():
 
     def __init__(self, sn_list, pv_sn, api_version='redx', phase=2, mode='normal'):
         self.battery_max_capacity_kwh = 5
