@@ -120,21 +120,13 @@ class BatteryScheduler:
                 time.sleep(self.sample_interval)
                 self._make_battery_decision()
 
-    def _seconds_to_next_n_minutes(self, n=5):
+    def _seconds_to_next_n_minutes(self,current_time, n=5):
         # logging.info(
         #     f"Calculating seconds until the next {n}-minute interval...")
-        current_time = datetime.now(tz=pytz.timezone('Australia/Brisbane'))
-        next_n_minutes = (current_time.minute // n + 1) * n
-        if next_n_minutes == 60:
-            next_time = current_time.replace(
-                hour=current_time.hour + 1, minute=0, second=0, microsecond=0)
-        else:
-            next_time = current_time.replace(
-                minute=next_n_minutes, second=0, microsecond=0)
+        next_time = current_time + timedelta(minutes=n)
+        next_time = next_time.replace(minute=(next_time.minute // n) * n, second=0, microsecond=0)
         time_diff = next_time - current_time
         seconds_to_wait = time_diff.total_seconds()
-        # logging.info(
-        #     f"Next {n}-minute interval is in {int(seconds_to_wait)} seconds.")
         return int(seconds_to_wait)
 
     def _collect_amber_prices(self):
@@ -143,7 +135,7 @@ class BatteryScheduler:
                 logging.info("Updating Amber Prices...")
                 self._update_prices('amber')
                 # Amber updates prices every 2 minutes
-                delay = self._seconds_to_next_n_minutes(n=2)
+                delay = self._seconds_to_next_n_minutes(current_time=datetime.now(pytz.timezone('Australia/Brisbane')), n=2)
                 time.sleep(delay)
             except Exception as e:
                 logging.error(
@@ -158,11 +150,12 @@ class BatteryScheduler:
                 quality = self._update_prices('lv')
                 if quality:
                     # Local Volts updates prices every 5 minutes
-                    delay = self._seconds_to_next_n_minutes(n=5)
+                    current_time=datetime.now(pytz.timezone('Australia/Brisbane'))
+                    delay = self._seconds_to_next_n_minutes(current_time, n=5)
                     # add 30 seconds to make sure the price is updated on Local Volts
                     delay = delay + 30
                     logging.info(
-                        f"Next Price Update at: {datetime.now() + timedelta(seconds=delay)}")
+                        f"Next Price Update at: {current_time + timedelta(seconds=delay)}")
                     time.sleep(delay)
                 else:
                     logging.info(
@@ -1405,11 +1398,8 @@ if __name__ == '__main__':
     # For Amber Johnathan (QLD)
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
-    now = datetime.now()
-    print(now)
     scheduler = BatteryScheduler(
         scheduler_type='PeakValley', battery_sn=['011LOKL140104B'], test_mode=False, api_version='redx')
-    print(f'time passed (seconds): {datetime.now()-now}')
     scheduler.start()
     # time.sleep(300)
     # print('Scheduler started')
