@@ -264,10 +264,14 @@ class BatteryScheduler:
             last_command_time = self.last_command_time.get(sn, datetime.min)
 
             if command != last_command or (c_datetime - last_command_time) >= timedelta(minutes=5):
-                self.send_battery_command(command=command, sn=sn)
-                self.last_command_time[sn] = c_datetime
-                self.last_schedule_peakvalley[sn] = command
-                logging.info(f"Successfully sent command for {sn}: {command}")
+                try:
+                    self.send_battery_command(command=command, sn=sn)
+                    self.last_command_time[sn] = c_datetime
+                    self.last_schedule_peakvalley[sn] = command
+                    logging.info(f"Successfully sent command for {sn}: {command}")
+                except Exception as e:
+                    logging.error(
+                        f"Error sending command for {sn}: {e}")
             # else:
                 # logging.info(f"Debug: Command: {command}, Last Command: {last_command}, Time: {c_datetime}, Last Time: {last_command_time}")
 
