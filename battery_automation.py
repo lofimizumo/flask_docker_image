@@ -261,9 +261,10 @@ class BatteryScheduler:
             last_command = self.last_schedule_peakvalley.get(sn, {})
             c_datetime = datetime.strptime(
                 current_time, '%H:%M')
-            last_command_time = self.last_command_time.get(sn, datetime.min)
+            last_command_time = self.last_command_time.get(sn, c_datetime)
+            minute_passed = abs(c_datetime.minute - last_command_time.minute)
 
-            if command != last_command or (c_datetime - last_command_time) >= timedelta(minutes=5):
+            if command != last_command or minute_passed >= 5:
                 try:
                     self.send_battery_command(command=command, sn=sn)
                     self.last_command_time[sn] = c_datetime
