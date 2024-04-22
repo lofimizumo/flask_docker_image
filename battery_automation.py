@@ -579,7 +579,7 @@ class PeakValleyScheduler():
 
         # Discharging logic
         # Turn off the debug flag to use the actual discharging period
-        if self._is_discharging_period(current_time, debug=True) and (current_buy_price >= sell_price):
+        if self._is_discharging_period(current_time, debug=False) and (current_buy_price >= sell_price):
             power = 5000 if device_type == "5000" else 2500
             device_charge_cost = self.charging_costs.get(device_sn, None)
             if current_feedin_price < device_charge_cost['weighted_charging_cost']:
