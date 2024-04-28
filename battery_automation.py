@@ -273,8 +273,8 @@ class BatteryScheduler:
                 except Exception as e:
                     logging.error(
                         f"Error sending command for {sn}: {e}")
-            # else:
-                # logging.info(f"Debug: Command: {command}, Last Command: {last_command}, Time: {c_datetime}, Last Time: {last_command_time}")
+            else:
+                logging.info(f"Command Skipped: Command: {command}, Last Command: {last_command}, Time: {c_datetime}, Last Time: {last_command_time}")
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = [executor.submit(_process_send_cmd_each_sn, sn)
