@@ -270,7 +270,7 @@ class BatteryScheduler:
 
             if command != last_command or minute_passed >= 5:
                 try:
-                    # self.send_battery_command(command=command, sn=sn)
+                    self.send_battery_command(command=command, sn=sn)
                     self.last_command_time[sn] = c_datetime
                     self.last_schedule_peakvalley[sn] = command
                     logging.info(f"Successfully sent command for {sn}: {command}")
@@ -289,6 +289,7 @@ class BatteryScheduler:
         '''
         Main loop for the battery scheduler.
         Steps:
+        
         1. Collect Amber prices Per 2 minutes
         2. Collect LocalVolts prices Per 5 minutes
         3. Make battery decision Periondically (Check SampleInterval in the config.toml file)
