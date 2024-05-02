@@ -84,7 +84,6 @@ def api_status_check(max_retries=10, delay=10):
             if response is None or not isinstance(response, dict):
                 logging.error(f"Invalid response: {response}")
                 return False
-                # raise ValueError("Invalid response: None or not a dictionary.")
             return True
 
         def check_status(args, kwargs):
@@ -497,7 +496,8 @@ class PriceAndLoadMonitor:
             response = None
         return response
 
-    @api_status_check(max_retries=2, delay=60)
+    # @api_status_check(max_retries=1, delay=60)
+    # Device status check is not enabled for now, consider enabling it in the future
     def send_battery_command(self, peak_valley_command=None, json=None, sn=None):
         if self.test_mode:
             return
@@ -672,8 +672,11 @@ class ApiCommunicator:
                 # Assuming JSON response. Modify as needed.
                 return response.json()
             except requests.RequestException as e:
-                logging.error(
-                    f"HTTP Error occurred sending {command}. JSON:{json}, Retrying...")
+                if e.response is not None and e.response.status_code == 504:
+                    return response.json()
+                else:
+                    logging.error(
+                        f"Failed to connect to {url}. Retrying...")
 
         raise ConnectionError(
             f"Failed to connect to {url} after {retries} attempts.")
