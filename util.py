@@ -673,7 +673,7 @@ class ApiCommunicator:
                 return response.json()
             except requests.RequestException as e:
                 if e.response is not None and e.response.status_code == 504:
-                    return response.json()
+                    return None 
                 else:
                     logging.error(
                         f"Failed to connect to {url}. Retrying...")
