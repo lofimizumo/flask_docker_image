@@ -270,7 +270,7 @@ class BatteryScheduler:
 
             if command != last_command or minute_passed >= 5:
                 try:
-                    self.send_battery_command(command=command, sn=sn)
+                    # self.send_battery_command(command=command, sn=sn)
                     self.last_command_time[sn] = c_datetime
                     self.last_schedule_peakvalley[sn] = command
                     logging.info(f"Successfully sent command for {sn}: {command}")
@@ -603,7 +603,7 @@ class PeakValleyScheduler():
 
     def step(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn, algo_type='sell_to_grid'):
         if algo_type == 'sell_to_grid':
-            return self.algo_sell_to_grid(
+            return self._algo_sell_to_grid(
                 current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn)
         else:
             return self._algo_cover_usage(
@@ -1273,7 +1273,8 @@ if __name__ == '__main__':
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
     scheduler = BatteryScheduler(
-        scheduler_type='PeakValley', battery_sn=['011LOKL140104B'], test_mode=False, api_version='redx')
+        scheduler_type='PeakValley', battery_sn=[
+                             'RX2505ACA10J0A160010'], test_mode=False, api_version='redx')
     scheduler.start()
     # time.sleep(300)
     # print('Scheduler started')
