@@ -1,6 +1,5 @@
-import sched
 from datetime import datetime, timedelta
-from datetime import time as dtime
+from enum import Enum
 from typing import Dict
 import time
 import numpy as np
@@ -22,6 +21,10 @@ def load_config(file_path):
         config = tomli.load(file)
     return config
 
+class DeviceType(Enum):
+    FIVETHOUSAND = 5000
+    TWOFIVEZEROFIVE = 2505
+    SEVENTHOUSAND = 7000
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -106,6 +109,7 @@ class BatteryScheduler:
     def _make_battery_decision(self):
         while True:
             if not self.is_running:
+                logging.info("Exiting the battery scheduler...")
                 return
 
             try:
@@ -238,7 +242,7 @@ class BatteryScheduler:
             current_usage = bat_stats.get('loadP', 0) if bat_stats else 0
             current_soc = bat_stats.get('soc', 0) / 100.0 if bat_stats else 0
             current_pv = bat_stats.get('ppv', 0) if bat_stats else 0
-            device_type = self.sn_types.get(sn, '2505')
+            device_type = DeviceType(self.sn_types.get(sn, 2505))
             device_location = self.sn_locations.get(sn, 'qld')
             buy_price = self.current_prices[sn]['buy']
             feedin_price = self.current_prices[sn]['feedin']
@@ -474,7 +478,7 @@ class PeakValleyScheduler():
         conf_level = 0.97 - 0.8824 * math.exp(-0.033 * current_price)
         return conf_level
 
-    def algo_sell_to_grid(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn):
+    def _algo_sell_to_grid(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type:DeviceType, device_sn):
         # Update price history
         current_time = datetime.strptime(current_time, '%H:%M').time()
         price_history = self.price_historys.get(device_sn, None)
@@ -511,7 +515,7 @@ class PeakValleyScheduler():
 
         # Discharging logic
         if self._is_discharging_period(current_time) and (current_buy_price >= sell_price):
-            power = 5000 if device_type == "5000" else 2500
+            power = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
             anti_backflow_threshold = np.percentile(
                 price_history, self.PeakPct)
             anti_backflow = current_buy_price <= anti_backflow_threshold
@@ -526,7 +530,7 @@ class PeakValleyScheduler():
 
         return command
 
-    def algo_cover_usage(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn):
+    def _algo_cover_usage(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type:DeviceType, device_sn):
         # Update price history
         current_time = datetime.strptime(current_time, '%H:%M').time()
         price_history = self.price_historys[device_sn]
@@ -602,12 +606,17 @@ class PeakValleyScheduler():
             return self.algo_sell_to_grid(
                 current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn)
         else:
-            return self.algo_cover_usage(
+            return self._algo_cover_usage(
                 current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn)
 
-    def _get_power_limits(self, device_type):
-        maxpower = 3000 if device_type == "5000" else 1500
-        minpower = 1250 if device_type == "5000" else 700
+    def _get_power_limits(self, device_type: DeviceType):
+        match device_type:
+            case DeviceType.FIVETHOUSAND:
+                maxpower = 5000
+                minpower = 1250
+            case DeviceType.TWOFIVEZEROFIVE:
+                maxpower = 1500
+                minpower = 700
         return maxpower, minpower
 
     def _calculate_charging_power(self, current_time, current_pv, current_usage, minpower, maxpower, low_price=False):
@@ -635,16 +644,12 @@ class PeakValleyScheduler():
         return t >= self.t_chg_start1 and t <= self.t_chg_end1
 
     def _is_discharging_period(self, t, debug=False):
-        # return True
         if debug:
             return t >= self.t_dis_start_test and t <= self.t_dis_end_test
         return (t >= self.t_dis_start2 and t <= self.t_dis_end2) or (t >= self.t_dis_start1 and t <= self.t_dis_end1)
 
     def _is_peak_period(self, t):
         return t >= self.t_peak_start and t <= self.t_peak_end
-
-    def required_data(self):
-        return ['current_price', 'current_time', 'current_usage', 'current_soc', 'current_pv']
 
 
 class AIScheduler():
@@ -1195,7 +1200,6 @@ class AIScheduler():
                     if task_type == 'Discharge':
                         data = {
                             'deviceSn': sn,
-                            # 'operatingMode': mode_map['Time'],
                             'dischargeStart1': start_time if task_type == 'Discharge' else "00:00",
                             'dischargeEnd1': end_time if task_type == 'Discharge' else "00:00",
                             'dischargePower1': power,
@@ -1205,13 +1209,9 @@ class AIScheduler():
                     elif task_type == 'Charge':
                         data = {
                             'deviceSn': sn,
-                            # 'operatingMode': mode_map['Time'],
                             'chargeStart1': start_time if task_type == 'Charge' else "00:00",
                             'chargeEnd1': end_time if task_type == 'Charge' else "00:00",
                             'chargePower1': power+200,  # Charging Power is increased by 200W to compensate in case
-                            # 'chargeStart1': "09:00",
-                            # 'chargeEnd1':  "15:00",
-                            # 'chargePower1': "800",
                         }
                         schedules[sn] = data | schedules.get(sn, {})
                 return schedules
@@ -1223,139 +1223,11 @@ class AIScheduler():
             tasks, stats, self.battery_max_capacity_kwh, sample_interval)
         json_schedule = battery_manager.manage_tasks()
 
-        # self.plot(consumption, price, battery_discharges, net_consumption)
         return json_schedule
 
     def _get_command_from_schedule(self, current_time):
         return 'Idle'
 
-    def plot(self, consumption, price, battery_discharges, net_consumption):
-        import matplotlib.pyplot as plt
-        import seaborn as sns
-        import numpy as np
-
-        # Seaborn settings
-        sns.set(style="whitegrid")
-        sns.set_palette("tab10")
-
-        def time_string(minute_count):
-            """ Convert total minutes to a formatted time string like 14:35 """
-            hour = minute_count // 60
-            minute = minute_count % 60
-            return f"{hour:02d}:{minute:02d}"
-
-        def time_to_minutes(t):
-            hours, minutes = map(int, t.split(':'))
-            return hours * 60 + minutes
-
-        def plot_greedy_solution(hours, consumption, battery_discharges, net_consumption, weight_adjusted_array):
-            plt.figure(figsize=(15, 6))
-
-            # Generate the times list for the x-axis
-            times = [time_string(i * 5) for i in range(288)]
-
-            # Plot original consumption
-            sns.lineplot(x=times, y=consumption, marker='o',
-                         label='Original Consumption')
-
-            # Plot net consumption after battery discharge
-            sns.lineplot(x=times, y=net_consumption,
-                         linestyle='--', label='Net Consumption')
-
-            # Plot the weighted consumption
-            sns.lineplot(x=times, y=weight_adjusted_array,
-                         linestyle='dashdot', label='Weighted Consumption')
-
-            # Plot the constant discharge rates for each battery as rectangles
-            palette = sns.color_palette(n_colors=15)
-            legend_added = set()
-
-            # Maintain a height tracker for each hour to determine the starting height for each battery's rectangle
-            height_tracker = [0] * len(times)
-
-            for i, discharge in enumerate(battery_discharges):
-                label = f'Battery {i+1} Discharge'
-                for j, rate in enumerate(discharge):
-                    if rate > 0:  # If the battery is discharging at this hour
-                        # Base the start of discharge at net consumption + height of previous batteries
-                        start = net_consumption[j] + height_tracker[j]
-                        end = start + rate
-                        plt.fill_between([times[j], times[j+1]], [start, start], [end, end], color=palette[i],
-                                         alpha=0.5, label=label if i not in legend_added else "")
-                        legend_added.add(i)
-
-                        # Update the height tracker for the next battery
-                        height_tracker[j] += rate
-
-            # Define a soft color palette for the periods
-            soft_yellow = "#FFFACD"  # lemon chiffon
-            soft_red = "#FFC1C1"  # rosy brown
-
-            shoulder_period = [('9:00', '16:59'), ('20:00', '21:59')]
-            peak_period = [('7:00', '8:59'), ('17:00', '19:59')]
-
-            # Add the shaded regions with dotted frame for shoulder period
-            for i, period in enumerate(shoulder_period):
-                start = times[time_to_minutes(period[0]) // 5]
-                end = times[time_to_minutes(period[1]) // 5]
-                plt.axvspan(start, end, color=soft_yellow, alpha=0.6, edgecolor='yellow',
-                            linestyle='dotted', linewidth=1.5, label='Shoulder Period' if i == 0 else "")
-
-            # Add the shaded regions with dotted frame for peak period
-            for i, period in enumerate(peak_period):
-                start = times[time_to_minutes(period[0]) // 5]
-                end = times[time_to_minutes(period[1]) // 5]
-                plt.axvspan(start, end, color=soft_red, alpha=0.6, edgecolor='red',
-                            linestyle='dotted', linewidth=1.5, label='Peak Period' if i == 0 else "")
-
-            plt.xlabel('Time')
-            plt.ylabel('Consumption/Discharge Rate')
-            plt.title('Energy Consumption and Battery Discharge')
-            tick_spacing = 12
-            plt.xticks([times[i]
-                       for i in range(0, len(times), tick_spacing)], rotation=45)
-
-            plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
-            plt.tight_layout()
-            plt.show()
-
-        def plot_charge_windows(hours, consumption, battery_charges, net_consumption):
-            net_consumption = np.array(net_consumption)
-            net_consumption += np.sum(battery_charges, axis=0)
-            plt.figure(figsize=(15, 6))
-
-            sns.lineplot(x=hours, y=consumption, marker='o',
-                         label='Original Consumption')
-            sns.lineplot(x=hours, y=net_consumption, linestyle='--',
-                         label='Net Consumption after Charge')
-            palette = sns.color_palette(n_colors=15)
-            legend_added = set()
-            height_tracker = [0] * len(hours)
-
-            for i, charge in enumerate(battery_charges):
-                label = f'Battery {i+1} Charge'
-                for hour, rate in enumerate(charge):
-                    if rate > 0:
-                        start = consumption[hour] + height_tracker[hour]
-                        end = start + rate
-                        plt.fill_between([hour, hour+1], [start, start], [end, end], color=palette[i],
-                                         alpha=0.5, label=label if i not in legend_added else "")
-                        legend_added.add(i)
-                        height_tracker[hour] += rate
-
-            plt.xlabel('Hour')
-            plt.ylabel('Consumption/Charge Rate')
-            plt.title('Energy Consumption and Battery Charge')
-            plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
-            plt.tight_layout()
-            plt.show()
-        weight_adjusted_array = [i*j*self.price_weight for i, j in zip(
-            consumption, price)]
-        hours = list(range(len(consumption)))
-
-        plot_greedy_solution(hours, consumption,
-                             battery_discharges, net_consumption, weight_adjusted_array)
-        # plot_charge_windows(hours, consumption, battery_charges, net_consumption)
 
     def step(self):
         current_day = datetime.now(tz=pytz.timezone('Australia/Sydney')).day
@@ -1375,9 +1247,6 @@ class AIScheduler():
                     sn, {}).get('chargePower1', 0)
 
         return self.schedule
-
-    def required_data(self):
-        return []
 
 
 if __name__ == '__main__':

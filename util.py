@@ -624,13 +624,13 @@ class PriceAndLoadMonitor:
 
         try:
             headers = {'token': self.get_token()}
-            self.set_hour_register(data)
-            self.set_min_register(data)
+            # self.set_hour_register(data)
+            # self.set_min_register(data)
             self.set_antibackflow_register(data)
-            data.pop('chargeStart1', None)
-            data.pop('chargeEnd1', None)
-            data.pop('dischargeStart1', None)
-            data.pop('dischargeEnd1', None)
+            # data.pop('chargeStart1', None)
+            # data.pop('chargeEnd1', None)
+            # data.pop('dischargeStart1', None)
+            # data.pop('dischargeEnd1', None)
             response = self.api.send_request(
                 "device/set_params", method='POST', json=data, headers=headers)
         except Exception as e:
