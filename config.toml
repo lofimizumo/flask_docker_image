@@ -37,6 +37,11 @@ SampleInterval = 900
 RX2505ACA10J0A180003 = 'qld'
 RX2505ACA10J0A160016 = 'qld'
 011LOKL140104B = 'nsw'
+[battery_algo_types]
+011LOKL140058B = 'sell_to_grid'
+RX2505ACA10J0A180003 = 'sell_to_grid'
+RX2505ACA10J0A160016 = 'sell_to_grid'
+011LOKL140104B = 'cover_usage'
 [battery_retailers]
 RX2505ACA10JOA160037 = 'lv'
 RX2505ACA10J0A160010 = 'lv'

@@ -77,6 +77,7 @@ class BatteryScheduler:
         self.sn_types = self.config.get('battery_types', {})
         self.sn_locations = self.config.get('battery_locations', {})
         self.sn_retailers = self.config.get('battery_retailers', {})
+        self.algo_types = self.config.get('battery_algo_types', {})
         self.last_command_time = {}
         self.current_prices = {sn: {'buy': 0.0, 'feedin': 0.0}
                                for sn in self.sn_list}
@@ -244,6 +245,7 @@ class BatteryScheduler:
             current_pv = bat_stats.get('ppv', 0) if bat_stats else 0
             device_type = DeviceType(self.sn_types.get(sn, 2505))
             device_location = self.sn_locations.get(sn, 'qld')
+            algo_type = self.algo_types.get(sn, 'sell_to_grid')
             buy_price = self.current_prices[sn]['buy']
             feedin_price = self.current_prices[sn]['feedin']
             current_time = current_times.get(sn, '00:00')
@@ -289,7 +291,7 @@ class BatteryScheduler:
         '''
         Main loop for the battery scheduler.
         Steps:
-        
+
         1. Collect Amber prices Per 2 minutes
         2. Collect LocalVolts prices Per 5 minutes
         3. Make battery decision Periondically (Check SampleInterval in the config.toml file)
@@ -526,7 +528,52 @@ class PeakValleyScheduler():
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': anti_backflow}
 
-        logging.info(f"AmberModel: price: {current_buy_price}, sell price: {sell_price}, usage: {current_usage}, "
+        logging.info(f"AmberModel (Sell to Grid): price: {current_buy_price}, sell price: {sell_price}, usage: {current_usage}, "
+                     f"time: {current_time}, command: {command}")
+
+        return command
+
+    def _algo_auto_time(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type:DeviceType, device_sn):
+        # Use the Auto Mode (Now actually we are using charge with solar only, not using the auto mode) in the morning charging, and the Time Mode in the afternoon discharging
+        # Update price history
+        current_time = datetime.strptime(current_time, '%H:%M').time()
+        price_history = self.price_historys[device_sn]
+        if price_history is None:
+            self.init_price_history(device_sn)
+            price_history = self.price_historys[device_sn]
+        last_updated_time = self.last_updated_times.get(device_sn, None)
+        if last_updated_time is None or current_time.minute != last_updated_time.minute:
+            self.last_updated_times[device_sn] = current_time
+            price_history.append(current_buy_price)
+            if len(price_history) > self.LookBackBars:
+                price_history.pop(0)
+
+        # Set current_price to the median of the last five minutes
+        sample_points_per_minute = 60 / self.sample_interval
+        if current_buy_price < self.PeakPrice:
+            current_buy_price = np.mean(
+                price_history[int(-5 * sample_points_per_minute):])
+
+        # Buy and sell price based on historical data
+        buy_price, sell_price = np.percentile(
+            price_history, [self.BuyPct, self.SellPct])
+        command = {"command": "Idle"}
+
+        # Charging logic
+        if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pv > current_usage)):
+            maxpower, minpower = self._get_power_limits(device_type)
+            power, grid_charge = self._calculate_charging_power(
+                current_time, current_pv, current_usage, minpower, maxpower, current_buy_price <= buy_price)
+            command = {'command': 'Charge',
+                       'power': power, 'grid_charge': grid_charge}
+
+        # Discharging logic
+        if self._is_discharging_period(current_time) and (current_buy_price >= sell_price):
+            power = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
+            command = {'command': 'Discharge', 'power': power,
+                       'anti_backflow': False}
+
+        logging.info(f"AmberModel (Auto-Time): price: {current_buy_price}, usage: {current_usage}, "
                      f"time: {current_time}, command: {command}")
 
         return command
@@ -590,14 +637,14 @@ class PeakValleyScheduler():
         # Discharging logic
         # Turn off the debug flag to use the actual discharging period
         if self._is_discharging_period(current_time, debug=False) and (current_buy_price >= sell_price):
-            power = 5000 if device_type == "5000" else 2500
+            power = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
             device_charge_cost = self.charging_costs.get(device_sn, None)
             if current_feedin_price < device_charge_cost['weighted_charging_cost']:
                 return command
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': True}
 
-        logging.info(f"AmberModel: price: {current_buy_price}, WeightedPrice: {weighted_price}, usage: {current_usage}, "
+        logging.info(f"AmberModel(Cover Usage) : price: {current_buy_price}, WeightedPrice: {weighted_price}, usage: {current_usage}, "
                      f"time: {current_time}, command: {command}")
 
         return command
@@ -606,6 +653,9 @@ class PeakValleyScheduler():
         if algo_type == 'sell_to_grid':
             return self._algo_sell_to_grid(
                 current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn)
+        if algo_type == 'auto_time':
+            return self._algo_auto_time(
+                current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn)
         else:
             return self._algo_cover_usage(
                 current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn)
