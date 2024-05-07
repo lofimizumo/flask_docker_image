@@ -238,50 +238,49 @@ class BatteryScheduler:
                 state=self.sn_locations.get(sn, 'qld'))
 
         def _process_send_cmd_each_sn(sn):
-            bat_stats = self.get_current_battery_stats(sn)
-            current_batP = bat_stats.get('batP', 0) if bat_stats else 0
-            current_usage = bat_stats.get('loadP', 0) if bat_stats else 0
-            current_soc = bat_stats.get('soc', 0) / 100.0 if bat_stats else 0
-            current_pv = bat_stats.get('ppv', 0) if bat_stats else 0
-            device_type = DeviceType(self.sn_types.get(sn, 2505))
-            device_location = self.sn_locations.get(sn, 'qld')
-            algo_type = self.algo_types.get(sn, 'sell_to_grid')
-            buy_price = self.current_prices[sn]['buy']
-            feedin_price = self.current_prices[sn]['feedin']
-            current_time = current_times.get(sn, '00:00')
-            algo_type = 'sell_to_grid' if device_location == 'qld' else 'cover_usage'
+            try:
+                bat_stats = self.get_current_battery_stats(sn)
+                current_batP = bat_stats.get('batP', 0) if bat_stats else 0
+                current_usage = bat_stats.get('loadP', 0) if bat_stats else 0
+                current_soc = bat_stats.get('soc', 0) / 100.0 if bat_stats else 0
+                current_pv = bat_stats.get('ppv', 0) if bat_stats else 0
+                device_type = DeviceType(self.sn_types.get(sn, 2505))
+                device_location = self.sn_locations.get(sn, 'qld')
+                algo_type = self.algo_types.get(sn, 'sell_to_grid')
+                buy_price = self.current_prices[sn]['buy']
+                feedin_price = self.current_prices[sn]['feedin']
+                current_time = current_times.get(sn, '00:00')
+                algo_type = 'sell_to_grid' if device_location == 'qld' else 'cover_usage'
 
-            command = self._get_battery_command(
-                current_buy_price=buy_price,
-                current_feedin_price=feedin_price,
-                current_usage=current_usage,
-                current_time=current_time,
-                current_soc=current_soc,
-                current_pv=current_pv,
-                current_batP=current_batP,
-                device_type=device_type,
-                device_sn=sn,
-                algo_type=algo_type
-            )
+                command = self._get_battery_command(
+                    current_buy_price=buy_price,
+                    current_feedin_price=feedin_price,
+                    current_usage=current_usage,
+                    current_time=current_time,
+                    current_soc=current_soc,
+                    current_pv=current_pv,
+                    current_batP=current_batP,
+                    device_type=device_type,
+                    device_sn=sn,
+                    algo_type=algo_type
+                )
 
-            last_command = self.last_schedule_peakvalley.get(sn, {})
-            c_datetime = datetime.strptime(
-                current_time, '%H:%M')
-            last_command_time = self.last_command_time.get(sn, c_datetime)
-            minute_passed = abs(c_datetime.minute - last_command_time.minute)
+                last_command = self.last_schedule_peakvalley.get(sn, {})
+                c_datetime = datetime.strptime(
+                    current_time, '%H:%M')
+                last_command_time = self.last_command_time.get(sn, c_datetime)
+                minute_passed = abs(c_datetime.minute - last_command_time.minute)
 
-            if command != last_command or minute_passed >= 5:
-                try:
+                if command != last_command or minute_passed >= 5:
                     self.send_battery_command(command=command, sn=sn)
                     self.last_command_time[sn] = c_datetime
                     self.last_schedule_peakvalley[sn] = command
                     logging.info(f"Successfully sent command for {sn}: {command}")
-                except Exception as e:
-                    logging.error(
-                        f"Error sending command for {sn}: {e}")
-            else:
-                logging.info(f"Command Skipped: Command: {command}, Last Command: {last_command}, Time: {c_datetime}, Last Time: {last_command_time}")
-
+                else:
+                    logging.info(f"Command Skipped: Command: {command}, Last Command: {last_command}, Time: {c_datetime}, Last Time: {last_command_time}")
+            except Exception as e:
+                logging.error(f"Error processing sn:{sn}: {e}")
+                logging.error(f"Traceback: {traceback.format_exc()}")
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = [executor.submit(_process_send_cmd_each_sn, sn)
                        for sn in self.sn_list]
@@ -1325,7 +1324,7 @@ if __name__ == '__main__':
     # For Amber Dion (NSW)
     scheduler = BatteryScheduler(
         scheduler_type='PeakValley', battery_sn=[
-                             'RX2505ACA10J0A160010'], test_mode=False, api_version='redx')
+                             'RX2505ACA10J0A160010','011LOKL140104B'], test_mode=False, api_version='redx')
     scheduler.start()
     # time.sleep(300)
     # print('Scheduler started')
