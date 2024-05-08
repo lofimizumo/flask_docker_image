@@ -636,12 +636,21 @@ class PeakValleyScheduler():
         # Discharging logic
         # Turn off the debug flag to use the actual discharging period
         if self._is_discharging_period(current_time, debug=False) and (current_buy_price >= sell_price):
+            anti_backflow = True
             power = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
             device_charge_cost = self.charging_costs.get(device_sn, None)
             if current_feedin_price < device_charge_cost['weighted_charging_cost']:
                 return command
+            
+            # Add dynamic discharging when price is very high
+            anti_backflow_threshold = 60 # This is a provisional value, need to be adjusted
+            if current_feedin_price > anti_backflow_threshold:
+                conf_level = self._discharge_confidence(
+                    current_feedin_price - anti_backflow_threshold)
+                power = max(min(power * conf_level + 900, power), 1000)
+                anti_backflow = False
             command = {'command': 'Discharge', 'power': power,
-                       'anti_backflow': True}
+                       'anti_backflow': anti_backflow}
 
         logging.info(f"AmberModel(Cover Usage) : price: {current_buy_price}, WeightedPrice: {weighted_price}, usage: {current_usage}, "
                      f"time: {current_time}, command: {command}")
