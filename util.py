@@ -595,7 +595,7 @@ class PriceAndLoadMonitor:
             if not hasattr(self, 'last_command_time'):
                 self.last_command_time = {}
 
-            if sn not in self.last_command_time or self.last_command_time[sn] is None or (current_time - self.last_command_time[sn]).total_seconds() >= 1800:
+            if sn not in self.last_command_time or self.last_command_time[sn] is None or (current_time - self.last_command_time[sn]).total_seconds() >= 5400:
                 data['controlCommand'] = command_map['Idle']
                 data['operatingMode'] = mode_map['Time']
                 data['antiBackflowSW'] = anti_backflow_map[True]
