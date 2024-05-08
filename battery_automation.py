@@ -643,7 +643,7 @@ class PeakValleyScheduler():
                 return command
             
             # Add dynamic discharging when price is very high
-            anti_backflow_threshold = 60 # This is a provisional value, need to be adjusted
+            anti_backflow_threshold = 150 # This is a provisional value, need to be adjusted
             if current_feedin_price > anti_backflow_threshold:
                 conf_level = self._discharge_confidence(
                     current_feedin_price - anti_backflow_threshold)
