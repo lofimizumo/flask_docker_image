@@ -1333,7 +1333,7 @@ if __name__ == '__main__':
     # For Amber Dion (NSW)
     scheduler = BatteryScheduler(
         scheduler_type='PeakValley', battery_sn=[
-                             'RX2505ACA10J0A160010','011LOKL140104B'], test_mode=False, api_version='redx')
+                             '011LOKL140104B'], test_mode=False, api_version='redx')
     scheduler.start()
     # time.sleep(300)
     # print('Scheduler started')
