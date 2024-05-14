@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Dict
+from dataclasses import dataclass
 import time
 import numpy as np
 import copy
@@ -16,19 +17,16 @@ import concurrent.futures
 import traceback
 
 
-def load_config(file_path):
-    with open(file_path, 'rb') as file:
-        config = tomli.load(file)
-    return config
-
 class DeviceType(Enum):
     FIVETHOUSAND = 5000
     TWOFIVEZEROFIVE = 2505
     SEVENTHOUSAND = 7000
 
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S')
+
+def load_config(file_path):
+    with open(file_path, 'rb') as file:
+        config = tomli.load(file)
+    return config
 
 
 class BatteryScheduler:
@@ -57,6 +55,7 @@ class BatteryScheduler:
         project_mode: str, the mode of the project of AI scheduler, e.g., 'Peak Shaving', 'Money Saving', 'Normal'
         '''
         self.config = load_config(config)
+        self.logger = logging.getLogger('logger')
         self.scheduler = None
         self.monitor = util.PriceAndLoadMonitor(
             test_mode=test_mode, api_version=api_version)
@@ -110,7 +109,7 @@ class BatteryScheduler:
     def _make_battery_decision(self):
         while True:
             if not self.is_running:
-                logging.info("Exiting the battery scheduler...")
+                self.logger.info("Exiting the battery scheduler...")
                 return
 
             try:
@@ -125,11 +124,12 @@ class BatteryScheduler:
                 time.sleep(self.sample_interval)
                 self._make_battery_decision()
 
-    def _seconds_to_next_n_minutes(self,current_time, n=5):
-        # logging.info(
+    def _seconds_to_next_n_minutes(self, current_time, n=5):
+        # self.logger.info(
         #     f"Calculating seconds until the next {n}-minute interval...")
         next_time = current_time + timedelta(minutes=n)
-        next_time = next_time.replace(minute=(next_time.minute // n) * n, second=0, microsecond=0)
+        next_time = next_time.replace(
+            minute=(next_time.minute // n) * n, second=0, microsecond=0)
         time_diff = next_time - current_time
         seconds_to_wait = time_diff.total_seconds()
         return int(seconds_to_wait)
@@ -137,35 +137,37 @@ class BatteryScheduler:
     def _collect_amber_prices(self):
         while True:
             try:
-                logging.info("Updating Amber Prices...")
+                self.logger.info("Updating Amber Prices...")
                 self._update_prices('amber')
                 # Amber updates prices every 2 minutes
-                delay = self._seconds_to_next_n_minutes(current_time=datetime.now(pytz.timezone('Australia/Brisbane')), n=2)
+                delay = self._seconds_to_next_n_minutes(
+                    current_time=datetime.now(pytz.timezone('Australia/Brisbane')), n=2)
                 time.sleep(delay)
             except Exception as e:
                 logging.error(
                     f"An exception occurred while updating Amber Prices: {str(e)}")
-                time.sleep(5)  
+                time.sleep(5)
 
     def _collect_localvolts_prices(self):
         while True:
             try:
-                logging.info("Updating LocalVolts Prices...")
-                logging.info("Now: " + str(datetime.now()))
+                self.logger.info("Updating LocalVolts Prices...")
+                self.logger.info("Now: " + str(datetime.now()))
                 quality = self._update_prices('lv')
                 if quality:
                     # Local Volts updates prices every 5 minutes
-                    current_time=datetime.now(pytz.timezone('Australia/Brisbane'))
+                    current_time = datetime.now(
+                        pytz.timezone('Australia/Brisbane'))
                     delay = self._seconds_to_next_n_minutes(current_time, n=5)
                     # add 30 seconds to make sure the price is updated on Local Volts
                     delay = delay + 30
-                    logging.info(
+                    self.logger.info(
                         f"Next Price Update at: {current_time + timedelta(seconds=delay)}")
                     time.sleep(delay)
                 else:
-                    logging.info(
+                    self.logger.info(
                         "Quality is not good or Error happened, waiting for 10 seconds...")
-                    time.sleep(10)  
+                    time.sleep(10)
             except Exception as e:
                 logging.error(
                     f"An exception occurred while updating LocalVolts Prices: {str(e)}")
@@ -182,11 +184,11 @@ class BatteryScheduler:
 
             if data and quality:
                 self.current_prices[sn]['buy'], self.current_prices[sn]['feedin'] = data
-                logging.info(
+                self.logger.info(
                     f'Price for {sn}({retailer}) updated: {self.current_prices[sn]}')
                 return True
             else:
-                logging.info(
+                self.logger.info(
                     f'Bad Quality: Got forecasted or invalid price for {sn}({retailer}) or price update failed, e.g. too many requests.')
                 return False
 
@@ -213,13 +215,13 @@ class BatteryScheduler:
             schedule, load, current_time)
         schedule = self.scheduler.daytime_hotfix_charging(
             schedule, load, current_time)
-        logging.info(f"Schedule: {schedule}")
+        self.logger.info(f"Schedule: {schedule}")
 
         for sn in self.sn_list:
             battery_schedule = schedule.get(sn, {})
             last_battery_schedule = self.last_schedule_ai.get(sn, {})
             if all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in battery_schedule) and all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in last_battery_schedule):
-                # logging.info(f"Schedule for {sn} is the same as the last one, skip sending command.")
+                # self.logger.info(f"Schedule for {sn} is the same as the last one, skip sending command.")
                 continue
             try:
                 thread = Thread(target=self.send_battery_command,
@@ -242,7 +244,8 @@ class BatteryScheduler:
                 bat_stats = self.get_current_battery_stats(sn)
                 current_batP = bat_stats.get('batP', 0) if bat_stats else 0
                 current_usage = bat_stats.get('loadP', 0) if bat_stats else 0
-                current_soc = bat_stats.get('soc', 0) / 100.0 if bat_stats else 0
+                current_soc = bat_stats.get(
+                    'soc', 0) / 100.0 if bat_stats else 0
                 current_pv = bat_stats.get('ppv', 0) if bat_stats else 0
                 device_type = DeviceType(self.sn_types.get(sn, 2505))
                 device_location = self.sn_locations.get(sn, 'qld')
@@ -269,15 +272,18 @@ class BatteryScheduler:
                 c_datetime = datetime.strptime(
                     current_time, '%H:%M')
                 last_command_time = self.last_command_time.get(sn, c_datetime)
-                minute_passed = abs(c_datetime.minute - last_command_time.minute)
+                minute_passed = abs(c_datetime.minute -
+                                    last_command_time.minute)
 
                 if command != last_command or minute_passed >= 5:
-                    self.send_battery_command(command=command, sn=sn)
+                    # self.send_battery_command(command=command, sn=sn)
                     self.last_command_time[sn] = c_datetime
                     self.last_schedule_peakvalley[sn] = command
-                    logging.info(f"Successfully sent command for {sn}: {command}")
+                    self.logger.info(
+                        f"Successfully sent command for {sn}: {command}")
                 else:
-                    logging.info(f"Command Skipped: Command: {command}, Last Command: {last_command}, Time: {c_datetime}, Last Time: {last_command_time}")
+                    self.logger.info(
+                        f"Command Skipped: Command: {command}, Last Command: {last_command}, Time: {c_datetime}, Last Time: {last_command_time}")
             except Exception as e:
                 logging.error(f"Error processing sn:{sn}: {e}")
                 logging.error(f"Traceback: {traceback.format_exc()}")
@@ -305,7 +311,12 @@ class BatteryScheduler:
 
     def stop(self):
         self.is_runing = False
-        logging.info("Stopped.")
+        self.logger.info("Stopped.")
+    
+    def get_logs(self):
+        with open('logs.txt', 'r') as file:
+            logs = file.read()
+        return logs
 
     def _init_device_profiles(self, sn):
         self.current_prices[sn] = {'buy': 0.0, 'feedin': 0.0}
@@ -315,12 +326,12 @@ class BatteryScheduler:
         if sn not in self.sn_list:
             self.sn_list.append(sn)
             self._init_device_profiles(sn)
-            logging.info(f"Added device {sn} to the scheduler.")
+            self.logger.info(f"Added device {sn} to the scheduler.")
 
     def remove_amber_device(self, sn):
         if sn in self.sn_list:
             self.sn_list.remove(sn)
-            logging.info(f"Removed device {sn} from the scheduler.")
+            self.logger.info(f"Removed device {sn} from the scheduler.")
 
     def get_current_price(self, location='qld', retailer='amber'):
         return self.monitor.get_realtime_price(location=location, retailer=retailer)
@@ -350,10 +361,37 @@ class BatteryScheduler:
             peak_valley_command=command, json=json, sn=sn)
 
 
+@dataclass
+class ChargingPoint:
+    '''
+    Charging Points:
+    ================
+    Each charging point represents a specific point in time during the charging process.
+    Charging Points is used to calculate the weighted price.
+    '''
+    charging_price: float
+    grid_charge_power: float
+    battery_charge_power: float
+
+
+@dataclass
+class DayChargingData:
+    '''
+    Day Charging Data:
+    ==================
+    Store the charging data of a device for a specific day.
+    '''
+    last_soc: float
+    date: str
+    charging_points: list[ChargingPoint]
+    weighted_charging_cost: float
+
+
 class PeakValleyScheduler():
     def __init__(self, config_path='config.toml', monitor=None):
         peak_valley_config = load_config(config_path)['peakvalley']
         self.config = load_config(config_path)
+        self.logger = logging.getLogger('logger')
         self.monitor = monitor
         self.BatNum = peak_valley_config['BatNum']
         self.BatMaxCapacity = peak_valley_config['BatMaxCapacity']
@@ -418,13 +456,16 @@ class PeakValleyScheduler():
             self.PeakEnd, '%H:%M').time()
 
     def init_device_charge_cost(self, device_sn):
-        self.charging_costs[device_sn] = {
-            'last_soc': 10,
-            'charging_costs': [],
-            'grid_charged': [],
-            'total_charged': [],
-            'weighted_charging_cost': 5
-        }
+        self.charging_costs[device_sn] = DayChargingData(
+            last_soc=0.0,
+            date=datetime.now().strftime('%Y-%m-%d'),
+            charging_points=[ChargingPoint(
+                charging_price=0.0,
+                grid_charge_power=0.0,
+                battery_charge_power=0.0
+            )],
+            weighted_charging_cost=0.0
+        )
 
     def init_price_history(self, sn):
         price_history = self.monitor.get_price_history(
@@ -459,7 +500,7 @@ class PeakValleyScheduler():
                 # here we give clouds more weight than rain based on the assumption that clouds have a bigger impact on solar generation
                 max_solar = (
                     1-(1.4*rain_info['clouds']+0.6*rain_info['rain'])/(2*100))*max_solar
-                logging.info(
+                self.logger.info(
                     f'Weather forecast: rain: {rain_info["rain"]}, clouds: {rain_info["clouds"]}, max_solar: {max_solar}')
             except Exception as e:
                 logging.error(e)
@@ -480,7 +521,7 @@ class PeakValleyScheduler():
         conf_level = 0.97 - 0.8824 * math.exp(-0.033 * current_price)
         return conf_level
 
-    def _algo_sell_to_grid(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type:DeviceType, device_sn):
+    def _algo_sell_to_grid(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type: DeviceType, device_sn):
         # Update price history
         current_time = datetime.strptime(current_time, '%H:%M').time()
         price_history = self.price_historys.get(device_sn, None)
@@ -527,12 +568,12 @@ class PeakValleyScheduler():
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': anti_backflow}
 
-        logging.info(f"AmberModel (Sell to Grid): price: {current_buy_price}, sell price: {sell_price}, usage: {current_usage}, "
-                     f"time: {current_time}, command: {command}")
+        self.logger.info(f"AmberModel (Sell to Grid): price: {current_buy_price}, sell price: {sell_price}, usage: {current_usage}, "
+                         f"time: {current_time}, command: {command}")
 
         return command
 
-    def _algo_auto_time(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type:DeviceType, device_sn):
+    def _algo_auto_time(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type: DeviceType, device_sn):
         # Use the Auto Mode (Now actually we are using charge with solar only, not using the auto mode) in the morning charging, and the Time Mode in the afternoon discharging
         # Update price history
         current_time = datetime.strptime(current_time, '%H:%M').time()
@@ -572,12 +613,12 @@ class PeakValleyScheduler():
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': False}
 
-        logging.info(f"AmberModel (Auto-Time): price: {current_buy_price}, usage: {current_usage}, "
-                     f"time: {current_time}, command: {command}")
+        self.logger.info(f"AmberModel (Auto-Time): price: {current_buy_price}, usage: {current_usage}, "
+                         f"time: {current_time}, command: {command}")
 
         return command
 
-    def _algo_cover_usage(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type:DeviceType, device_sn):
+    def _algo_cover_usage(self, current_buy_price, current_feedin_price, current_time, current_usagekW, current_soc, current_pvkW, current_batpowerkW, device_type: DeviceType, device_sn):
         # Update price history
         current_time = datetime.strptime(current_time, '%H:%M').time()
         price_history = self.price_historys[device_sn]
@@ -608,54 +649,66 @@ class PeakValleyScheduler():
         # Init the WeightedPrice (Charging Cost) for the device
         if device_sn not in self.charging_costs:
             self.init_device_charge_cost(device_sn)
-        if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pv > current_usage)):
+        if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pvkW > current_usagekW)):
             maxpower, minpower = self._get_power_limits(device_type)
-            power, grid_charge = self._calculate_charging_power(
-                current_time, current_pv, current_usage, minpower, maxpower, current_buy_price <= buy_price)
+            powerkW, grid_charge = self._calculate_charging_power(
+                current_time, current_pvkW, current_usagekW, minpower, maxpower, current_buy_price <= buy_price)
             command = {'command': 'Charge',
-                       'power': power, 'grid_charge': grid_charge}
+                       'power': powerkW, 'grid_charge': grid_charge}
             # Update the weighted charging costs
-            charge_power = -current_batP
-            device_charge_cost = self.charging_costs.get(device_sn, None)
-            excess_energy = max(0, current_pv - current_usage)
-            grid_charged = max(0, charge_power - excess_energy)
-            max_length = 60  # Set the maximum length of the arrays (5 hours)
-            if len(device_charge_cost['charging_costs']) == max_length:
-                device_charge_cost['charging_costs'].pop(0)
-                device_charge_cost['grid_charged'].pop(0)
-                device_charge_cost['total_charged'].pop(0)
-            device_charge_cost['charging_costs'].append(current_buy_price)
-            device_charge_cost['grid_charged'].append(grid_charged)
-            device_charge_cost['total_charged'].append(charge_power)
-            device_charge_cost['weighted_charging_cost'] = np.multiply(np.array(device_charge_cost['charging_costs']), np.array(
-                device_charge_cost['grid_charged'])).sum()/(np.array(device_charge_cost['total_charged']).sum()+1e-6)
+            charge_powerkW = -current_batpowerkW
+            self.update_weightedPrice(
+                current_buy_price, current_usagekW, current_pvkW, device_sn, charge_powerkW)
 
         device_charge_cost = self.charging_costs.get(device_sn, None)
-        weighted_price = device_charge_cost['weighted_charging_cost'] if device_charge_cost else None
+        weighted_price = device_charge_cost.weighted_charging_cost if device_charge_cost else None
 
         # Discharging logic
         # Turn off the debug flag to use the actual discharging period
-        if self._is_discharging_period(current_time, debug=False) and (current_buy_price >= sell_price):
+        if self._is_discharging_period(current_time, debug=False) and (current_feedin_price >= weighted_price):
             anti_backflow = True
-            power = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
+            powerkW = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
             device_charge_cost = self.charging_costs.get(device_sn, None)
-            if current_feedin_price < device_charge_cost['weighted_charging_cost']:
-                return command
-            
+
             # Add dynamic discharging when price is very high
-            anti_backflow_threshold = 150 # This is a provisional value, need to be adjusted
+            anti_backflow_threshold = 150  # This is a provisional value, need to be adjusted
             if current_feedin_price > anti_backflow_threshold:
                 conf_level = self._discharge_confidence(
                     current_feedin_price - anti_backflow_threshold)
-                power = max(min(power * conf_level + 900, power), 1000)
+                powerkW = max(min(powerkW * conf_level + 900, powerkW), 1000)
                 anti_backflow = False
-            command = {'command': 'Discharge', 'power': power,
+            command = {'command': 'Discharge', 'power': powerkW,
                        'anti_backflow': anti_backflow}
 
-        logging.info(f"AmberModel(Cover Usage) : price: {current_buy_price}, WeightedPrice: {weighted_price}, usage: {current_usage}, "
-                     f"time: {current_time}, command: {command}")
+        self.logger.info(f"AmberModel(Cover Usage) : price: {current_buy_price}, WeightedPrice: {weighted_price}, usage: {current_usagekW}, "
+                         f"time: {current_time}, command: {command}")
 
         return command
+
+    def update_weightedPrice(self, current_buy_price, current_usagekW, current_pvkW, device_sn, charge_powerkW):
+        device_charge_cost = self.charging_costs.get(device_sn, None)
+
+        # Ensure the stored charge_cost is only for the current day
+        now_date_str = datetime.now().strftime('%Y-%m-%d')
+        if now_date_str != device_charge_cost.date:
+            self.init_device_charge_cost(device_sn)
+
+        excess_energy = max(0, current_pvkW - current_usagekW)
+        grid_charge_power = max(0, charge_powerkW - excess_energy)
+        device_charge_cost.charging_points.append(ChargingPoint(
+            charging_price=current_buy_price,
+            grid_charge_power=grid_charge_power,
+            battery_charge_power=charge_powerkW
+        ))
+        charging_prices = [
+            point.charging_price for point in device_charge_cost.charging_points]
+        grid_charge_powers = [
+            point.grid_charge_power for point in device_charge_cost.charging_points]
+        battery_charge_powers = [
+            point.battery_charge_power for point in device_charge_cost.charging_points]
+
+        device_charge_cost.weighted_charging_cost = np.multiply(np.array(charging_prices), np.array(
+            grid_charge_powers)).sum()/(np.array(battery_charge_powers).sum() + 1e-6)
 
     def step(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn, algo_type='sell_to_grid'):
         if algo_type == 'sell_to_grid':
@@ -714,6 +767,7 @@ class PeakValleyScheduler():
 class AIScheduler():
 
     def __init__(self, sn_list, pv_sn, api_version='redx', phase=2, mode='normal'):
+        self.logger = logging.getLogger('logger')
         self.battery_max_capacity_kwh = 5
         if sn_list is None:
             raise ValueError('sn_list is None')
@@ -742,7 +796,7 @@ class AIScheduler():
                                                                                )
         except Exception as e:
             demand, price = pickle.load(open('demand_price.pkl', 'rb'))
-            logging.info(
+            self.logger.info(
                 f'Error fetching demand with get_prediction API, use the default demand instead. Error: {e}')
 
         interval = int(24*60/len(demand))
@@ -806,7 +860,7 @@ class AIScheduler():
                 sigma = 0.5
                 max_solar = (
                     1-sigma*(1.4*rain_info['clouds']+0.6*rain_info['rain'])/(2*100))*max_solar
-                logging.info(
+                self.logger.info(
                     f'Weather forecast: rain: {rain_info["rain"]}, clouds: {rain_info["clouds"]}, max_solar: {max_solar}')
             except Exception as e:
                 logging.error(e)
@@ -852,7 +906,7 @@ class AIScheduler():
                 adjusted_charging_power = max(
                     adjusted_charging_power*0.6, self.battery_original_charging_powers.get(sn, 800))
                 difference = original_charging_power - adjusted_charging_power
-                # logging.info(
+                # self.logger.info(
                 # f'No surplus power, return original charging power for: {sn}')
                 schedule[sn]['chargePower1'] = adjusted_charging_power
                 power_now += difference
@@ -890,7 +944,7 @@ class AIScheduler():
                 schedule[sn]['chargeStart1'] = current_time_str
                 if schedule[sn]['chargeEnd1'] < end_30mins_later_str:
                     schedule[sn]['chargeEnd1'] = end_30mins_later_str
-                # logging.info(
+                # self.logger.info(
                 #     f'Increased charging power for Device: {sn} by {adjusted_charging_power - current_charging_power}W due to excess solar power.')
         return schedule
 
@@ -906,7 +960,7 @@ class AIScheduler():
             return schedule
 
         if load >= threshold_peak_bound:
-            # logging.info(
+            # self.logger.info(
             #     f"Load is above peak threshold: {load}, Start increasing discharge power")
             for sn in self.sn_list:
                 start_time = datetime.strptime(
@@ -915,20 +969,20 @@ class AIScheduler():
                     schedule[sn]['dischargeEnd1'], '%H:%M')
                 end_time_str = schedule[sn]['dischargeEnd1']
                 if start_time > current_time:
-                    # logging.info(
+                    # self.logger.info(
                     #     f'--Device: {sn} is not in discharging period, skip.')
                     continue
                 if end_time < current_time:
                     end_time = current_time + timedelta(minutes=30)
                     end_time_str = end_time.strftime('%H:%M')
                     schedule[sn]['dischargeEnd1'] = end_time_str
-                # logging.info(
+                # self.logger.info(
                 #     f'Peak: Maximized discharging power for Device: {sn} by 30 minutes.')
                 schedule[sn]['dischargePower1'] = 2000
             return schedule
 
         if load >= threshold_upper_bound:
-            # logging.info(
+            # self.logger.info(
             #     f"Load is above upper threshold: {load}, Start increasing discharge power")
             for sn in self.sn_list:
                 start_time = datetime.strptime(
@@ -939,7 +993,7 @@ class AIScheduler():
                 if load_now <= threshold_upper_bound:
                     break
                 if not start_time <= current_time <= end_time:
-                    # logging.info(
+                    # self.logger.info(
                     #     f'--Device: {sn} is not in discharging period, skip.')
                     continue
                 increased_power = schedule.get(
@@ -947,13 +1001,13 @@ class AIScheduler():
                 increased_power = min(
                     700+increased_power, self.battery_original_discharging_powers.get(sn, 1000))
                 difference = increased_power - schedule[sn]['dischargePower1']
-                # logging.info(
+                # self.logger.info(
                 #     f'--Increased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {increased_power}')
                 schedule[sn]['dischargePower1'] = increased_power
                 load_now -= difference
 
         elif load <= threshold_lower_bound:
-            # logging.info(
+            # self.logger.info(
             #     f'Load is below lower threshold: {load}, Start lowering discharge power')
             for sn in self.sn_list:
                 start_time = datetime.strptime(
@@ -964,14 +1018,14 @@ class AIScheduler():
                 if load_now >= threshold_lower_bound:
                     break
                 if not start_time <= current_time <= end_time:
-                    # logging.info(
+                    # self.logger.info(
                     #     f'--Device: {sn} is not in discharging period, skip.')
                     continue
                 decreased_power = schedule.get(
                     sn, {}).get('dischargePower1', 0)
                 decreased_power = 0 if 0.5*decreased_power < 200 else 0.5*decreased_power
                 difference = schedule[sn]['dischargePower1'] - decreased_power
-                # logging.info(
+                # self.logger.info(
                 #     f'--Decreased discharge power for Device: {sn} by {difference}W. from: {schedule[sn]["dischargePower1"]}, to: {decreased_power}')
                 schedule[sn]['dischargePower1'] = decreased_power
                 load_now += difference
@@ -1221,12 +1275,6 @@ class AIScheduler():
                 return False
 
             def manage_tasks(self):
-                for task_type, task_time, task_duration in self.tasks:
-                    # logging.info(
-                    # f'try to allocate a battery for: (task_type: {task_type}, task_time: {task_time}, task_duration: {task_duration}))')
-                    if not self.allocate_battery(task_time, task_type, task_duration):
-                        logging.info(
-                            f'task {task_time} {task_type} {task_duration} failed to allocate battery')
 
                 def unit_to_time(unit, sample_interval):
                     total_minutes = int(unit * sample_interval)
@@ -1287,14 +1335,13 @@ class AIScheduler():
     def _get_command_from_schedule(self, current_time):
         return 'Idle'
 
-
     def step(self):
         current_day = datetime.now(tz=pytz.timezone('Australia/Sydney')).day
         if self.last_scheduled_date != current_day:
-            logging.info(
+            self.logger.info(
                 f'Updating schedule: day {current_day}, time: {datetime.now(tz=pytz.timezone("Australia/Sydney"))}, last_scheduled_date: {self.last_scheduled_date}')
             demand, price = self._get_demand_and_price()
-            logging.info(f'demand: {demand}')
+            self.logger.info(f'demand: {demand}')
             stats = self._get_battery_status()
             self.schedule = self.generate_schedule(
                 demand, price, self.battery_max_capacity_kwh, self.num_batteries, stats, self.price_weight)
@@ -1333,7 +1380,7 @@ if __name__ == '__main__':
     # For Amber Dion (NSW)
     scheduler = BatteryScheduler(
         scheduler_type='PeakValley', battery_sn=[
-                             '011LOKL140104B'], test_mode=False, api_version='redx')
+            '011LOKL140104B'], test_mode=False, api_version='redx')
     scheduler.start()
     # time.sleep(300)
     # print('Scheduler started')

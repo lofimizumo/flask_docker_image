@@ -153,6 +153,11 @@ def stop_ai_scheduler_phase1():
     else:
         return jsonify(status='error', message='Shawsbay_Phase_1 Scheduler is not running'), 404
 
+@app.route('/logs', methods=['GET'])
+def get_logs():
+    if scheduler_amber is None:
+        return jsonify(status='error', message='Scheduler not running'), 400
+    return jsonify(scheduler_amber.get_logs())
 # @app.route('/cost_savings', methods=['POST'])
 # def route_cost_savings():
 #     data = request.get_json()

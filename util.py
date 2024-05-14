@@ -14,11 +14,20 @@ def load_config(file_path='config.toml'):
         config = tomli.load(file)
     return config
 
+def setup_logger(logger_name, log_file, level=logging.info):
+    logger = logging.getLogger(logger_name)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    fileHandler = logging.FileHandler(log_file, mode='a')
+    fileHandler.setFormatter(formatter)
+    streamHandler = logging.StreamHandler()
+    streamHandler.setFormatter(formatter)
 
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S')
+    logger.setLevel(level)
+    logger.addHandler(fileHandler)
+    logger.addHandler(streamHandler)
 
+setup_logger('logger', 'logs.txt', logging.INFO)
+logger = logging.getLogger('logger')
 
 def api_status_check(max_retries=10, delay=10):
     """
@@ -71,18 +80,18 @@ def api_status_check(max_retries=10, delay=10):
             for attempt in range(max_retries):
                 response = func(*args, **kwargs)
                 if not check_response(response):
-                    logging.error(f"Attempt {attempt + 1} failed, retrying...")
+                    logger.error(f"Attempt {attempt + 1} failed, retrying...")
                     time.sleep(delay)  # Sleep for some time before retrying
                 else:
                     # logging.info("Status successfully changed!")
                     return response
-            logging.error(
+            logger.error(
                 "Max retry limit reached! Stopping further attempts.")
             return response
 
         def check_response(response):
             if response is None or not isinstance(response, dict):
-                logging.error(f"Invalid response: {response}")
+                logger.error(f"Invalid response: {response}")
                 return False
             return True
 
@@ -99,7 +108,7 @@ def api_status_check(max_retries=10, delay=10):
             # Send an API request to check the status
             status_response = api.send_request('device/get_latest_data', method='POST', json={
                 'deviceSn': sn}, headers={'token': token})
-            logging.info(f"Status: {status_response['data']['showStatus']}")
+            logger.info(f"Status: {status_response['data']['showStatus']}")
 
             if _is_command_expected(status_response['data']['showStatus'], expected_status):
                 return True
@@ -155,7 +164,7 @@ class PriceAndLoadMonitor:
             cast_prices = [float(x) for x in prices[0]]
             is_expected_data = r.json()[0]['quality'] == 'Exp'
         except Exception as e:
-            logging.error(f"Failed to get price data: {e}")
+            logger.error(f"Failed to get price data: {e}")
             return None, False
         return cast_prices, is_expected_data
     
@@ -175,7 +184,7 @@ class PriceAndLoadMonitor:
         # True means it's expected data, Amber doesn't have forecast data, so we always return True
             return (prices[0], -prices[1]), True
         except Exception as e:
-            logging.error(f"Failed to get price data: {e}")
+            logger.error(f"Failed to get price data: {e}")
             return None, False
 
     def get_price_history(self, location='qld'):
@@ -356,7 +365,7 @@ class PriceAndLoadMonitor:
         response = self.api.send_request(
             "grid/get_meter_reading", method='POST', json=data, headers=headers)
         self.get_meter_reading_stats_call_count += 1
-        # logging.info(f'get_prediction_v2_api called: {self.get_meter_reading_stats_call_count}')
+        # logger.info(f'get_prediction_v2_api called: {self.get_meter_reading_stats_call_count}')
         if response is None:
             raise Exception('Get meter reading API failed')
         return response['data'][f'phase{phase}']
@@ -384,7 +393,7 @@ class PriceAndLoadMonitor:
                     "grid/get_prediction_v2", method='POST', json=data, headers=headers)
 
             if response.get('data') is None:
-                logging.error(
+                logger.error(
                     f"Failed to get prediction data, retrying... Attempt {retry_count + 1}")
                 time.sleep(180)
         prediction_average = [
@@ -416,7 +425,7 @@ class PriceAndLoadMonitor:
                 "device/get_params", method='POST', json=data, headers=headers)
             return response
         except ConnectionError as e:
-            logging.error(f"Connection error occurred: {e}")
+            logger.error(f"Connection error occurred: {e}")
             return None
 
     def set_antibackflow_register(self, data):
@@ -432,7 +441,7 @@ class PriceAndLoadMonitor:
                 headers=headers
             )
         except Exception as e:
-            logging.error(f"Set Anti-backflow: unexpected error occurred: {e}")
+            logger.error(f"Set Anti-backflow: unexpected error occurred: {e}")
             response = None
         return response
 
@@ -459,10 +468,10 @@ class PriceAndLoadMonitor:
                         headers=headers
                     )
         except ConnectionError as e:
-            logging.error(f"Connection error occurred: {e}")
+            logger.error(f"Connection error occurred: {e}")
             response = None
         except Exception as e:
-            logging.error(f"An unexpected error occurred: {e}")
+            logger.error(f"An unexpected error occurred: {e}")
             response = None
         return response
 
@@ -489,10 +498,10 @@ class PriceAndLoadMonitor:
                         headers=headers
                     )
         except ConnectionError as e:
-            logging.error(f"Connection error occurred: {e}")
+            logger.error(f"Connection error occurred: {e}")
             response = None
         except Exception as e:
-            logging.error(f"An unexpected error occurred: {e}")
+            logger.error(f"An unexpected error occurred: {e}")
             response = None
         return response
 
@@ -607,7 +616,7 @@ class PriceAndLoadMonitor:
 
         # Check if the device is on VPP mode
         if self.is_VPP_on(sn):
-            logging.info(f"Device {sn} is on VPP mode, skipping...")
+            logger.info(f"Device {sn} is on VPP mode, skipping...")
             return {'status': 'VPP mode', 'message': 'Device is on VPP mode, skipping...'}
 
         data = {}
@@ -634,7 +643,7 @@ class PriceAndLoadMonitor:
             response = self.api.send_request(
                 "device/set_params", method='POST', json=data, headers=headers)
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"An unexpected error occurred at sending command: {e}")
             response = None
 
@@ -675,7 +684,7 @@ class ApiCommunicator:
                 if e.response is not None and e.response.status_code == 504:
                     return None 
                 else:
-                    logging.error(
+                    logger.error(
                         f"Failed to connect to {url}. Retrying...")
 
         raise ConnectionError(
