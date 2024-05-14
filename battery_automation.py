@@ -276,7 +276,7 @@ class BatteryScheduler:
                                     last_command_time.minute)
 
                 if command != last_command or minute_passed >= 5:
-                    # self.send_battery_command(command=command, sn=sn)
+                    self.send_battery_command(command=command, sn=sn)
                     self.last_command_time[sn] = c_datetime
                     self.last_schedule_peakvalley[sn] = command
                     self.logger.info(
@@ -1274,27 +1274,16 @@ class AIScheduler():
                         return True
                 return False
 
-            def manage_tasks(self):
-
+            def generate_json_commands(self):
+                for task_type, task_time, task_duration in self.tasks:
+                    if not self.allocate_battery(task_time, task_type, task_duration):
+                        logging.info(
+                            f'task {task_time} {task_type} {task_duration} failed to allocate battery')
                 def unit_to_time(unit, sample_interval):
                     total_minutes = int(unit * sample_interval)
                     hour = total_minutes // 60
                     minute = total_minutes % 60
                     return "{:02d}:{:02d}".format(hour, minute)
-
-                command_map = {
-                    'Idle': 3,
-                    'Charge': 2,
-                    'Discharge': 1,
-                    'Clear Fault': 4,
-                    'Power Off': 5,
-                }
-
-                mode_map = {
-                    'Auto': 0,
-                    'Vpp': 1,
-                    'Time': 2,
-                }
 
                 schedules = {}
                 for sn, task_time, task_type, task_duration in self.output:
@@ -1328,7 +1317,7 @@ class AIScheduler():
         sample_interval = 24*60/len(consumption)
         battery_manager = ProjectBatteryManager(
             tasks, stats, self.battery_max_capacity_kwh, sample_interval)
-        json_schedule = battery_manager.manage_tasks()
+        json_schedule = battery_manager.generate_json_commands()
 
         return json_schedule
 
@@ -1357,13 +1346,13 @@ class AIScheduler():
 
 if __name__ == '__main__':
     # For Phase 2
-    # scheduler = BatteryScheduler(
-    #     scheduler_type='AIScheduler',
-    #     battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'],
-    #     test_mode=False,
-    #     api_version='redx',
-    #     pv_sn=['RX2505ACA10J0A170033'],
-    #     phase=2)
+    scheduler = BatteryScheduler(
+        scheduler_type='AIScheduler',
+        battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'],
+        test_mode=False,
+        api_version='redx',
+        pv_sn=['RX2505ACA10J0A170033'],
+        phase=2)
 
     # For Phase 3
     # scheduler = BatteryScheduler(
@@ -1378,9 +1367,9 @@ if __name__ == '__main__':
     # For Amber Johnathan (QLD)
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
-    scheduler = BatteryScheduler(
-        scheduler_type='PeakValley', battery_sn=[
-            '011LOKL140104B'], test_mode=False, api_version='redx')
+    # scheduler = BatteryScheduler(
+    #     scheduler_type='PeakValley', battery_sn=[
+    #         '011LOKL140104B'], test_mode=False, api_version='redx')
     scheduler.start()
     # time.sleep(300)
     # print('Scheduler started')
