@@ -1344,13 +1344,13 @@ class AIScheduler():
 
 if __name__ == '__main__':
     # For Phase 2
-    scheduler = BatteryScheduler(
-        scheduler_type='AIScheduler',
-        battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'],
-        test_mode=False,
-        api_version='redx',
-        pv_sn=['RX2505ACA10J0A170033'],
-        phase=2)
+    # scheduler = BatteryScheduler(
+    #     scheduler_type='AIScheduler',
+    #     battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'],
+    #     test_mode=False,
+    #     api_version='redx',
+    #     pv_sn=['RX2505ACA10J0A170033'],
+    #     phase=2)
 
     # For Phase 3
     # scheduler = BatteryScheduler(
@@ -1365,9 +1365,9 @@ if __name__ == '__main__':
     # For Amber Johnathan (QLD)
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
-    # scheduler = BatteryScheduler(
-    #     scheduler_type='PeakValley', battery_sn=[
-    #         '011LOKL140104B'], test_mode=False, api_version='redx')
+    scheduler = BatteryScheduler(
+        scheduler_type='PeakValley', battery_sn=[
+            '011LOKL140104B'], test_mode=False, api_version='redx')
     scheduler.start()
     # time.sleep(300)
     # print('Scheduler started')
