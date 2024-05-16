@@ -557,7 +557,7 @@ class PeakValleyScheduler():
                        'power': power, 'grid_charge': grid_charge}
 
         # Discharging logic
-        if self._is_discharging_period(current_time) and (current_buy_price >= sell_price):
+        if self._is_discharging_period(current_time) and (current_buy_price >= sell_price) and current_soc > 0.1:
             power = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
             anti_backflow_threshold = np.percentile(
                 price_history, self.PeakPct)
@@ -608,7 +608,7 @@ class PeakValleyScheduler():
                        'power': power, 'grid_charge': grid_charge}
 
         # Discharging logic
-        if self._is_discharging_period(current_time) and (current_buy_price >= sell_price):
+        if self._is_discharging_period(current_time) and (current_buy_price >= sell_price) and current_soc > 0.1:
             power = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': False}
@@ -665,7 +665,7 @@ class PeakValleyScheduler():
 
         # Discharging logic
         # Turn off the debug flag to use the actual discharging period
-        if self._is_discharging_period(current_time, debug=False) and (current_feedin_price >= weighted_price):
+        if self._is_discharging_period(current_time, debug=False) and (current_feedin_price >= weighted_price) and current_soc > 0.1:
             anti_backflow = True
             powerkW = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
             device_charge_cost = self.charging_costs.get(device_sn, None)
@@ -737,8 +737,8 @@ class PeakValleyScheduler():
         excess_solar = 1000 * (current_pv - current_usage)
 
         if excess_solar > 0:
-            power = maxpower
-            grid_charge = False
+            power = max(minpower, min(excess_solar, maxpower))
+            grid_charge = True
             return power, grid_charge
 
         if low_price:
@@ -775,8 +775,6 @@ class AIScheduler():
         self.price_weight = 1
         self.min_discharge_rate_kw = 1.25
         self.max_discharge_rate_kw = 2.5
-        self.api = util.ApiCommunicator(
-            'https://da2e586eae72a40e5bde4ead0fe77b2f0.clg07azjl.paperspacegradient.com/')
         self.sn_list = sn_list
         self.pv_sn = pv_sn
         self.project_phase = phase
@@ -792,7 +790,7 @@ class AIScheduler():
         # we don't need to get each battery's demand, just use the get_project_demand() method to get the total demand instead.
         # take the first battery monitor from the list
         try:
-            demand = self.battery_monitors[self.sn_list[0]].get_project_demand(phase=self.project_phase
+            demand = self.battery_monitors[self.sn_list[0]].get_project_demand_pred(phase=self.project_phase
                                                                                )
         except Exception as e:
             demand, price = pickle.load(open('demand_price.pkl', 'rb'))

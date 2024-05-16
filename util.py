@@ -7,6 +7,7 @@ from itertools import cycle
 import logging
 import tomli
 import os
+from algorithms import DemandPredictorFactory
 
 
 def load_config(file_path='config.toml'):
@@ -370,7 +371,18 @@ class PriceAndLoadMonitor:
             raise Exception('Get meter reading API failed')
         return response['data'][f'phase{phase}']
 
-    def get_project_demand(self, grid_ID=1, phase=2):
+    def get_device_demand_pred(self, sn):
+        factory = DemandPredictorFactory('config.toml')
+        model = factory.get_demand_predictor(sn)
+        return model.predict()
+    
+    def get_device_price_pred(self, sn):
+        raise NotImplementedError
+        factory = PricePredictorFactory('config.toml')
+        model = factory.get_price_predictor(sn)
+        return model.predict()
+
+    def get_project_demand_pred(self, grid_ID=1, phase=2):
         '''
         Currently we have only one project, shawsbay, so we hard code the gridID as 1.
         '''
