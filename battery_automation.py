@@ -736,15 +736,13 @@ class PeakValleyScheduler():
         grid_charge = True
         excess_solar = 1000 * (current_pv - current_usage)
 
-        if excess_solar > 0:
-            power = max(minpower, min(excess_solar, maxpower))
-            grid_charge = True
-            return power, grid_charge
-
         if low_price:
             power = minpower
             grid_charge = True
-            return power, grid_charge
+
+        if excess_solar > 0:
+            power = max(minpower, min(excess_solar, maxpower))
+            grid_charge = True
 
         if current_time <= time(9, 0) and current_time >= time(6, 0):
             power = maxpower

@@ -159,3 +159,16 @@
 2024-05-16 12:59:33,520 - INFO - Next Price Update at: 2024-05-16 13:00:29.520675+10:00
 2024-05-16 12:59:33,679 - INFO - AmberModel(Cover Usage) : price: 14.515275, WeightedPrice: 14.515263378492092, usage: 1.413, time: 12:59:00, command: {'command': 'Charge', 'power': 1250, 'grid_charge': True}
 2024-05-16 12:59:34,108 - INFO - Price for 011LOKL140104B(amber) updated: {'buy': 24.97678, 'feedin': 5.71706}
+2024-05-16 12:59:59,113 - INFO - Updating Amber Prices...
+2024-05-16 12:59:59,615 - INFO - Price for 011LOKL140104B(amber) updated: {'buy': 24.97678, 'feedin': 5.71706}
+2024-05-16 12:59:59,615 - INFO - Updating Amber Prices...
+2024-05-16 13:00:00,180 - INFO - Price for 011LOKL140104B(amber) updated: {'buy': 24.97678, 'feedin': 5.71706}
+2024-05-16 13:00:29,526 - INFO - Updating LocalVolts Prices...
+2024-05-16 13:00:29,527 - INFO - Now: 2024-05-16 13:00:29.527354
+2024-05-16 13:00:29,528 - INFO - Next Price Update at: 2024-05-16 13:05:29.528297+10:00
+2024-05-16 13:00:34,396 - INFO - Successfully sent command for 011LOKL140104B: {'command': 'Charge', 'power': 1250, 'grid_charge': True}
+2024-05-16 13:12:23,827 - INFO - Updating Amber Prices...
+2024-05-16 13:12:23,828 - INFO - Updating LocalVolts Prices...
+2024-05-16 13:12:23,831 - INFO - Now: 2024-05-16 13:12:23.831153
+2024-05-16 13:12:23,833 - INFO - Next Price Update at: 2024-05-16 13:15:29.833405+10:00
+2024-05-16 13:12:24,399 - INFO - Price for 011LOKL140104B(amber) updated: {'buy': 24.28661, 'feedin': 5.08963}
