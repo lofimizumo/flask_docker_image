@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as datetime_time
 from enum import Enum
 from typing import Dict
 from dataclasses import dataclass
@@ -744,7 +744,7 @@ class PeakValleyScheduler():
             power = max(minpower, min(excess_solar, maxpower))
             grid_charge = True
 
-        if current_time <= time(9, 0) and current_time >= time(6, 0):
+        if datetime_time(6, 0) <= current_time <= datetime_time(9, 0):
             power = maxpower
             grid_charge = False
 
