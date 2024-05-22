@@ -521,7 +521,7 @@ class PeakValleyScheduler():
         conf_level = 0.97 - 0.8824 * math.exp(-0.033 * current_price)
         return conf_level
 
-    def _algo_sell_to_grid(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type: DeviceType, device_sn):
+    def _algo_sell_to_grid(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pvkW, device_type: DeviceType, device_sn):
         # Update price history
         current_time = datetime.strptime(current_time, '%H:%M').time()
         price_history = self.price_historys.get(device_sn, None)
@@ -549,15 +549,15 @@ class PeakValleyScheduler():
         command = {"command": "Idle"}
 
         # Charging logic
-        if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pv > current_usage)):
+        if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pvkW > current_usage)):
             maxpower, minpower = self._get_power_limits(device_type)
             power, grid_charge = self._calculate_charging_power(
-                current_time, current_pv, current_usage, minpower, maxpower, current_buy_price <= buy_price)
+                current_time, current_pvkW, current_usage, minpower, maxpower, current_buy_price <= buy_price)
             command = {'command': 'Charge',
                        'power': power, 'grid_charge': grid_charge}
 
         # Discharging logic
-        if self._is_discharging_period(current_time) and (current_buy_price >= sell_price) and current_soc > 0.1:
+        if self._is_discharging_period(current_time) and (current_buy_price >= sell_price) and current_soc > 0.1 and current_pvkW < current_usage:
             power = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
             anti_backflow_threshold = np.percentile(
                 price_history, self.PeakPct)
@@ -665,7 +665,7 @@ class PeakValleyScheduler():
 
         # Discharging logic
         # Turn off the debug flag to use the actual discharging period
-        if self._is_discharging_period(current_time, debug=False) and (current_feedin_price >= weighted_price) and current_soc > 0.1:
+        if self._is_discharging_period(current_time, debug=False) and (current_feedin_price >= weighted_price) and current_soc > 0.1 and current_pvkW < current_usagekW:
             anti_backflow = True
             powerkW = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
             device_charge_cost = self.charging_costs.get(device_sn, None)
