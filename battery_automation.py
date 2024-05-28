@@ -1389,6 +1389,4 @@ if __name__ == '__main__':
     # print('Scheduler started')
     # time.sleep(3)
     # scheduler.add_amber_device('011LOKL140104B')
-    # time.sleep(3)
     # scheduler.add_amber_device('RX2505ACA10J0A160016')
-    # scheduler.remove_amber_device('011LOKL140058B')
