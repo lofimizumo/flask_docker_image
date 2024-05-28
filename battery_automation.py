@@ -308,6 +308,7 @@ class BatteryScheduler:
             if isinstance(self.scheduler, PeakValleyScheduler):
                 executor.submit(self._collect_amber_prices)
                 executor.submit(self._collect_localvolts_prices)
+            time.sleep(5)
             executor.submit(self._make_battery_decision)
 
     def stop(self):
@@ -558,7 +559,7 @@ class PeakValleyScheduler():
                        'power': power, 'grid_charge': grid_charge}
 
         # Discharging logic
-        if self._is_discharging_period(current_time) and (current_buy_price >= sell_price) and current_soc > 0.1 and current_pvkW < current_usage:
+        if self._is_discharging_period(current_time) and (current_buy_price >= sell_price) and current_soc > 0.1 and current_pvkW <= current_usage:
             power = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
             anti_backflow_threshold = np.percentile(
                 price_history, self.PeakPct)
@@ -666,7 +667,7 @@ class PeakValleyScheduler():
 
         # Discharging logic
         # Turn off the debug flag to use the actual discharging period
-        if self._is_discharging_period(current_time, debug=False) and (current_feedin_price >= weighted_price) and current_soc > 0.1 and current_pvkW < current_usagekW:
+        if self._is_discharging_period(current_time, debug=False) and (current_feedin_price >= weighted_price) and current_soc > 0.1 and current_pvkW <= current_usagekW:
             anti_backflow = True
             powerkW = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
             device_charge_cost = self.charging_costs.get(device_sn, None)
@@ -1382,7 +1383,7 @@ if __name__ == '__main__':
     # For Amber Dion (NSW)
     scheduler = BatteryScheduler(
         scheduler_type='PeakValley', battery_sn=[
-            '011LOKL140104B'], test_mode=False, api_version='redx')
+            'RX2505ACA10JOA160037'], test_mode=False, api_version='redx')
     scheduler.start()
     # time.sleep(300)
     # print('Scheduler started')
