@@ -33,6 +33,7 @@ class BatteryScheduler:
 
     def __init__(self, scheduler_type='PeakValley',
                  battery_sn=['011LOKL140104B',
+                             '011LOKL140058B',
                              'RX2505ACA10J0A180003',
                              'RX2505ACA10J0A160016',
                              'RX2505ACA10JOA160037',
@@ -211,9 +212,9 @@ class BatteryScheduler:
         schedule = self._get_battery_command()
         load = self.get_project_status(phase=self.project_phase)
         current_time = self.get_current_time()
-        schedule = self.scheduler.daytime_hotfix_discharging_smooth(
+        schedule = self.scheduler.adjust_discharge_power(
             schedule, load, current_time)
-        schedule = self.scheduler.daytime_hotfix_charging(
+        schedule = self.scheduler.adjust_charge_power(
             schedule, load, current_time)
         self.logger.info(f"Schedule: {schedule}")
 
@@ -312,7 +313,7 @@ class BatteryScheduler:
     def stop(self):
         self.is_runing = False
         self.logger.info("Stopped.")
-    
+
     def get_logs(self):
         with open('logs.txt', 'r') as file:
             logs = file.read()
@@ -789,7 +790,7 @@ class AIScheduler():
         # take the first battery monitor from the list
         try:
             demand = self.battery_monitors[self.sn_list[0]].get_project_demand_pred(phase=self.project_phase
-                                                                               )
+                                                                                    )
         except Exception as e:
             demand, price = pickle.load(open('demand_price.pkl', 'rb'))
             self.logger.info(
@@ -872,7 +873,17 @@ class AIScheduler():
 
         return battery_status
 
-    def daytime_hotfix_charging(self, schedule, load, current_time):
+    def adjust_charge_power(self, schedule, load, current_time):
+        '''
+        1. No adjustments are made during certain hours (16:00 to 06:00).
+        2. Surplus power is calculated based on the load and mode.
+        3. If surplus power is low (<=0W), reduce charging power for devices within their charging window.
+        4. If surplus power is moderate (<=threshold+2000W), no adjustments are made.
+        5. If surplus power is high (>3000W), increase charging power for devices not in their discharging window, up to a maximum limit.
+        6. Update the charging start and end times in the schedule based on the current time and a 30-minute window.
+        7. Return the updated schedule.
+
+        '''
         if self.mode == 'normal':
             surplus_power = - load
         else:
@@ -884,11 +895,13 @@ class AIScheduler():
             return schedule
 
         # Return original schedule if surplus power is less than 0W
+        # Reduce charging power, but not discharge to the grid, use current_load to track the remaining power
+        # If the current_load reaches 0, stop reducing the charging power.
         threshold = 0
         if surplus_power <= threshold:
-            power_now = surplus_power
+            current_load = surplus_power
             for sn in self.sn_list:
-                if power_now >= threshold:
+                if current_load >= threshold:
                     break
                 start_time_str = schedule.get(
                     sn, {}).get('chargeStart1', '00:00')
@@ -905,13 +918,16 @@ class AIScheduler():
                 # self.logger.info(
                 # f'No surplus power, return original charging power for: {sn}')
                 schedule[sn]['chargePower1'] = adjusted_charging_power
-                power_now += difference
+                current_load += difference
             return schedule
 
+        # After we adjusted the power, the surplus power will change accordingly.
+        # In order to avoid oscillation, we set a 2000 buffer to avoid frequent adjustments.
         if surplus_power <= threshold+2000:
             return schedule
 
-        # Only when surplus power is greater than 3000W, we start to increase the charging power
+        # Only when surplus power exceeded this 2000 buffer, then we can start to increase the charging power
+        # We track the remaining power in the surplus_power variable, so that the surplus power will be used up.
         for sn in self.sn_list:
             if surplus_power <= 0:
                 break
@@ -944,7 +960,7 @@ class AIScheduler():
                 #     f'Increased charging power for Device: {sn} by {adjusted_charging_power - current_charging_power}W due to excess solar power.')
         return schedule
 
-    def daytime_hotfix_discharging_smooth(self, schedule: dict, load, current_time) -> dict:
+    def adjust_discharge_power(self, schedule: dict, load, current_time) -> dict:
         threshold_lower_bound = 4000
         threshold_upper_bound = threshold_lower_bound + 2000
         threshold_peak_bound = 12000
@@ -1275,6 +1291,7 @@ class AIScheduler():
                     if not self.allocate_battery(task_time, task_type, task_duration):
                         logging.info(
                             f'task {task_time} {task_type} {task_duration} failed to allocate battery')
+
                 def unit_to_time(unit, sample_interval):
                     total_minutes = int(unit * sample_interval)
                     hour = total_minutes // 60
@@ -1371,7 +1388,6 @@ if __name__ == '__main__':
     # print('Scheduler started')
     # time.sleep(3)
     # scheduler.add_amber_device('011LOKL140104B')
-    time.sleep(300)
     # time.sleep(3)
     # scheduler.add_amber_device('RX2505ACA10J0A160016')
     # time.sleep(3)
