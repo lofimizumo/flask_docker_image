@@ -4,6 +4,8 @@ import time
 from datetime import datetime, timedelta
 import pytz
 from itertools import cycle
+import smtplib
+from email.mime.text import MIMEText
 import logging
 import tomli
 import os
@@ -120,6 +122,24 @@ def api_status_check(max_retries=10, delay=10):
 
     return decorator
 
+def send_email(api_key, domain, sender, recipients, subject, text):
+    api_url = f"https://api.mailgun.net/v3/{domain}/messages"
+    auth = ("api", api_key)
+    
+    data = {
+        "from": sender,
+        "to": recipients,
+        "subject": subject,
+        "text": text
+    }
+    
+    response = requests.post(api_url, auth=auth, data=data)
+    
+    if response.status_code == 200:
+        print("Email sent successfully!")
+    else:
+        print(f"Error sending email. Status code: {response.status_code}")
+        print(response.text)
 
 class PriceAndLoadMonitor:
     def __init__(self,  test_mode=False, api_version='dev3'):
