@@ -244,3 +244,43 @@
 2024-05-28 16:20:26,812 - INFO - Now: 2024-05-28 16:20:26.812825
 2024-05-28 16:20:27,149 - INFO - Price for RX2505ACA10JOA160037(lv) updated: {'buy': 31.04674006, 'feedin': 20.81784455}
 2024-05-28 16:20:27,149 - INFO - Next Price Update at: 2024-05-28 16:25:29.149406+10:00
+2024-06-06 14:04:15,507 - INFO - Updating Amber Prices...
+2024-06-06 14:04:15,508 - INFO - Updating LocalVolts Prices...
+2024-06-06 14:04:15,509 - INFO - Now: 2024-06-06 14:04:15.509562
+2024-06-06 14:04:15,856 - INFO - Price for RX2505ACA10JOA160037(lv) updated: {'buy': 13.87290355, 'feedin': 5.20526591}
+2024-06-06 14:04:15,857 - INFO - Next Price Update at: 2024-06-06 14:05:29.857107+10:00
+2024-06-06 14:04:31,289 - INFO - Updating Amber Prices...
+2024-06-06 14:04:31,290 - INFO - Updating LocalVolts Prices...
+2024-06-06 14:04:31,291 - INFO - Now: 2024-06-06 14:04:31.291076
+2024-06-06 14:04:31,603 - INFO - Price for RX2505ACA10JOA160037(lv) updated: {'buy': 13.87290355, 'feedin': 5.20526591}
+2024-06-06 14:04:31,603 - INFO - Next Price Update at: 2024-06-06 14:05:29.603534+10:00
+2024-06-06 14:05:48,649 - INFO - Updating LocalVolts Prices...
+2024-06-06 14:05:48,649 - INFO - Now: 2024-06-06 14:05:48.649382
+2024-06-06 14:05:49,480 - INFO - Price for RX2505ACA10JOA160037(lv) updated: {'buy': 13.86464122, 'feedin': 5.1977547}
+2024-06-06 14:05:49,481 - INFO - Next Price Update at: 2024-06-06 14:10:29.481134+10:00
+2024-06-06 14:08:17,351 - INFO - Updating Amber Prices...
+2024-06-06 14:08:17,352 - INFO - Updating LocalVolts Prices...
+2024-06-06 14:08:17,352 - INFO - Now: 2024-06-06 14:08:17.352776
+2024-06-06 14:08:17,726 - INFO - Price for RX2505ACA10JOA160037(lv) updated: {'buy': 13.86464122, 'feedin': 5.1977547}
+2024-06-06 14:08:17,726 - INFO - Next Price Update at: 2024-06-06 14:10:29.726809+10:00
+2024-06-10 09:15:01,509 - INFO - Updating Amber Prices...
+2024-06-10 09:15:01,509 - INFO - Updating LocalVolts Prices...
+2024-06-10 09:15:01,511 - INFO - Now: 2024-06-10 09:15:01.511221
+2024-06-10 09:15:01,906 - INFO - Bad Quality: Got forecasted or invalid price for RX2505ACA10JOA160037(lv) or price update failed, e.g. too many requests.
+2024-06-10 09:15:01,907 - INFO - Quality is not good or Error happened, waiting for 10 seconds...
+2024-06-10 09:15:16,769 - INFO - Updating LocalVolts Prices...
+2024-06-10 09:15:16,770 - INFO - Now: 2024-06-10 09:15:16.770239
+2024-06-10 09:15:16,820 - INFO - AmberModel (Sell to Grid): price: 10.776255, sell price: 2.5216685396383864, usage: 0.812, time: 09:15:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-10 09:15:17,034 - INFO - Price for RX2505ACA10JOA160037(lv) updated: {'buy': 8.14711105, 'feedin': 0.0}
+2024-06-10 09:15:17,034 - INFO - Next Price Update at: 2024-06-10 09:20:29.034494+10:00
+2024-06-10 09:16:07,687 - INFO - Updating Amber Prices...
+2024-06-10 09:16:07,688 - INFO - Updating LocalVolts Prices...
+2024-06-10 09:16:07,689 - INFO - Now: 2024-06-10 09:16:07.689739
+2024-06-10 09:16:07,691 - INFO - Next Price Update at: 2024-06-10 09:20:29.691113+10:00
+2024-06-10 09:16:08,332 - INFO - Price for 011LOKL140104B(amber) updated: {'buy': 25.80702, 'feedin': 6.47183}
+2024-06-10 09:16:08,964 - INFO - Price for 011LOKL140058B(amber) updated: {'buy': 8.16227, 'feedin': 0.30134}
+2024-06-10 09:16:09,557 - INFO - Price for RX2505ACA10J0A180003(amber) updated: {'buy': 8.16227, 'feedin': 0.30134}
+2024-06-10 09:16:10,192 - INFO - Price for RX2505ACA10J0A160016(amber) updated: {'buy': 8.16227, 'feedin': 0.30134}
+2024-06-10 09:16:12,936 - INFO - AmberModel (Sell to Grid): price: 14.85739, sell price: 2.529807621696801, usage: 3.513, time: 09:16:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-10 09:16:28,123 - INFO - AmberModel (Sell to Grid): price: 14.85739, sell price: 2.529807621696801, usage: 1.017, time: 09:16:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-10 09:16:28,124 - INFO - AmberModel (Sell to Grid): price: 14.85739, sell price: 2.529807621696801, usage: 0.373, time: 09:16:00, command: {'command': 'Charge', 'power': 1250, 'grid_charge': True}

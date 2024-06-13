@@ -672,7 +672,7 @@ class PeakValleyScheduler():
 
         # Discharging logic
         # Turn off the debug flag to use the actual discharging period
-        if self._is_discharging_period(current_time, debug=False) and (current_feedin_price >= weighted_price) and current_soc > 0.1:
+        if self._is_discharging_period(current_time, debug=False) and (current_feedin_price >= weighted_price) and current_soc > 0.1 and current_pvkW < current_usagekW:
             anti_backflow = True
             powerkW = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
             device_charge_cost = self.charging_costs.get(device_sn, None)
