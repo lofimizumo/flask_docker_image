@@ -4,7 +4,7 @@
   "name": "shawsbay-ai",
   "enabled": true,
   "resources": {
-    "machineType": "C5",
+    "machineType": "C4",
     "replicas": 1,
     "ports": [
       5000
