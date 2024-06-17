@@ -4,7 +4,6 @@ import time
 from datetime import datetime, timedelta
 import pytz
 from itertools import cycle
-import smtplib
 from email.mime.text import MIMEText
 import logging
 import tomli

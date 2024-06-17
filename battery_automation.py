@@ -152,7 +152,7 @@ class BatteryScheduler:
         while True:
             try:
                 self.logger.info("Updating LocalVolts Prices...")
-                self.logger.info("Now: " + str(datetime.now()))
+                # self.logger.info("Now: " + str(datetime.now()))
                 quality = self._update_prices('lv')
                 if quality:
                     # Local Volts updates prices every 5 minutes
@@ -161,8 +161,8 @@ class BatteryScheduler:
                     delay = self._seconds_to_next_n_minutes(current_time, n=5)
                     # add 30 seconds to make sure the price is updated on Local Volts
                     delay = delay + 30
-                    self.logger.info(
-                        f"Next Price Update at: {current_time + timedelta(seconds=delay)}")
+                    # self.logger.info(
+                        # f"Next Price Update at: {current_time + timedelta(seconds=delay)}")
                     time.sleep(delay)
                 else:
                     self.logger.info(
@@ -184,8 +184,8 @@ class BatteryScheduler:
 
             if data and quality:
                 self.current_prices[sn]['buy'], self.current_prices[sn]['feedin'] = data
-                self.logger.info(
-                    f'Price for {sn}({retailer}) updated: {self.current_prices[sn]}')
+                # self.logger.info(
+                #     f'Price for {sn}({retailer}) updated: {self.current_prices[sn]}')
                 return True
             else:
                 self.logger.info(
@@ -234,69 +234,66 @@ class BatteryScheduler:
         self.last_schedule_ai = copy.deepcopy(schedule)
 
     def _process_peak_valley_scheduler(self):
-        current_times = {sn: '' for sn in self.sn_list}
-        for sn in self.sn_list:
-            current_times[sn] = self.get_current_time(
-                state=self.sn_locations.get(sn, 'qld'))
-
-        def _process_send_cmd_each_sn(sn):
-            try:
-                bat_stats = self.get_current_battery_stats(sn)
-                current_batP = bat_stats.get('batP', 0) if bat_stats else 0
-                current_usage = bat_stats.get('loadP', 0) if bat_stats else 0
-                current_soc = bat_stats.get(
-                    'soc', 0) / 100.0 if bat_stats else 0
-                current_pv = bat_stats.get('ppv', 0) if bat_stats else 0
-                device_type = DeviceType(self.sn_types.get(sn, 2505))
-                device_location = self.sn_locations.get(sn, 'qld')
-                algo_type = self.algo_types.get(sn, 'sell_to_grid')
-                buy_price = self.current_prices[sn]['buy']
-                feedin_price = self.current_prices[sn]['feedin']
-                current_time = current_times.get(sn, '00:00')
-                algo_type = 'sell_to_grid' if device_location == 'qld' else 'cover_usage'
-
-                command = self._get_battery_command(
-                    current_buy_price=buy_price,
-                    current_feedin_price=feedin_price,
-                    current_usage=current_usage,
-                    current_time=current_time,
-                    current_soc=current_soc,
-                    current_pv=current_pv,
-                    current_batP=current_batP,
-                    device_type=device_type,
-                    device_sn=sn,
-                    algo_type=algo_type
-                )
-
-                last_command = self.last_schedule_peakvalley.get(sn, {})
-                c_datetime = datetime.strptime(
-                    current_time, '%H:%M')
-                last_command_time = self.last_command_time.get(sn, c_datetime)
-                minute_passed = abs(c_datetime.minute -
-                                    last_command_time.minute)
-
-                if command != last_command or minute_passed >= 5:
-                    self.send_battery_command(command=command, sn=sn)
-                    self.last_command_time[sn] = c_datetime
-                    self.last_schedule_peakvalley[sn] = command
-                    self.logger.info(
-                        f"Successfully sent command for {sn}: {command}")
-                else:
-                    self.logger.info(
-                        f"Command Skipped: Command: {command}, Last Command: {last_command}, Time: {c_datetime}, Last Time: {last_command_time}")
-            except Exception as e:
-                error_message = f"Error processing sn:{sn}: {e}\nTraceback: {traceback.format_exc()}"
-                logging.error(error_message)
-                # Free tier mailgun account, only 100 emails per day, replace it later.
-                api = '1d8d9cfb35f2ae4bf1eaeadb988854f6-a4da91cf-a075fd47'
-                domain = 'sandbox2cf9f51d043a48b69cdd606ef382fb8c.mailgun.org'
-                sender = f'bk0717 <mailgun@{domain}>'
-                to = [f'mizumo1988@gmail.com']
-                util.send_email(api,domain,sender,to,f'{sn}: Error Occurred',error_message)
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [executor.submit(_process_send_cmd_each_sn, sn)
-                       for sn in self.sn_list]
-            concurrent.futures.wait(futures)
+            self.futures = [executor.submit(self._process_send_cmd_each_sn, sn)
+                            for sn in self.sn_list]
+            concurrent.futures.wait(self.futures)
+
+
+    def _process_send_cmd_each_sn(self,sn):
+        try:
+            bat_stats = self.get_current_battery_stats(sn)
+            current_batP = bat_stats.get('batP', 0) if bat_stats else 0
+            current_usage = bat_stats.get('loadP', 0) if bat_stats else 0
+            current_soc = bat_stats.get(
+                'soc', 0) / 100.0 if bat_stats else 0
+            current_pv = bat_stats.get('ppv', 0) if bat_stats else 0
+            device_type = DeviceType(self.sn_types.get(sn, 2505))
+            device_location = self.sn_locations.get(sn, 'qld')
+            algo_type = self.algo_types.get(sn, 'sell_to_grid')
+            buy_price = self.current_prices[sn]['buy']
+            feedin_price = self.current_prices[sn]['feedin']
+            current_time = self.get_current_time(state=self.sn_locations.get(sn, 'qld')) 
+            algo_type = 'sell_to_grid' if device_location == 'qld' else 'cover_usage'
+
+            command = self._get_battery_command(
+                current_buy_price=buy_price,
+                current_feedin_price=feedin_price,
+                current_usage=current_usage,
+                current_time=current_time,
+                current_soc=current_soc,
+                current_pv=current_pv,
+                current_batP=current_batP,
+                device_type=device_type,
+                device_sn=sn,
+                algo_type=algo_type
+            )
+
+            last_command = self.last_schedule_peakvalley.get(sn, {})
+            c_datetime = datetime.strptime(
+                current_time, '%H:%M')
+            last_command_time = self.last_command_time.get(sn, c_datetime)
+            minute_passed = abs(c_datetime.minute -
+                                last_command_time.minute)
+
+            if command != last_command or minute_passed >= 5:
+                self.send_battery_command(command=command, sn=sn)
+                self.last_command_time[sn] = c_datetime
+                self.last_schedule_peakvalley[sn] = command
+                self.logger.info(
+                    f"Successfully sent command for {sn}: {command}")
+            else:
+                self.logger.info(
+                    f"Command Skipped: Command: {command}, Last Command: {last_command}, Time: {c_datetime}, Last Time: {last_command_time}")
+        except Exception as e:
+            error_message = f"Error processing sn:{sn}: {e}\nTraceback: {traceback.format_exc()}"
+            logging.error(error_message)
+            # Free tier mailgun account, only 100 emails per day, replace it later.
+            api = '1d8d9cfb35f2ae4bf1eaeadb988854f6-a4da91cf-a075fd47'
+            domain = 'sandbox2cf9f51d043a48b69cdd606ef382fb8c.mailgun.org'
+            sender = f'bk0717 <mailgun@{domain}>'
+            to = [f'mizumo1988@gmail.com']
+            util.send_email(api,domain,sender,to,f'{sn}: Error Occurred',error_message)
 
     def start(self):
         '''
@@ -315,10 +312,30 @@ class BatteryScheduler:
                 executor.submit(self._collect_localvolts_prices)
             time.sleep(5)
             executor.submit(self._make_battery_decision)
+            executor.submit(self._health_checker_devices)
 
     def stop(self):
         self.is_runing = False
         self.logger.info("Stopped.")
+
+    def _health_checker_devices(self):
+        # Sleep for 10 seconds to wait for the main thread to start
+        time.sleep(10)
+        while self.is_running:
+            try:
+                for future, sn in zip(self.futures, self.sn_list):
+                    if future.done() and future.exception() is not None:
+                        self.logger.error(f"Device thread for {sn} crashed. Restarting...")
+                        index = self.futures.index(future)
+                        self.futures[index] = concurrent.futures.ThreadPoolExecutor().submit(
+                            self._process_send_cmd_each_sn, sn)
+                self.logger.info("Health checker for devices is running...")
+                time.sleep(60)  # Check every 60 seconds
+            except Exception as e:
+                self.logger.error(f"Health checker for devices error: {e}")
+                # restart the health checker
+                time.sleep(10)
+                self._health_checker_devices()
 
     def get_logs(self):
         with open('logs.txt', 'r') as file:
@@ -1387,8 +1404,7 @@ if __name__ == '__main__':
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
     scheduler = BatteryScheduler(
-        scheduler_type='PeakValley', battery_sn=[
-            'RX2505ACA10JOA160037'], test_mode=False, api_version='redx')
+        scheduler_type='PeakValley', test_mode=False, api_version='redx')
     scheduler.start()
     # time.sleep(300)
     # print('Scheduler started')
