@@ -1,7 +1,7 @@
 {
   "apiVersion": "v1",
   "image": "bellakira0717/flask-battery-scheduler:latest",
-  "name": "shawsbay-ai",
+  "name": "battery-optimization-ai",
   "enabled": true,
   "resources": {
     "machineType": "C5",
