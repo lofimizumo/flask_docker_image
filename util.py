@@ -8,6 +8,8 @@ from email.mime.text import MIMEText
 import logging
 import tomli
 import os
+import numpy as np
+from batteryexceptions import *
 # from algorithms import DemandPredictorFactory
 
 
@@ -157,8 +159,9 @@ class PriceAndLoadMonitor:
             tz=pytz.timezone('Australia/Sydney'))
         # Test Mode is for testing the battery control without sending command to the actual battery
         self.test_mode = test_mode
-        self.get_project_stats_call_count = 0
-        self.get_meter_reading_stats_call_count = 0
+
+        self.default_prices = {}
+
         self.amber_api_url_qld = self.config.get(
             'apiurls', {}).get('apiurl_qld', None)
         self.amber_api_url_nsw = self.config.get(
@@ -170,11 +173,11 @@ class PriceAndLoadMonitor:
 
     def get_realtime_price(self, location = 'qld', retailer = 'amber'):
         if retailer == 'amber':
-            return self._get_amber_price(location)
+            return self._get_realtime_amber_price(location)
         elif retailer == 'lv':
-            return self._get_lv_price(location)
+            return self._get_realtime_lv_price(location)
     
-    def _get_lv_price(self, location = 'qld'):
+    def _get_realtime_lv_price(self, location = 'qld'):
         # TODO: replace the API key with the device's API key and partner ID
         url = "https://api.localvolts.com/v1/customer/interval?NMI=*"
         header = {'Authorization': 'apikey 21b831bc02410319571a27250d49b4c4', 'partner': '25370'}
@@ -188,7 +191,7 @@ class PriceAndLoadMonitor:
             return None, False
         return cast_prices, is_expected_data
     
-    def _get_amber_price(self, location='qld'):
+    def _get_realtime_amber_price(self, location='qld'):
         if location == 'qld':
             url = self.amber_api_url_qld
             api_key = self.amber_api_key_qld
@@ -207,71 +210,50 @@ class PriceAndLoadMonitor:
             logger.error(f"Failed to get price data: {e}")
             return None, False
 
-    def get_price_history(self, location='qld'):
-        if location == 'qld':
-            api_key = self.amber_api_key_qld
-        elif location == 'nsw':
-            api_key = self.amber_api_key_nsw
-        fetcher = AmberFetcher(api_key)
-        yesterday_date = (datetime.now(tz=pytz.timezone(
-            'Australia/Sydney')) - timedelta(days=1)).strftime("%Y-%m-%d")
-        day_before_yesterday_date = (datetime.now(tz=pytz.timezone(
-            'Australia/Sydney')) - timedelta(days=2)).strftime("%Y-%m-%d")
-        response = fetcher.get_prices(
-            day_before_yesterday_date, yesterday_date, resolution=30)
-        prices = [x[1] for x in response]
-        return prices
+    def _init_default_prices(self, sn, location, retailer):
+        # LocalVolts doesn't have historical price data, so we only need to get the historical price data from Amber instead
+        if retailer == 'amber' or retailer == 'lv':
+            if location == 'qld':
+                api_key = self.amber_api_key_qld
+            elif location == 'nsw':
+                api_key = self.amber_api_key_nsw
+            fetcher = AmberFetcher(api_key)
+            yesterday_date = (datetime.now(tz=pytz.timezone(
+                'Australia/Sydney')) - timedelta(days=1)).strftime("%Y-%m-%d")
+            day_before_yesterday_date = (datetime.now(tz=pytz.timezone(
+                'Australia/Sydney')) - timedelta(days=2)).strftime("%Y-%m-%d")
+            response = fetcher.get_prices(
+                day_before_yesterday_date, yesterday_date, resolution=30)
+            prices = [x[1] for x in response]
+            return prices
+        else:
+            raise ValueError(f"Retailer {retailer} is not supported")
+    
+    def _get_device_info(self, sn):
+        location = self.config.get('battery_locations', {}).get(sn, 'qld')
+        retailer = self.config.get('retailers', {}).get(sn, 'amber')
+        return location, retailer 
 
+    def get_price_history(self, sn, length):
+        location, retailer = self._get_device_info(sn)
+        ret = None
+        if retailer == 'amber':
+            if self.default_prices.get('amber', None) is None:
+                self.default_prices['amber'] = self._init_default_prices(sn, location, retailer)
+            ret = self.default_prices.get('amber')
+        elif retailer == 'lv':
+            if self.default_prices.get('lv', None) is None:
+                self.default_prices['lv'] = self._init_default_prices(sn, location, retailer)
+            ret = self.default_prices.get('lv')
+        ret = np.interp(
+                    np.linspace(0, 1, int(length)),
+                    np.linspace(0, 1, len(ret)),
+                    ret
+                ).tolist() 
+        return ret
+    
     def get_sim_price(self, current_time):
-        _price_test = [17.12,
-                       18.48,
-                       18,
-                       18,
-                       15.7,
-                       14.96,
-                       14.94,
-                       14.67,
-                       14.98,
-                       15.83,
-                       15.9,
-                       17.57,
-                       16.19,
-                       15.62,
-                       16.65,
-                       13.83,
-                       17.06,
-                       17.56,
-                       17.48,
-                       15.25,
-                       15.39,
-                       15.39,
-                       14.84,
-                       15.87,
-                       16.54,
-                       17.95,
-                       17.8,
-                       18.55,
-                       18.08,
-                       19.02,
-                       17.95,
-                       17.89,
-                       18.79,
-                       15.57,
-                       16.39,
-                       17.61,
-                       17.39,
-                       20.61,
-                       20.42,
-                       18.14,
-                       18.43,
-                       18.42,
-                       17.91,
-                       18.39,
-                       17.16,
-                       21.37,
-                       18.89,
-                       19.39,
-                       ]
+        _price_test = [20] * 48
         start_time = datetime.strptime('00:00', '%H:%M')
         time_intervals = [(start_time + timedelta(minutes=30 * i)).time()
                           for i in range(48)]
@@ -287,54 +269,7 @@ class PriceAndLoadMonitor:
         return price_time_map[time_intervals[0]]
 
     def get_sim_load_iter(self):
-        _usage = [0.17,
-                  0.18,
-                  0.11,
-                  0.1,
-                  0.11,
-                  0.17,
-                  0.22,
-                  0.15,
-                  0.13,
-                  0.13,
-                  0.12,
-                  0.13,
-                  0.4,
-                  0.42,
-                  0.22,
-                  0.48,
-                  0.2,
-                  0.23,
-                  0.55,
-                  0.7,
-                  0.5,
-                  0.85,
-                  0.53,
-                  0.48,
-                  0.22,
-                  0.23,
-                  0.54,
-                  0.51,
-                  0.51,
-                  0.57,
-                  0.34,
-                  0.21,
-                  0.17,
-                  0.24,
-                  0.2,
-                  0.35,
-                  0.44,
-                  0.51,
-                  0.43,
-                  0.49,
-                  0.52,
-                  0.57,
-                  0.47,
-                  0.43,
-                  0.19,
-                  0.22,
-                  0.19,
-                  ]
+        _usage = [0.2] * 48
         return cycle(_usage)
 
     def get_sim_load(self):
@@ -357,12 +292,16 @@ class PriceAndLoadMonitor:
 
     def get_realtime_battery_stats(self, sn):
         # Test Get latest summary data
+        # raise BatteryStatsUpdateFailure(
+        #     f"Failed to get latest summary data for device {sn}")
         data = {'deviceSn': sn}
         headers = {'token': self.get_token()}
         response = self.api.send_request(
             "device/get_latest_data", method='POST', json=data, headers=headers)
-        if response is None:
-            raise Exception('API failed: get_latest_data')
+        if response.get('data', None) is None:
+            # raise custom exception
+            raise BatteryStatsUpdateFailure(
+                f"Failed to get latest data for device {sn}")
         return response['data']
 
     def is_VPP_on(self, sn):
@@ -384,7 +323,6 @@ class PriceAndLoadMonitor:
         headers = {'token': self.get_token()}
         response = self.api.send_request(
             "grid/get_meter_reading", method='POST', json=data, headers=headers)
-        self.get_meter_reading_stats_call_count += 1
         # logger.info(f'get_prediction_v2_api called: {self.get_meter_reading_stats_call_count}')
         if response is None:
             raise Exception('Get meter reading API failed')
@@ -429,7 +367,6 @@ class PriceAndLoadMonitor:
                 time.sleep(180)
         prediction_average = [
             (int(x['predictionLower']) + int(x['predictionUpper']))/2 for x in response['data']]
-        self.get_project_stats_call_count += 1
         return prediction_average
 
     def get_sim_time_iter(self):
@@ -752,6 +689,7 @@ class AmberFetcher:
                   'accept': 'application/json'}
         url = f"{self.base_url}/sites/{self.site_id}/prices?startDate={start_date}&endDate={end_date}&resolution={resolution}"
         response = requests.get(url, headers=header)
+        response.raise_for_status()
         data = response.json()
         data = list(filter(lambda x: x['channelType'] == 'general', data))
         prices = [(x['nemTime'], x['perKwh']) for x in data]

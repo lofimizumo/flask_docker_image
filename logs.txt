@@ -1375,3 +1375,297 @@
 2024-06-17 14:13:46,351 - INFO - Successfully sent command for 011LOKL140104B: {'command': 'Charge', 'power': 2044.0, 'grid_charge': True}
 2024-06-17 14:13:59,029 - INFO - Successfully sent command for RX2505ACA10J0A180003: {'command': 'Charge', 'power': 700, 'grid_charge': True}
 2024-06-17 14:13:59,456 - INFO - Updating Amber Prices...
+2024-06-17 15:59:04,188 - INFO - Updating Amber Prices...
+2024-06-17 15:59:04,188 - INFO - Updating LocalVolts Prices...
+2024-06-17 15:59:09,660 - INFO - AmberModel (Sell to Grid): price: 19.248945, sell price: 2.8248920869262863, usage: 0.911, time: 15:59:00, command: {'command': 'Idle'}
+2024-06-17 15:59:09,660 - INFO - AmberModel (Sell to Grid): price: 19.248945, sell price: 2.8248920869262863, usage: 0.911, time: 15:59:00, command: {'command': 'Idle'}
+2024-06-17 15:59:09,685 - INFO - AmberModel (Sell to Grid): price: 19.248945, sell price: 2.8248920869262863, usage: 0.911, time: 15:59:00, command: {'command': 'Idle'}
+2024-06-17 15:59:19,200 - INFO - Health checker for devices is running...
+2024-06-17 15:59:59,938 - INFO - Updating Amber Prices...
+2024-06-17 16:00:12,501 - INFO - Successfully sent command for RX2505ACA10J0A160016: {'command': 'Idle'}
+2024-06-17 16:00:12,503 - INFO - Successfully sent command for RX2505ACA10J0A160016: {'command': 'Idle'}
+2024-06-17 16:00:12,504 - INFO - Successfully sent command for RX2505ACA10J0A160016: {'command': 'Idle'}
+2024-06-17 16:00:19,206 - INFO - Health checker for devices is running...
+2024-06-17 16:00:29,195 - INFO - Updating LocalVolts Prices...
+2024-06-18 09:23:42,720 - INFO - Updating Amber Prices...
+2024-06-18 09:23:42,721 - INFO - Updating LocalVolts Prices...
+2024-06-18 09:23:48,195 - INFO - AmberModel (Sell to Grid): price: 23.05014, sell price: 2.8276251536856747, usage: 3.592, time: 09:23:00, command: {'command': 'Idle'}
+2024-06-18 09:23:48,195 - INFO - AmberModel(Cover Usage) : price: 33.61222, WeightedPrice: 0.0, usage: 1.292, time: 09:23:00, command: {'command': 'Charge', 'power': 2485.9999999999995, 'grid_charge': True}
+2024-06-18 09:23:48,196 - INFO - AmberModel (Sell to Grid): price: 23.05014, sell price: 2.8276251536856747, usage: 0.262, time: 09:23:00, command: {'command': 'Charge', 'power': 1250, 'grid_charge': True}
+2024-06-18 09:23:48,196 - INFO - AmberModel (Sell to Grid): price: 23.05014, sell price: 2.8276251536856747, usage: 0.89, time: 09:23:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:44:39,005 - INFO - Updating Amber Prices...
+2024-06-18 10:44:39,006 - INFO - Updating LocalVolts Prices...
+2024-06-18 10:44:58,771 - INFO - Health checker for devices is running...
+2024-06-18 10:51:26,014 - INFO - Updating Amber Prices...
+2024-06-18 10:51:26,015 - INFO - Updating LocalVolts Prices...
+2024-06-18 10:51:31,335 - INFO - AmberModel (Sell to Grid): price: 19.211585, sell price: 2.8276251536856747, usage: 0.547, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:39,107 - INFO - AmberModel (Sell to Grid): price: 19.211585, sell price: 2.8276251536856747, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:39,109 - INFO - AmberModel (Sell to Grid): price: 19.211585, sell price: 2.8276251536856747, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:39,109 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:39,111 - INFO - AmberModel (Sell to Grid): price: 19.211585, sell price: 2.8276251536856747, usage: 0.085, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:39,113 - INFO - AmberModel (Sell to Grid): price: 19.211585, sell price: 2.8276251536856747, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:39,115 - INFO - AmberModel (Sell to Grid): price: 19.211585, sell price: 2.8276251536856747, usage: -1.621, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:39,117 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:39,117 - INFO - AmberModel (Sell to Grid): price: 19.211585, sell price: 2.8276251536856747, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:39,117 - INFO - AmberModel (Sell to Grid): price: 19.211585, sell price: 2.8276251536856747, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:39,118 - INFO - AmberModel (Sell to Grid): price: 19.211585, sell price: 2.8276251536856747, usage: 0.447, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:39,119 - INFO - AmberModel (Sell to Grid): price: 19.211585, sell price: 2.8276251536856747, usage: -1.126, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:39,119 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: -0.289, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:39,119 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 1.316, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:39,120 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.189, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:39,121 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 1.927, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:39,121 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.291, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:39,123 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 2.775, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:39,123 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 3.377, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:39,124 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.978, time: 10:51:00, command: {'command': 'Charge', 'power': 1055.0, 'grid_charge': True}
+2024-06-18 10:51:46,684 - INFO - Successfully sent command for 011LOKL140102B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,685 - INFO - Successfully sent command for 001XOKD180098B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,687 - INFO - Successfully sent command for 001XOKC310084B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,688 - INFO - Successfully sent command for RX2505ACA10J0A160031: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,688 - INFO - Successfully sent command for RX2505AC5008001D00: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,690 - INFO - Successfully sent command for 001XOKC020031B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,691 - INFO - Successfully sent command for 006LOKP010150B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,692 - INFO - Successfully sent command for 017LOKM180012B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,692 - INFO - Successfully sent command for 011LOKL140077B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,692 - INFO - Successfully sent command for 001XOKF180055B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,692 - INFO - Successfully sent command for 006LOKP240200B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,693 - INFO - Successfully sent command for 001XOKD080033B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,693 - INFO - Health checker for devices is running...
+2024-06-18 10:51:46,695 - INFO - Successfully sent command for 011LOKL140092B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,696 - INFO - Successfully sent command for 006LOKP240244B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,696 - INFO - Successfully sent command for 006LOLC120001B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,697 - INFO - Successfully sent command for 017LOKP010050B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,698 - INFO - Successfully sent command for 001XOKC010060B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,698 - INFO - Successfully sent command for 017LOKM180018B: {'command': 'Charge', 'power': 1055.0, 'grid_charge': True}
+2024-06-18 10:51:46,698 - INFO - Successfully sent command for 006LOKP240204B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,699 - INFO - Successfully sent command for 011LOKL140041B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,793 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 1.426, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,793 - INFO - Successfully sent command for 006LOKM110054B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,824 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.189, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,825 - INFO - Successfully sent command for 002XOJP120010B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,825 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 3.49, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,826 - INFO - Successfully sent command for 001XOKD180043B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,828 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,829 - INFO - Successfully sent command for 017LOKP010091B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,829 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.621, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,829 - INFO - Successfully sent command for 001XOKC310085B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,840 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 1.518, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,840 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,840 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.086, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,841 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 3.023, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,841 - INFO - Successfully sent command for 011LOKG080074B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,841 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,841 - INFO - Successfully sent command for 002XOJP120036B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,841 - INFO - Successfully sent command for 006LOKP240251B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,841 - INFO - Successfully sent command for 006LOKM110038B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,842 - INFO - Successfully sent command for 011LOKL140157B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,902 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.927, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,902 - INFO - Successfully sent command for 006LOKM110051B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,939 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.473, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,941 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.319, time: 10:51:00, command: {'command': 'Charge', 'power': 1442.0, 'grid_charge': True}
+2024-06-18 10:51:46,943 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,944 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.532, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,944 - INFO - Successfully sent command for 011LOKL140096B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,945 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.081, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,945 - INFO - Successfully sent command for 006LOKM110064B: {'command': 'Charge', 'power': 1442.0, 'grid_charge': True}
+2024-06-18 10:51:46,946 - INFO - Successfully sent command for 006LOKP010136B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,947 - INFO - Successfully sent command for 017LOKM180020B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,947 - INFO - Successfully sent command for RX2505ACA10J0A170035: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,956 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: -0.017, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,956 - INFO - Successfully sent command for RX2505ACA10J0A170033: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,961 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.38, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,962 - INFO - Successfully sent command for RX2505ACA10J0A180035: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,962 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,962 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.214, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,962 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.849, time: 10:51:00, command: {'command': 'Charge', 'power': 1465.0, 'grid_charge': True}
+2024-06-18 10:51:46,962 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: -1.528, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,962 - INFO - Successfully sent command for 006LOKP240210B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,963 - INFO - Successfully sent command for 001XOKC020015B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,963 - INFO - Successfully sent command for 001XOKC310017B: {'command': 'Charge', 'power': 1465.0, 'grid_charge': True}
+2024-06-18 10:51:46,963 - INFO - Successfully sent command for 001XOKD080008B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,983 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: -0.071, time: 10:51:00, command: {'command': 'Charge', 'power': 1398.0, 'grid_charge': True}
+2024-06-18 10:51:46,984 - INFO - Successfully sent command for RX2505ACA10J0A150009: {'command': 'Charge', 'power': 1398.0, 'grid_charge': True}
+2024-06-18 10:51:46,994 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: -0.229, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,994 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.56, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,994 - INFO - Successfully sent command for 001XOKC310102B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,994 - INFO - Successfully sent command for 017LOKP010052B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:46,996 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.981, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,997 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.448, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,997 - INFO - Successfully sent command for 006LOKM110091B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:46,997 - INFO - Successfully sent command for 011LOKL140126B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,001 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 1.175, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,001 - INFO - Successfully sent command for 006LOKM110008B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,002 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,003 - INFO - Successfully sent command for 001XOKC010044B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,011 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.063, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,011 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,012 - INFO - Successfully sent command for 006LOKM110086B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,012 - INFO - Successfully sent command for 006LOKM110060B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,053 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: -2.023, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,053 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.431, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,056 - INFO - Successfully sent command for 001XOKC310054B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,057 - INFO - Successfully sent command for 001XOKC310059B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,064 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: -1.532, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,064 - INFO - Successfully sent command for 001XOKC310010B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,065 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.568, time: 10:51:00, command: {'command': 'Charge', 'power': 975.0, 'grid_charge': True}
+2024-06-18 10:51:47,065 - INFO - Successfully sent command for 001XOKF240096B: {'command': 'Charge', 'power': 975.0, 'grid_charge': True}
+2024-06-18 10:51:47,068 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,069 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: -0.202, time: 10:51:00, command: {'command': 'Charge', 'power': 1437.0, 'grid_charge': True}
+2024-06-18 10:51:47,070 - INFO - Successfully sent command for 011ROKK110010B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,070 - INFO - Successfully sent command for 001XOKF120088B: {'command': 'Charge', 'power': 1437.0, 'grid_charge': True}
+2024-06-18 10:51:47,073 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 2.447, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,073 - INFO - Successfully sent command for 017LOKP010109B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,073 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.007, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,074 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.868, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,075 - INFO - Successfully sent command for RX2505ACA10J0A180002: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,076 - INFO - Successfully sent command for 017LOKM180002B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,080 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,080 - INFO - Successfully sent command for 001XOKC310029B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,117 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.339, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,117 - INFO - Successfully sent command for 006LOLC120045B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,119 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,119 - INFO - Successfully sent command for 006ROKK110008B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,122 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.471, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,122 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,122 - INFO - Successfully sent command for 006LOLC120058B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,122 - INFO - Successfully sent command for 001XOKF120051B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,128 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.371, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,129 - INFO - Successfully sent command for 020LOLC120023B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,132 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: -0.329, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,135 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 1.777, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,135 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.363, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,135 - INFO - Successfully sent command for 017LOKM180001B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,139 - INFO - Successfully sent command for 001XOKC310086B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,149 - INFO - Successfully sent command for 001XOKC310001B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,182 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.053, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,183 - INFO - Successfully sent command for 006LOKM110014B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,191 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 1.673, time: 10:51:00, command: {'command': 'Charge', 'power': 1392.0, 'grid_charge': True}
+2024-06-18 10:51:47,191 - INFO - Successfully sent command for 001XOKD180031B: {'command': 'Charge', 'power': 1392.0, 'grid_charge': True}
+2024-06-18 10:51:47,202 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 1.301, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,202 - INFO - Successfully sent command for 006LOKM110092B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,204 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,204 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,204 - INFO - Successfully sent command for 006LOKP010154B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,205 - INFO - Successfully sent command for RX2505PW5108006000: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,205 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.525, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,209 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,209 - INFO - Successfully sent command for 001XOKC010050B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,209 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: -0.026, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,210 - INFO - Successfully sent command for RX2505ACA20J0A30219P: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,210 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,210 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 4.402, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,210 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,210 - INFO - Successfully sent command for 011LOKL140082B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,211 - INFO - Successfully sent command for 006LOKM110083B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,212 - INFO - Successfully sent command for RX5000AC625B303738: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,212 - INFO - Successfully sent command for 006LOKP240211B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,218 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,219 - INFO - Successfully sent command for 011LOKL140013B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,226 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.143, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,226 - INFO - Successfully sent command for RX2505ACA10J0A160008: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,227 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: -0.199, time: 10:51:00, command: {'command': 'Charge', 'power': 1278.0, 'grid_charge': True}
+2024-06-18 10:51:47,227 - INFO - Successfully sent command for 001XOKC310076B: {'command': 'Charge', 'power': 1278.0, 'grid_charge': True}
+2024-06-18 10:51:47,230 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,230 - INFO - Successfully sent command for 011LOKG080024B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,232 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.437, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,232 - INFO - Successfully sent command for 006LOKM110040B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,235 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 2.318, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,235 - INFO - Successfully sent command for 001XOKC310071B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,285 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,285 - INFO - Successfully sent command for 002XOJP120012B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,302 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 2.672, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,302 - INFO - Successfully sent command for 001XOKC010030B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,315 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.264, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,315 - INFO - Successfully sent command for 001XOKF180099B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,335 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,335 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.09, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,337 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.372, time: 10:51:00, command: {'command': 'Charge', 'power': 711.0, 'grid_charge': True}
+2024-06-18 10:51:47,337 - INFO - Successfully sent command for 001XOKC310037B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,337 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 1454.0, 'grid_charge': True}
+2024-06-18 10:51:47,337 - INFO - Successfully sent command for RX2505ACA10J0A150008: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,337 - INFO - Successfully sent command for 017LOKP010090B: {'command': 'Charge', 'power': 711.0, 'grid_charge': True}
+2024-06-18 10:51:47,338 - INFO - Successfully sent command for 001XOKC310075B: {'command': 'Charge', 'power': 1454.0, 'grid_charge': True}
+2024-06-18 10:51:47,341 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.24, time: 10:51:00, command: {'command': 'Charge', 'power': 843.0, 'grid_charge': True}
+2024-06-18 10:51:47,341 - INFO - Successfully sent command for 001XOKC310093B: {'command': 'Charge', 'power': 843.0, 'grid_charge': True}
+2024-06-18 10:51:47,352 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,352 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.365, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,354 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.371, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,355 - INFO - Successfully sent command for 001XOKC310088B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,356 - INFO - Successfully sent command for 006LOKP240205B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,356 - INFO - Successfully sent command for 006LOKP240249B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,407 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,407 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.0, time: 10:51:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,407 - INFO - AmberModel (Sell to Grid): price: 15.24791, sell price: 2.8090969826147427, usage: 0.111, time: 10:51:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:51:47,408 - INFO - Successfully sent command for 001XOKF180082B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,408 - INFO - Successfully sent command for 001XOKC020022B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 10:51:47,408 - INFO - Successfully sent command for 001XOKD080075B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 10:52:08,344 - ERROR - Failed to get price data: Expecting value: line 1 column 1 (char 0)
+2024-06-18 10:52:08,347 - INFO - Bad Quality: Got forecasted or invalid price for 001XOKC020015B(amber) or price update failed, e.g. too many requests.
+2024-06-18 11:22:30,246 - INFO - Updating Amber Prices...
+2024-06-18 11:22:30,247 - INFO - Updating LocalVolts Prices...
+2024-06-18 11:22:35,540 - INFO - AmberModel (Sell to Grid): price: 18.0714, sell price: 2.8276251536856747, usage: -0.304, time: 11:22:00, command: {'command': 'Charge', 'power': 1398.0000000000002, 'grid_charge': True}
+2024-06-18 11:22:35,541 - INFO - Successfully sent command for 001XOKC310080B: {'command': 'Charge', 'power': 1398.0000000000002, 'grid_charge': True}
+2024-06-18 11:22:45,260 - INFO - Health checker for devices is running...
+2024-06-18 11:23:45,272 - INFO - Health checker for devices is running...
+2024-06-18 11:23:59,764 - INFO - Updating Amber Prices...
+2024-06-18 11:25:33,941 - INFO - Updating Amber Prices...
+2024-06-18 11:25:33,941 - INFO - Updating LocalVolts Prices...
+2024-06-18 11:25:48,952 - INFO - Health checker for devices is running...
+2024-06-18 11:25:59,509 - INFO - Updating Amber Prices...
+2024-06-18 11:30:23,749 - INFO - Updating Amber Prices...
+2024-06-18 11:30:23,749 - INFO - Updating LocalVolts Prices...
+2024-06-18 11:30:29,223 - INFO - AmberModel (Sell to Grid): price: 19.26442, sell price: 2.8276251536856747, usage: 0.044, time: 11:30:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 11:30:29,224 - INFO - Successfully sent command for 002XOJP120011B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 11:30:55,878 - INFO - Updating Amber Prices...
+2024-06-18 11:30:55,879 - INFO - Updating LocalVolts Prices...
+2024-06-18 11:31:19,526 - ERROR - Device thread for 001XOKC310048B crashed. Restarting...
+2024-06-18 11:31:24,075 - INFO - Health checker for devices is running...
+2024-06-18 11:31:59,402 - INFO - Updating Amber Prices...
+2024-06-18 11:32:34,806 - ERROR - Device thread for 001XOKC310048B crashed. Restarting...
+2024-06-18 11:32:50,278 - INFO - Health checker for devices is running...
+2024-06-18 11:35:18,776 - INFO - Updating Amber Prices...
+2024-06-18 11:35:18,777 - INFO - Updating LocalVolts Prices...
+2024-06-18 11:35:57,661 - ERROR - Device thread for 001XOKC310097B crashed. Restarting...
+2024-06-18 11:36:01,104 - INFO - Updating Amber Prices...
+2024-06-18 11:36:10,588 - INFO - Health checker for devices is running...
+2024-06-18 11:37:14,595 - ERROR - Device thread for 001XOKC310097B crashed. Restarting...
+2024-06-18 11:37:17,613 - INFO - Health checker for devices is running...
+2024-06-18 11:37:39,249 - INFO - Updating Amber Prices...
+2024-06-18 11:37:39,250 - INFO - Updating LocalVolts Prices...
+2024-06-18 11:37:44,262 - INFO - Health checker for devices is running...
+2024-06-18 11:37:44,494 - INFO - AmberModel (Sell to Grid): price: 18.12658, sell price: 2.8276251536856747, usage: 0.475, time: 11:37:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 11:37:44,495 - INFO - Successfully sent command for 001XOKF180087B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 11:37:59,768 - INFO - Updating Amber Prices...
+2024-06-18 11:38:14,288 - INFO - Updating Amber Prices...
+2024-06-18 11:38:14,289 - INFO - Updating LocalVolts Prices...
+2024-06-18 11:38:19,294 - ERROR - Health checker for devices error: 'BatteryScheduler' object has no attribute 'futures'
+2024-06-18 11:38:19,537 - INFO - AmberModel (Sell to Grid): price: 18.12658, sell price: 2.8276251536856747, usage: 0.16, time: 11:38:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 11:38:19,538 - INFO - Successfully sent command for 006LOKM110027B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 11:38:29,300 - INFO - Health checker for devices is running...
+2024-06-18 11:39:46,678 - INFO - Updating Amber Prices...
+2024-06-18 11:39:46,678 - INFO - Updating LocalVolts Prices...
+2024-06-18 11:39:51,687 - ERROR - Health checker for devices error: 'BatteryScheduler' object has no attribute 'futures', restarting after 10 seconds...
+2024-06-18 11:39:51,942 - INFO - AmberModel (Sell to Grid): price: 18.12658, sell price: 2.8276251536856747, usage: 0.0, time: 11:39:00, command: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 11:39:51,942 - INFO - Successfully sent command for 001XOKF120001B: {'command': 'Charge', 'power': 700, 'grid_charge': True}
+2024-06-18 11:39:59,245 - INFO - Updating Amber Prices...
+2024-06-18 11:39:59,776 - INFO - Updating Amber Prices...
+2024-06-18 11:40:01,694 - INFO - Health checker for devices is running...
+2024-06-18 11:47:11,031 - INFO - Updating Amber Prices...
+2024-06-18 11:47:11,032 - INFO - Updating LocalVolts Prices...
+2024-06-18 11:47:16,043 - ERROR - Health checker for devices error: 'BatteryScheduler' object has no attribute 'futures', restarting after 10 seconds...
+2024-06-18 11:47:16,505 - INFO - AmberModel (Sell to Grid): price: 18.12658, sell price: 2.8276251536856747, usage: 2.636, time: 11:47:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 11:47:16,505 - INFO - Successfully sent command for 001XOKC310052B: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 11:47:26,050 - INFO - Health checker for devices is running...
+2024-06-18 11:47:59,614 - INFO - Updating Amber Prices...
+2024-06-18 11:48:26,056 - INFO - Health checker for devices is running...
+2024-06-18 11:49:16,753 - INFO - AmberModel (Sell to Grid): price: 5.75734, sell price: 2.8276251536856747, usage: 2.58, time: 11:49:00, command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}
+2024-06-18 11:49:16,753 - INFO - Command Skipped: Command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}, Last Command: {'command': 'Charge', 'power': 1500, 'grid_charge': True}, Time: 1900-01-01 11:49:00, Last Time: 1900-01-01 11:47:00
+2024-06-18 11:49:26,062 - INFO - Health checker for devices is running...
+2024-06-18 11:49:59,201 - INFO - Updating Amber Prices...
+2024-06-18 11:49:59,790 - INFO - Updating Amber Prices...
+2024-06-18 11:50:26,064 - INFO - Health checker for devices is running...
+2024-06-18 11:53:26,790 - INFO - Updating Amber Prices...
+2024-06-18 11:53:26,793 - INFO - Updating LocalVolts Prices...
+2024-06-18 11:53:31,799 - ERROR - Health checker for devices error: 'BatteryScheduler' object has no attribute 'futures', restarting after 10 seconds...
+2024-06-18 11:53:32,104 - INFO - AmberModel (Sell to Grid): price: 18.12658, sell price: 2.8276251536856747, usage: 1.98, time: 11:53:00, command: {'command': 'Charge', 'power': 771.9999999999998, 'grid_charge': True}
+2024-06-18 11:53:32,104 - INFO - Successfully sent command for RX2505ACA10J0A160038: {'command': 'Charge', 'power': 771.9999999999998, 'grid_charge': True}

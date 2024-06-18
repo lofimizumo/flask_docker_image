@@ -15,6 +15,7 @@ import pickle
 from solar_prediction import WeatherInfoFetcher
 import concurrent.futures
 import traceback
+from batteryexceptions import *
 
 
 class DeviceType(Enum):
@@ -57,8 +58,7 @@ class BatteryScheduler:
         self.config = load_config(config)
         self.logger = logging.getLogger('logger')
         self.scheduler = None
-        self.monitor = util.PriceAndLoadMonitor(
-            test_mode=test_mode, api_version=api_version)
+        self.monitor = util.PriceAndLoadMonitor(api_version=api_version)
         self.test_mode = test_mode
         self.is_runing = False
         self.pv_sn = pv_sn
@@ -242,6 +242,7 @@ class BatteryScheduler:
 
     def _process_send_cmd_each_sn(self,sn):
         try:
+            logging.info(f"Processing sn: {sn}")
             bat_stats = self.get_current_battery_stats(sn)
             current_batP = bat_stats.get('batP', 0) if bat_stats else 0
             current_usage = bat_stats.get('loadP', 0) if bat_stats else 0
@@ -277,7 +278,8 @@ class BatteryScheduler:
                                 last_command_time.minute)
 
             if command != last_command or minute_passed >= 5:
-                self.send_battery_command(command=command, sn=sn)
+                if not self.test_mode:
+                    self.send_battery_command(command=command, sn=sn)
                 self.last_command_time[sn] = c_datetime
                 self.last_schedule_peakvalley[sn] = command
                 self.logger.info(
@@ -285,15 +287,19 @@ class BatteryScheduler:
             else:
                 self.logger.info(
                     f"Command Skipped: Command: {command}, Last Command: {last_command}, Time: {c_datetime}, Last Time: {last_command_time}")
+        except BatteryStatsUpdateFailure:
+            logging.error(
+                f"Failed to update battery stats for {sn}.")
         except Exception as e:
             error_message = f"Error processing sn:{sn}: {e}\nTraceback: {traceback.format_exc()}"
             logging.error(error_message)
             # Free tier mailgun account, only 100 emails per day, replace it later.
-            api = '1d8d9cfb35f2ae4bf1eaeadb988854f6-a4da91cf-a075fd47'
-            domain = 'sandbox2cf9f51d043a48b69cdd606ef382fb8c.mailgun.org'
-            sender = f'bk0717 <mailgun@{domain}>'
-            to = [f'mizumo1988@gmail.com']
-            util.send_email(api,domain,sender,to,f'{sn}: Error Occurred',error_message)
+            # api = '1d8d9cfb35f2ae4bf1eaeadb988854f6-a4da91cf-a075fd47'
+            # domain = 'sandbox2cf9f51d043a48b69cdd606ef382fb8c.mailgun.org'
+            # sender = f'bk0717 <mailgun@{domain}>'
+            # to = [f'mizumo1988@gmail.com']
+            # util.send_email(api,domain,sender,to,f'{sn}: Error Occurred',error_message)
+            raise e
 
     def start(self):
         '''
@@ -319,12 +325,13 @@ class BatteryScheduler:
         self.logger.info("Stopped.")
 
     def _health_checker_devices(self):
-        # Sleep for 10 seconds to wait for the main thread to start
-        time.sleep(10)
         while self.is_running:
             try:
                 for future, sn in zip(self.futures, self.sn_list):
                     if future.done() and future.exception() is not None:
+                        if future.exception() == BatteryStatsUpdateFailure:
+                            self.logger.error(
+                                f"Failed to update battery stats for {sn}. Restarting...")
                         self.logger.error(f"Device thread for {sn} crashed. Restarting...")
                         index = self.futures.index(future)
                         self.futures[index] = concurrent.futures.ThreadPoolExecutor().submit(
@@ -332,10 +339,9 @@ class BatteryScheduler:
                 self.logger.info("Health checker for devices is running...")
                 time.sleep(60)  # Check every 60 seconds
             except Exception as e:
-                self.logger.error(f"Health checker for devices error: {e}")
+                self.logger.error(f"Health checker for devices error: {e}, restarting after 10 seconds...")
                 # restart the health checker
                 time.sleep(10)
-                self._health_checker_devices()
 
     def get_logs(self):
         with open('logs.txt', 'r') as file:
@@ -491,14 +497,13 @@ class PeakValleyScheduler():
             weighted_charging_cost=0.0
         )
 
-    def init_price_history(self, sn):
-        price_history = self.monitor.get_price_history(
-            location=self.config.get('battery_locations', {}).get(sn, 'qld'))
-        self.price_historys[sn] = np.interp(
-            np.linspace(0, 1, int(self.LookBackBars)),
-            np.linspace(0, 1, len(price_history)),
-            price_history
-        ).tolist()
+    def init_price_history(self, sn, length = 720):
+        '''
+        sn: str, the serial number of the device
+        length: int, the length of the returned price history, it's interpolated from the original price history with a 30-minute interval
+        '''
+        price_history = self.monitor.get_price_history(sn, length)
+        self.price_historys[sn] = price_history 
 
     def _get_solar(self, interval=0.5, test_mode=False, max_solar_power=5000):
         max_solar = max_solar_power
@@ -1379,8 +1384,20 @@ class AIScheduler():
 
         return self.schedule
 
+def get_test_devices(count=100):
+    import json
+    import os
+    file_path = os.path.join(os.path.dirname(__file__), 'ignoreMe/device_lists.json')
+    with open(file_path) as f:
+        data = json.load(f)
+        sns = [device['deviceSn'] for device in data['data']]
+    # choose random 100 devices
+    import random
+    random.shuffle(sns) 
+    sns = sns[:count]
+    return sns
 
-if __name__ == '__main__':
+def test_scheduler():
     # For Phase 2
     # scheduler = BatteryScheduler(
     #     scheduler_type='AIScheduler',
@@ -1404,10 +1421,21 @@ if __name__ == '__main__':
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
     scheduler = BatteryScheduler(
-        scheduler_type='PeakValley', test_mode=False, api_version='redx')
+        scheduler_type='PeakValley', battery_sn=['RX2505ACA10J0A160016','RX2505ACA10J0A160016','RX2505ACA10J0A160016'], test_mode=False, api_version='redx')
     scheduler.start()
     # time.sleep(300)
     # print('Scheduler started')
     # time.sleep(3)
     # scheduler.add_amber_device('011LOKL140104B')
     # scheduler.add_amber_device('RX2505ACA10J0A160016')
+
+def profile_scheduler(count = 1):
+    import cProfile
+    sns = get_test_devices(count = count)
+    scheduler = BatteryScheduler(
+        scheduler_type='PeakValley', battery_sn=sns, test_mode=True, api_version='redx')
+    scheduler.start()
+    cProfile.run('test_scheduler()', 'profile_scheduler')
+if __name__ == '__main__':
+    profile_scheduler()
+    # test_scheduler()

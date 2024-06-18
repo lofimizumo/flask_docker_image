@@ -1,0 +1,2 @@
+class BatteryStatsUpdateFailure(Exception):
+    pass
