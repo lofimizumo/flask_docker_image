@@ -4,7 +4,7 @@
   "name": "battery-optimization-ai",
   "enabled": true,
   "resources": {
-    "machineType": "C4",
+    "machineType": "C5",
     "replicas": 1,
     "ports": [
       5000
