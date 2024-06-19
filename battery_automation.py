@@ -14,6 +14,8 @@ from threading import Thread
 import pickle
 from solar_prediction import WeatherInfoFetcher
 import concurrent.futures
+import cProfile
+import pstats
 import traceback
 from batteryexceptions import *
 
@@ -122,7 +124,7 @@ class BatteryScheduler:
                 logging.error(f"Scheduling error: {e}")
                 logging.error(f"Traceback: {traceback.format_exc()}")
                 time.sleep(self.sample_interval)
-                self._make_battery_decision()
+                # self._make_battery_decision()
 
     def _seconds_to_next_n_minutes(self, current_time, n=5):
         # self.logger.info(
@@ -332,7 +334,7 @@ class BatteryScheduler:
                         if future.exception() == BatteryStatsUpdateFailure:
                             self.logger.error(
                                 f"Failed to update battery stats for {sn}. Restarting...")
-                        self.logger.error(f"Device thread for {sn} crashed. Restarting...")
+                        self.logger.error(f"Device thread for {sn} crashed: {future.exception()}, restarting...")
                         index = self.futures.index(future)
                         self.futures[index] = concurrent.futures.ThreadPoolExecutor().submit(
                             self._process_send_cmd_each_sn, sn)
@@ -1430,12 +1432,11 @@ def test_scheduler():
     # scheduler.add_amber_device('RX2505ACA10J0A160016')
 
 def profile_scheduler(count = 1):
-    import cProfile
     sns = get_test_devices(count = count)
     scheduler = BatteryScheduler(
         scheduler_type='PeakValley', battery_sn=sns, test_mode=True, api_version='redx')
     scheduler.start()
-    cProfile.run('test_scheduler()', 'profile_scheduler')
+
 if __name__ == '__main__':
     profile_scheduler()
     # test_scheduler()
