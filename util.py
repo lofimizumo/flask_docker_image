@@ -18,7 +18,7 @@ def load_config(file_path='config.toml'):
         config = tomli.load(file)
     return config
 
-def setup_logger(logger_name, log_file, level=logging.info):
+def setup_logger(logger_name, log_file, level=logging.INFO):
     logger = logging.getLogger(logger_name)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     fileHandler = logging.FileHandler(log_file, mode='a')

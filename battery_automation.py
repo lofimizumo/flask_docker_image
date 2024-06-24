@@ -1431,7 +1431,7 @@ def test_scheduler():
     # scheduler.add_amber_device('011LOKL140104B')
     # scheduler.add_amber_device('RX2505ACA10J0A160016')
 
-def profile_scheduler(count = 1):
+def profile_scheduler(count = 5):
     sns = get_test_devices(count = count)
     scheduler = BatteryScheduler(
         scheduler_type='PeakValley', battery_sn=sns, test_mode=True, api_version='redx')

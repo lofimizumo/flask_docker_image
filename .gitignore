@@ -4,7 +4,7 @@ venv
 test/
 scratch/
 *.pyc
-logs.txt
+*.txt
 data/
 ignoreMe/
 demand_element.pkl
