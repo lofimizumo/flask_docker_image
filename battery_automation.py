@@ -164,7 +164,7 @@ class BatteryScheduler:
                     # add 30 seconds to make sure the price is updated on Local Volts
                     delay = delay + 30
                     # self.logger.info(
-                        # f"Next Price Update at: {current_time + timedelta(seconds=delay)}")
+                    # f"Next Price Update at: {current_time + timedelta(seconds=delay)}")
                     time.sleep(delay)
                 else:
                     self.logger.info(
@@ -241,8 +241,7 @@ class BatteryScheduler:
                             for sn in self.sn_list]
             concurrent.futures.wait(self.futures)
 
-
-    def _process_send_cmd_each_sn(self,sn):
+    def _process_send_cmd_each_sn(self, sn):
         try:
             logging.info(f"Processing sn: {sn}")
             bat_stats = self.get_current_battery_stats(sn)
@@ -256,7 +255,8 @@ class BatteryScheduler:
             algo_type = self.algo_types.get(sn, 'sell_to_grid')
             buy_price = self.current_prices[sn]['buy']
             feedin_price = self.current_prices[sn]['feedin']
-            current_time = self.get_current_time(state=self.sn_locations.get(sn, 'qld')) 
+            current_time = self.get_current_time(
+                state=self.sn_locations.get(sn, 'qld'))
             algo_type = 'sell_to_grid' if device_location == 'qld' else 'cover_usage'
 
             command = self._get_battery_command(
@@ -293,7 +293,7 @@ class BatteryScheduler:
             logging.error(
                 f"Failed to update battery stats for {sn}.")
         except Exception as e:
-            error_message = f"Error processing sn:{sn}: {e}\nTraceback: {traceback.format_exc()}"
+            error_message = f"Error processing sn:{sn}: {e} \n Traceback: {traceback.format_exc()}"
             logging.error(error_message)
             # Free tier mailgun account, only 100 emails per day, replace it later.
             # api = '1d8d9cfb35f2ae4bf1eaeadb988854f6-a4da91cf-a075fd47'
@@ -499,13 +499,13 @@ class PeakValleyScheduler():
             weighted_charging_cost=0.0
         )
 
-    def init_price_history(self, sn, length = 720):
+    def init_price_history(self, sn, length=720):
         '''
         sn: str, the serial number of the device
         length: int, the length of the returned price history, it's interpolated from the original price history with a 30-minute interval
         '''
         price_history = self.monitor.get_price_history(sn, length)
-        self.price_historys[sn] = price_history 
+        self.price_historys[sn] = price_history
 
     def _get_solar(self, interval=0.5, test_mode=False, max_solar_power=5000):
         max_solar = max_solar_power
@@ -1386,20 +1386,23 @@ class AIScheduler():
 
         return self.schedule
 
+
 def get_test_devices(count=100):
     import json
     import os
-    file_path = os.path.join(os.path.dirname(__file__), 'ignoreMe/device_lists.json')
+    file_path = os.path.join(os.path.dirname(
+        __file__), 'ignoreMe/device_lists.json')
     with open(file_path) as f:
         data = json.load(f)
         sns = [device['deviceSn'] for device in data['data']]
     # choose random 100 devices
     import random
-    random.shuffle(sns) 
+    random.shuffle(sns)
     sns = sns[:count]
     return sns
 
-def test_scheduler():
+
+def test_scheduler(test_mode=False):
     # For Phase 2
     # scheduler = BatteryScheduler(
     #     scheduler_type='AIScheduler',
@@ -1423,7 +1426,9 @@ def test_scheduler():
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
     scheduler = BatteryScheduler(
-        scheduler_type='PeakValley', battery_sn=['RX2505ACA10J0A160016','RX2505ACA10J0A160016','RX2505ACA10J0A160016'], test_mode=False, api_version='redx')
+        scheduler_type='PeakValley',
+        battery_sn=['011LOKL140058B','011LOKL140104B','RX2505ACA10J0A160016'],
+        test_mode=test_mode, api_version='redx')
     scheduler.start()
     # time.sleep(300)
     # print('Scheduler started')
@@ -1431,12 +1436,14 @@ def test_scheduler():
     # scheduler.add_amber_device('011LOKL140104B')
     # scheduler.add_amber_device('RX2505ACA10J0A160016')
 
-def profile_scheduler(count = 5):
-    sns = get_test_devices(count = count)
+
+def multiple_random_devices_test(count=5):
+    sns = get_test_devices(count=count)
     scheduler = BatteryScheduler(
         scheduler_type='PeakValley', battery_sn=sns, test_mode=True, api_version='redx')
     scheduler.start()
 
+
 if __name__ == '__main__':
-    profile_scheduler()
-    # test_scheduler()
+    # multiple_random_devices_test()
+    test_scheduler()
