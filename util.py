@@ -177,6 +177,11 @@ class PriceAndLoadMonitor:
         elif retailer == 'lv':
             return self._get_realtime_lv_price(location)
     
+    def get_realtime_price_from_server(self, sn):
+        # TODO: implement the function to get the realtime price from the server
+        # Send a request to the RedX Prod server to get the realtime price
+        raise NotImplementedError
+    
     def _get_realtime_lv_price(self, location = 'qld'):
         # TODO: replace the API key with the device's API key and partner ID
         url = "https://api.localvolts.com/v1/customer/interval?NMI=*"
@@ -617,6 +622,21 @@ class PriceAndLoadMonitor:
 
         return response
 
+class AIServerCommunicator:
+    '''
+    Communicate with the AI server to get the `PricePrediction`, `SolarPrediction` and `LoadPrediction` data.'''
+    def __init__(self) :
+        self.api = ApiCommunicator(
+            base_url="https://dev3.redxvpp.com/restapi")
+    
+    def get_price_prediction(self, sn):
+        raise NotImplementedError
+    
+    def get_solar_prediction(self, sn):
+        raise NotImplementedError
+    
+    def get_load_prediction(self, sn):
+        raise NotImplementedError
 
 class ApiCommunicator:
     def __init__(self, base_url):

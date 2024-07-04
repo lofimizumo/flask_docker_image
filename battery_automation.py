@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, time as datetime_time
 from enum import Enum
-from typing import Dict
 from dataclasses import dataclass
 import time
 import numpy as np
@@ -14,10 +13,10 @@ from threading import Thread
 import pickle
 from solar_prediction import WeatherInfoFetcher
 import concurrent.futures
-import cProfile
-import pstats
 import traceback
 from batteryexceptions import *
+import warnings
+import asyncio
 
 
 class DeviceType(Enum):
@@ -365,8 +364,11 @@ class BatteryScheduler:
             self.sn_list.remove(sn)
             self.logger.info(f"Removed device {sn} from the scheduler.")
 
-    def get_current_price(self, location='qld', retailer='amber'):
-        return self.monitor.get_realtime_price(location=location, retailer=retailer)
+    def get_current_price(self, sn, retailer='amber'):
+        warnings.warn("The 'get_realtime_price' method with retailer argument will be deprecated in a future version. "
+            "Please update your code to use 'get_realtime_price_from_server' instead.", 
+            DeprecationWarning, stacklevel=2)
+        return self.monitor.get_realtime_price(sn, retailer=retailer)
 
     def get_current_time(self, state='qld') -> str:
         state_timezone_map = {
@@ -506,6 +508,402 @@ class PeakValleyScheduler():
         '''
         price_history = self.monitor.get_price_history(sn, length)
         self.price_historys[sn] = price_history
+
+    def _get_solar(self, interval=0.5, test_mode=False, max_solar_power=5000):
+        max_solar = max_solar_power
+
+        def gaussian_mixture(interval=0.5):
+            gaus_x = np.arange(0, 24, interval)
+            mu1 = 10.35
+            mu2 = 13.65
+            sigma = 1.67
+            gaus_y1 = np.exp(-0.5 * ((gaus_x - mu1) / sigma)
+                             ** 2) / (sigma * np.sqrt(2 * np.pi))
+            gaus_y2 = np.exp(-0.5 * ((gaus_x - mu2) / sigma)
+                             ** 2) / (sigma * np.sqrt(2 * np.pi))
+            gaus_y = (gaus_y1 + gaus_y2) / np.max(gaus_y1 + gaus_y2)
+            return gaus_x, gaus_y
+        if test_mode:
+            max_solar = 5000
+        else:
+            try:
+                weather_fetcher = WeatherInfoFetcher('Shaws Bay')
+                rain_info = weather_fetcher.get_rain_cloud_forecast_24h(
+                    weather_fetcher.get_response())
+                # here we give clouds more weight than rain based on the assumption that clouds have a bigger impact on solar generation
+                max_solar = (
+                    1-(1.4*rain_info['clouds']+0.6*rain_info['rain'])/(2*100))*max_solar
+                self.logger.info(
+                    f'Weather forecast: rain: {rain_info["rain"]}, clouds: {rain_info["clouds"]}, max_solar: {max_solar}')
+            except Exception as e:
+                logging.error(e)
+
+        _, gaus_y = gaussian_mixture(interval)
+        return gaus_y*max_solar
+
+    def _discharge_confidence(self, current_price):
+        """
+        Calculate the discharge confidence level based on the current price.
+
+        Parameters:
+        current_price (float): The current price value.
+
+        Returns:
+        float (0-1): The discharge confidence level.
+        """
+        conf_level = 0.97 - 0.8824 * math.exp(-0.033 * current_price)
+        return conf_level
+
+    def _algo_sell_to_grid(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pvkW, device_type: DeviceType, device_sn):
+        # Update price history
+        current_time = datetime.strptime(current_time, '%H:%M').time()
+        price_history = self.price_historys.get(device_sn, None)
+        if price_history is None:
+            self.init_price_history(device_sn)
+            price_history = self.price_historys[device_sn]
+        last_updated_time = self.last_updated_times.get(device_sn, None)
+        if last_updated_time is None or current_time.minute != last_updated_time.minute:
+            self.last_updated_times[device_sn] = current_time
+            price_history.append(current_buy_price)
+            if len(price_history) > self.LookBackBars:
+                price_history.pop(0)
+
+        # Set current_price to the median of the last five minutes
+        sample_points_per_minute = 60 / self.sample_interval
+        if current_buy_price < self.PeakPrice:
+            current_buy_price = np.mean(
+                price_history[int(-5 * sample_points_per_minute):])
+
+        # Buy and sell price based on historical data
+        buy_price, sell_price = np.percentile(
+            price_history, [self.BuyPct, self.SellPct])
+        peak_price = self.PeakPrice
+
+        command = {"command": "Idle"}
+
+        # Charging logic
+        if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pvkW > current_usage)):
+            maxpower, minpower = self._get_power_limits(device_type)
+            power, grid_charge = self._calculate_charging_power(
+                current_time, current_pvkW, current_usage, minpower, maxpower, current_buy_price <= buy_price)
+            command = {'command': 'Charge',
+                       'power': power, 'grid_charge': grid_charge}
+
+        # Discharging logic
+        if self._is_discharging_period(current_time) and (current_buy_price >= sell_price) and current_soc > 0.1:
+            power = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
+            anti_backflow_threshold = np.percentile(
+                price_history, self.PeakPct)
+            anti_backflow = current_buy_price <= anti_backflow_threshold
+            conf_level = self._discharge_confidence(
+                current_buy_price - anti_backflow_threshold)
+            power = max(min(power * conf_level + 900, power), 1000)
+            command = {'command': 'Discharge', 'power': power,
+                       'anti_backflow': anti_backflow}
+
+        self.logger.info(f"AmberModel (Sell to Grid): price: {current_buy_price}, sell price: {sell_price}, usage: {current_usage}, "
+                         f"time: {current_time}, command: {command}")
+
+        return command
+
+    def _algo_auto_time(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type: DeviceType, device_sn):
+        # Use the Auto Mode (Now actually we are using charge with solar only, not using the auto mode) in the morning charging, and the Time Mode in the afternoon discharging
+        # Update price history
+        current_time = datetime.strptime(current_time, '%H:%M').time()
+        price_history = self.price_historys[device_sn]
+        if price_history is None:
+            self.init_price_history(device_sn)
+            price_history = self.price_historys[device_sn]
+        last_updated_time = self.last_updated_times.get(device_sn, None)
+        if last_updated_time is None or current_time.minute != last_updated_time.minute:
+            self.last_updated_times[device_sn] = current_time
+            price_history.append(current_buy_price)
+            if len(price_history) > self.LookBackBars:
+                price_history.pop(0)
+
+        # Set current_price to the median of the last five minutes
+        sample_points_per_minute = 60 / self.sample_interval
+        if current_buy_price < self.PeakPrice:
+            current_buy_price = np.mean(
+                price_history[int(-5 * sample_points_per_minute):])
+
+        # Buy and sell price based on historical data
+        buy_price, sell_price = np.percentile(
+            price_history, [self.BuyPct, self.SellPct])
+        command = {"command": "Idle"}
+
+        # Charging logic
+        if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pv > current_usage)):
+            maxpower, minpower = self._get_power_limits(device_type)
+            power, grid_charge = self._calculate_charging_power(
+                current_time, current_pv, current_usage, minpower, maxpower, current_buy_price <= buy_price)
+            command = {'command': 'Charge',
+                       'power': power, 'grid_charge': grid_charge}
+
+        # Discharging logic
+        if self._is_discharging_period(current_time) and (current_buy_price >= sell_price) and current_soc > 0.1:
+            power = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
+            command = {'command': 'Discharge', 'power': power,
+                       'anti_backflow': False}
+
+        self.logger.info(f"AmberModel (Auto-Time): price: {current_buy_price}, usage: {current_usage}, "
+                         f"time: {current_time}, command: {command}")
+
+        return command
+
+    def _algo_cover_usage(self, current_buy_price, current_feedin_price, current_time, current_usagekW, current_soc, current_pvkW, current_batpowerkW, device_type: DeviceType, device_sn):
+        # Update price history
+        current_time = datetime.strptime(current_time, '%H:%M').time()
+        price_history = self.price_historys[device_sn]
+        if price_history is None:
+            self.init_price_history(device_sn)
+            price_history = self.price_historys[device_sn]
+        last_updated_time = self.last_updated_times.get(device_sn, None)
+        if last_updated_time is None or current_time.minute != last_updated_time.minute:
+            self.last_updated_times[device_sn] = current_time
+            price_history.append(current_buy_price)
+            if len(price_history) > self.LookBackBars:
+                price_history.pop(0)
+
+        # Set current_price to the median of the last five minutes
+        sample_points_per_minute = 60 / self.sample_interval
+        if current_buy_price < self.PeakPrice:
+            current_buy_price = np.mean(
+                price_history[int(-5 * sample_points_per_minute):])
+
+        # Buy and sell price based on historical data
+        buy_price, sell_price = np.percentile(
+            price_history, [self.BuyPct, self.SellPct])
+        peak_price = self.PeakPrice
+
+        command = {"command": "Idle"}
+
+        # Charging logic
+        # Init the WeightedPrice (Charging Cost) for the device
+        if device_sn not in self.charging_costs:
+            self.init_device_charge_cost(device_sn)
+        if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pvkW > current_usagekW)):
+            maxpower, minpower = self._get_power_limits(device_type)
+            powerkW, grid_charge = self._calculate_charging_power(
+                current_time, current_pvkW, current_usagekW, minpower, maxpower, current_buy_price <= buy_price)
+            command = {'command': 'Charge',
+                       'power': powerkW, 'grid_charge': grid_charge}
+            # Update the weighted charging costs
+            charge_powerkW = -current_batpowerkW
+            self.update_weightedPrice(
+                current_buy_price, current_usagekW, current_pvkW, device_sn, charge_powerkW)
+
+        device_charge_cost = self.charging_costs.get(device_sn, None)
+        weighted_price = device_charge_cost.weighted_charging_cost if device_charge_cost else None
+
+        # Discharging logic
+        # Turn off the debug flag to use the actual discharging period
+        if self._is_discharging_period(current_time, debug=False) and (current_feedin_price >= weighted_price) and current_soc > 0.1 and current_pvkW < current_usagekW:
+            anti_backflow = True
+            powerkW = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
+            device_charge_cost = self.charging_costs.get(device_sn, None)
+
+            # Add dynamic discharging when price is very high
+            anti_backflow_threshold = 150  # This is a provisional value, need to be adjusted
+            if current_feedin_price > anti_backflow_threshold:
+                conf_level = self._discharge_confidence(
+                    current_feedin_price - anti_backflow_threshold)
+                powerkW = max(min(powerkW * conf_level + 900, powerkW), 1000)
+                anti_backflow = False
+            command = {'command': 'Discharge', 'power': powerkW,
+                       'anti_backflow': anti_backflow}
+
+        self.logger.info(f"AmberModel(Cover Usage) : price: {current_buy_price}, WeightedPrice: {weighted_price}, usage: {current_usagekW}, "
+                         f"time: {current_time}, command: {command}")
+
+        return command
+
+    def update_weightedPrice(self, current_buy_price, current_usagekW, current_pvkW, device_sn, charge_powerkW):
+        device_charge_cost = self.charging_costs.get(device_sn, None)
+
+        # Ensure the stored charge_cost is only for the current day
+        now_date_str = datetime.now().strftime('%Y-%m-%d')
+        if now_date_str != device_charge_cost.date:
+            self.init_device_charge_cost(device_sn)
+
+        excess_energy = max(0, current_pvkW - current_usagekW)
+        grid_charge_power = max(0, charge_powerkW - excess_energy)
+        device_charge_cost.charging_points.append(ChargingPoint(
+            charging_price=current_buy_price,
+            grid_charge_power=grid_charge_power,
+            battery_charge_power=charge_powerkW
+        ))
+        charging_prices = [
+            point.charging_price for point in device_charge_cost.charging_points]
+        grid_charge_powers = [
+            point.grid_charge_power for point in device_charge_cost.charging_points]
+        battery_charge_powers = [
+            point.battery_charge_power for point in device_charge_cost.charging_points]
+
+        device_charge_cost.weighted_charging_cost = np.multiply(np.array(charging_prices), np.array(
+            grid_charge_powers)).sum()/(np.array(battery_charge_powers).sum() + 1e-6)
+
+    def step(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn, algo_type='sell_to_grid'):
+        if algo_type == 'sell_to_grid':
+            return self._algo_sell_to_grid(
+                current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn)
+        if algo_type == 'auto_time':
+            return self._algo_auto_time(
+                current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn)
+        else:
+            return self._algo_cover_usage(
+                current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn)
+
+    def _get_power_limits(self, device_type: DeviceType):
+        match device_type:
+            case DeviceType.FIVETHOUSAND:
+                maxpower = 5000
+                minpower = 1250
+            case DeviceType.TWOFIVEZEROFIVE:
+                maxpower = 1500
+                minpower = 700
+        return maxpower, minpower
+
+    def _calculate_charging_power(self, current_time, current_pv, current_usage, minpower, maxpower, low_price=False):
+        power = 0
+        grid_charge = True
+        excess_solar = 1000 * (current_pv - current_usage)
+
+        if low_price:
+            power = minpower
+            grid_charge = True
+
+        if excess_solar > 0:
+            power = max(minpower, min(excess_solar, maxpower))
+            grid_charge = True
+
+        if datetime_time(6, 0) <= current_time <= datetime_time(9, 0):
+            power = maxpower
+            grid_charge = False
+
+        return power, grid_charge
+
+    def _is_charging_period(self, t):
+        return t >= self.t_chg_start1 and t <= self.t_chg_end1
+
+    def _is_discharging_period(self, t, debug=False):
+        if debug:
+            return t >= self.t_dis_start_test and t <= self.t_dis_end_test
+        return (t >= self.t_dis_start2 and t <= self.t_dis_end2) or (t >= self.t_dis_start1 and t <= self.t_dis_end1)
+
+    def _is_peak_period(self, t):
+        return t >= self.t_peak_start and t <= self.t_peak_end
+
+
+class HybridScheduler():
+    '''
+    v2.0 model
+    '''
+    def __init__(self, config_path='config.toml', monitor=None):
+        peak_valley_config = load_config(config_path)['peakvalley']
+        self.config = load_config(config_path)
+        self.logger = logging.getLogger('logger')
+        self.monitor = monitor
+        self.ai_server = util.AIServerCommunicator()
+        self.BatNum = peak_valley_config['BatNum']
+        self.BatMaxCapacity = peak_valley_config['BatMaxCapacity']
+        self.BatCap = self.BatNum * self.BatMaxCapacity
+        self.BatChgMax = self.BatNum * \
+            peak_valley_config['BatChgMaxMultiplier']
+        self.BatDisMax = self.BatNum * \
+            peak_valley_config['BatDisMaxMultiplier']
+        self.HrMin = peak_valley_config['HrMin']
+        self.SellDiscount = peak_valley_config['SellDiscount']
+        self.SpikeLevel = peak_valley_config['SpikeLevel']
+        self.SolarCharge = peak_valley_config['SolarCharge']
+        self.SellBack = peak_valley_config['SellBack']
+        self.BuyPct = peak_valley_config['BuyPct']
+        self.SellPct = peak_valley_config['SellPct']
+        self.PeakPct = peak_valley_config['PeakPct']
+        self.PeakPrice = peak_valley_config['PeakPrice']
+        self.LookBackDays = peak_valley_config['LookBackDays']
+        self.sample_interval = peak_valley_config['SampleInterval']
+        self.LookBackBars = 24 * 60 / \
+            (self.sample_interval / 60) * self.LookBackDays
+        self.ChgStart1 = peak_valley_config['ChgStart1']
+        self.ChgEnd1 = peak_valley_config['ChgEnd1']
+        self.DisChgStart2 = peak_valley_config['DisChgStart2']
+        self.DisChgEnd2 = peak_valley_config['DisChgEnd2']
+        self.DisChgStartTest = peak_valley_config['DisChgStartTest']
+        self.DisChgEndTest = peak_valley_config['DisChgEndTest']
+        self.DisChgStart1 = peak_valley_config['DisChgStart1']
+        self.DisChgEnd1 = peak_valley_config['DisChgEnd1']
+        self.PeakStart = peak_valley_config['PeakStart']
+        self.PeakEnd = peak_valley_config['PeakEnd']
+
+        self.date = None
+        self.last_updated_times = {}
+        self.last_soc = None
+
+        # Initial data containers and setup
+        self.price_historys = {}
+        self.charging_costs = {}
+        self.solar = None
+
+        # Convert start and end times to datetime.time
+        self.t_chg_start1 = datetime.strptime(
+            self.ChgStart1, '%H:%M').time()
+        self.t_chg_end1 = datetime.strptime(
+            self.ChgEnd1, '%H:%M').time()
+        self.t_dis_start2 = datetime.strptime(
+            self.DisChgStart2, '%H:%M').time()
+        self.t_dis_end2 = datetime.strptime(
+            self.DisChgEnd2, '%H:%M').time()
+        self.t_dis_start1 = datetime.strptime(
+            self.DisChgStart1, '%H:%M').time()
+        self.t_dis_end1 = datetime.strptime(
+            self.DisChgEnd1, '%H:%M').time()
+        self.t_dis_start_test = datetime.strptime(
+            self.DisChgStartTest, '%H:%M').time()
+        self.t_dis_end_test = datetime.strptime(
+            self.DisChgEndTest, '%H:%M').time()
+        self.t_peak_start = datetime.strptime(
+            self.PeakStart, '%H:%M').time()
+        self.t_peak_end = datetime.strptime(
+            self.PeakEnd, '%H:%M').time()
+
+    def init_device_charge_cost(self, device_sn):
+        self.charging_costs[device_sn] = DayChargingData(
+            last_soc=0.0,
+            date=datetime.now().strftime('%Y-%m-%d'),
+            charging_points=[ChargingPoint(
+                charging_price=0.0,
+                grid_charge_power=0.0,
+                battery_charge_power=0.0
+            )],
+            weighted_charging_cost=0.0
+        )
+
+    def init_price_history(self, sn, length=720):
+        '''
+        sn: str, the serial number of the device
+        length: int, the length of the returned price history, it's interpolated from the original price history with a 30-minute interval
+        '''
+        price_history = self.monitor.get_price_history(sn, length)
+        self.price_historys[sn] = price_history
+
+    async def get_global_schedule(self):
+        def _get_device_batch():
+            return [self.sn_list[i:i+30] for i in range(0, len(self.sn_list), 30)]
+        if not _is_schedule_updated():
+            # Divide the devices into batches of 30 devices to avoid too many concurrent requests
+            for batch in _get_device_batch():
+                tasks = await asyncio.gather(*[self._update_global_schedule(sn) for sn in batch])
+            _update_global_schedule()
+        return self.global_schedule
+    
+    async def _update_global_schedule(self, sn):
+        price, load, solar = await asyncio.gather(
+            self.ai_server.get_price_prediction(sn),
+            self.ai_server.get_load_prediction(sn),
+            self.ai_server.get_solar_prediction(sn)
+        )
+        self.global_schedule = self.ai_model.generate_schedule(price, load, solar)
 
     def _get_solar(self, interval=0.5, test_mode=False, max_solar_power=5000):
         max_solar = max_solar_power
