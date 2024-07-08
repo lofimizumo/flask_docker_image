@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, validator
-from battery_automation import BatteryScheduler
+from battery_automation import BatterySchedulerManager
 from concurrent.futures import ThreadPoolExecutor
 from fastapi.responses import JSONResponse
 
@@ -37,7 +37,7 @@ def start_scheduler(request: SchedulerRequest):
     if scheduler_id in schedulers:
         raise HTTPException(status_code=400, detail=f"Scheduler {scheduler_id} is already running")
 
-    scheduler = BatteryScheduler(
+    scheduler = BatterySchedulerManager(
         scheduler_type=request.schedulerType,
         battery_sn=request.deviceSn,
         test_mode=request.testMode,

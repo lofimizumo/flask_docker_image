@@ -37,12 +37,12 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Deploy to Paperspace
-        uses: paperspace/deploy-action@v1.4
-        id: deploy
-        env:
-          PAPERSPACE_API_KEY: ${{ secrets.PAPERSPACE_API_KEY }}
-        with:
-          projectId: pl3sp7im7bp
-          configPath: ./paperspace_config/paperspace.json
-          image: ${{ steps.meta.outputs.tags }}
+      # - name: Deploy to Paperspace
+      #   uses: paperspace/deploy-action@v1.4
+      #   id: deploy
+      #   env:
+      #     PAPERSPACE_API_KEY: ${{ secrets.PAPERSPACE_API_KEY }}
+      #   with:
+      #     projectId: pl3sp7im7bp
+      #     configPath: ./paperspace_config/paperspace.json
+      #     image: ${{ steps.meta.outputs.tags }}
