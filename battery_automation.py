@@ -114,8 +114,9 @@ class BatterySchedulerManager:
                 self.logger.info("Exiting the battery scheduler...")
                 return
 
-            self._process_peak_valley_scheduler()
-            time.sleep(self.sample_interval)
+            try:
+                self._process_peak_valley_scheduler()
+                time.sleep(self.sample_interval)
             except Exception as e:
                 logging.error(f"Scheduling error: {e}")
                 logging.error(f"Traceback: {traceback.format_exc()}")
