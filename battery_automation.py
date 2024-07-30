@@ -155,7 +155,7 @@ class BatterySchedulerManager:
                 if quality:
                     # Local Volts updates prices every 5 minutes
                     current_time = datetime.now(
-                        pytz.timezone('Australia/Brisbane'))
+                        pytz.timezone("Australia/Brisbane"))
                     delay = self._seconds_to_next_n_minutes(current_time, n=5)
                     # add 30 seconds to make sure the price is updated on Local Volts
                     delay = delay + 30
@@ -701,7 +701,7 @@ class PeakValleyScheduler():
 
         # Charging logic
         if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pvkW > current_usage)):
-            maxpower, minpower = self._get_power_limits(device_type)
+            maxpower, minpower = self._calc_charge_power(device_type)
             power, grid_charge = self._calculate_charging_power(
                 current_time, current_pvkW, current_usage, minpower, maxpower, current_buy_price <= buy_price)
             command = {'command': 'Charge',
@@ -709,7 +709,7 @@ class PeakValleyScheduler():
 
         # Discharging logic
         if self._is_discharging_period(current_time) and (current_buy_price >= sell_price) and current_soc > 0.1:
-            power = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
+            power = self._calc_discharge_power(device_type)
             anti_backflow_threshold = np.percentile(
                 price_history, self.PeakPct)
             anti_backflow = current_buy_price <= anti_backflow_threshold
@@ -723,6 +723,7 @@ class PeakValleyScheduler():
                          f"time: {current_time}, command: {command}")
 
         return command
+
 
     def _algo_auto_time(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type: DeviceType, device_sn):
         # Use the Auto Mode (Now actually we are using charge with solar only, not using the auto mode) in the morning charging, and the Time Mode in the afternoon discharging
@@ -752,7 +753,7 @@ class PeakValleyScheduler():
 
         # Charging logic
         if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pv > current_usage)):
-            maxpower, minpower = self._get_power_limits(device_type)
+            maxpower, minpower = self._calc_charge_power(device_type)
             power, grid_charge = self._calculate_charging_power(
                 current_time, current_pv, current_usage, minpower, maxpower, current_buy_price <= buy_price)
             command = {'command': 'Charge',
@@ -760,7 +761,7 @@ class PeakValleyScheduler():
 
         # Discharging logic
         if self._is_discharging_period(current_time) and (current_buy_price >= sell_price) and current_soc > 0.1:
-            power = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
+            power = self._calc_discharge_power(device_type)
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': False}
 
@@ -801,7 +802,7 @@ class PeakValleyScheduler():
         if device_sn not in self.charging_costs:
             self.init_device_charge_cost(device_sn)
         if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pvkW > current_usagekW)):
-            maxpower, minpower = self._get_power_limits(device_type)
+            maxpower, minpower = self._calc_charge_power(device_type)
             powerkW, grid_charge = self._calculate_charging_power(
                 current_time, current_pvkW, current_usagekW, minpower, maxpower, current_buy_price <= buy_price)
             command = {'command': 'Charge',
@@ -818,7 +819,7 @@ class PeakValleyScheduler():
         # Turn off the debug flag to use the actual discharging period
         if self._is_discharging_period(current_time, debug=False) and (current_feedin_price >= weighted_price) and current_soc > 0.1 and current_pvkW < current_usagekW:
             anti_backflow = True
-            powerkW = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
+            powerkW = self._calc_discharge_power(device_type)
             device_charge_cost = self.charging_costs.get(device_sn, None)
 
             # Add dynamic discharging when price is very high
@@ -872,7 +873,7 @@ class PeakValleyScheduler():
             return self._algo_cover_usage(
                 current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn)
 
-    def _get_power_limits(self, device_type: DeviceType):
+    def _calc_charge_power(self, device_type: DeviceType):
         match device_type:
             case DeviceType.FIVETHOUSAND:
                 maxpower = 5000
@@ -880,8 +881,20 @@ class PeakValleyScheduler():
             case DeviceType.TWOFIVEZEROFIVE:
                 maxpower = 1500
                 minpower = 700
+            case DeviceType.SEVENTHOUSAND:
+                maxpower = 7000
+                minpower = 1750
         return maxpower, minpower
 
+    def _calc_discharge_power(self, device_type):
+        match device_type:
+            case DeviceType.FIVETHOUSAND:
+                power = 5000
+            case DeviceType.TWOFIVEZEROFIVE:
+                power = 2500
+            case DeviceType.SEVENTHOUSAND:
+                power = 7000
+        return power
     def _calculate_charging_power(self, current_time, current_pv, current_usage, minpower, maxpower, low_price=False):
         power = 0
         grid_charge = True
