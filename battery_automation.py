@@ -404,11 +404,8 @@ class BatterySchedulerManager:
             self.sn_list.remove(sn)
             self.logger.info(f"Removed device {sn} from the scheduler.")
 
-    def get_current_price(self, sn, retailer='amber'):
-        warnings.warn("The 'get_realtime_price' method with retailer argument will be deprecated in a future version. "
-            "Please update your code to use 'get_realtime_price_from_server' instead.", 
-            DeprecationWarning, stacklevel=2)
-        return self.monitor.get_realtime_price(sn, retailer=retailer)
+    def get_current_price(self, location='qld', retailer='amber'):
+        return self.monitor.get_realtime_price(location=location, retailer=retailer)
 
     def get_current_time(self, state='qld') -> str:
         state_timezone_map = {
