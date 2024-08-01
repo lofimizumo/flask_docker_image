@@ -20,7 +20,7 @@ ChgEnd1 = "16:00"
 DisChgStart2 = "17:00"
 DisChgEnd2 = "23:55"
 DisChgStart1 = "00:00"
-DisChgEnd1 = "09:00"
+DisChgEnd1 = "08:00"
 DisChgStartTest= "17:00"
 DisChgEndTest = "23:55"
 PeakStart = "18:00"
@@ -31,6 +31,7 @@ SampleInterval = 900
 011LOKG080015B = 5000
 011LOKL140058B = 5000
 011LOKL140104B = 5000
+RX7000PLUS254F313532 = 7000
 [battery_locations]
 011LOKG080015B = 'qld'
 011LOKL140058B = 'qld'

@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from battery_automation import BatteryScheduler
+from battery_automation import BatterySchedulerManager, ShawsbaySchedulerManager
 from threading import Thread
 # from amber import cost_savings, get_prices
 
@@ -30,7 +30,7 @@ def basic_scheduler():
     if sn in amber_devices:
         return jsonify(status='error', message='Scheduler already exists for this deviceSn'), 400
     if scheduler_amber is None:
-        scheduler_amber = BatteryScheduler(
+        scheduler_amber = BatterySchedulerManager(
             scheduler_type='PeakValley', api_version='redx')
         thread = Thread(target=scheduler_amber.start)
         thread.daemon = True  # This will make sure the thread exits when the main program exits
@@ -71,7 +71,7 @@ def ai_scheduler():
         return jsonify(status='error', message='Scheduler already running'), 400
 
     shawsbay_phase2_devices = ['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'] 
-    scheduler_shawsbay = BatteryScheduler(
+    scheduler_shawsbay = ShawsbaySchedulerManager(
         scheduler_type='AIScheduler', battery_sn=shawsbay_phase2_devices, test_mode=False, api_version='redx')
     
     thread_shawsbay = Thread(target=scheduler_shawsbay.start)
@@ -109,7 +109,7 @@ def ai_scheduler_phase3():
     if thread_shawsbay_phase3 and thread_shawsbay_phase3.is_alive():
         return jsonify(status='error', message='Scheduler_Phase3 already running'), 400
 
-    scheduler_shawsbay_phase3 = BatteryScheduler(
+    scheduler_shawsbay_phase3 = ShawsbaySchedulerManager(
         scheduler_type='AIScheduler', 
         battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002', 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019','RX2505ACA10J0A150008'], 
         test_mode=False, 
@@ -129,7 +129,7 @@ def ai_scheduler_phase1():
     if thread_shawsbay_phase1 and thread_shawsbay_phase1.is_alive():
         return jsonify(status='error', message='Scheduler_Phase1 already running'), 400
 
-    scheduler_shawsbay_phase1 = BatteryScheduler(
+    scheduler_shawsbay_phase1 = ShawsbaySchedulerManager(
         scheduler_type='AIScheduler', 
         battery_sn=['RX2505ACA10J0A150009', 'RX2505ACA10J0A180037', 'RX2505ACA10J0A160039', 'RX2505ACA10J0A160014', 'RX2505ACA10J0A180009'], 
         test_mode=False, 
@@ -184,5 +184,5 @@ def get_logs():
 #         })
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)
 

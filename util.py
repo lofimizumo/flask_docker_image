@@ -31,6 +31,7 @@ def setup_logger(logger_name, log_file, level=logging.INFO):
     logger.addHandler(streamHandler)
 
 setup_logger('logger', 'logs.txt', logging.INFO)
+setup_logger('shawsbay_logger', 'sb_logs.txt', logging.INFO)
 logger = logging.getLogger('logger')
 
 def api_status_check(max_retries=10, delay=10):

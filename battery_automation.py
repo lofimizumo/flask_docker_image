@@ -33,7 +33,7 @@ def load_config(file_path):
     return config
 
 
-class BatteryScheduler:
+class BatterySchedulerManager:
 
     def __init__(self, scheduler_type='PeakValley',
                  battery_sn=['011LOKL140104B',
@@ -121,16 +121,12 @@ class BatteryScheduler:
                 return
 
             try:
-                if isinstance(self.scheduler, AIScheduler):
-                    self._process_ai_scheduler()
-                elif isinstance(self.scheduler, PeakValleyScheduler):
-                    self._process_peak_valley_scheduler()
+                self._process_peak_valley_scheduler()
                 time.sleep(self.sample_interval)
             except Exception as e:
                 logging.error(f"Scheduling error: {e}")
                 logging.error(f"Traceback: {traceback.format_exc()}")
                 time.sleep(self.sample_interval)
-                # self._make_battery_decision()
 
     def _seconds_to_next_n_minutes(self, current_time, n=5):
         # self.logger.info(
@@ -165,7 +161,7 @@ class BatteryScheduler:
                 if quality:
                     # Local Volts updates prices every 5 minutes
                     current_time = datetime.now(
-                        pytz.timezone('Australia/Brisbane'))
+                        pytz.timezone("Australia/Brisbane"))
                     delay = self._seconds_to_next_n_minutes(current_time, n=5)
                     # add 30 seconds to make sure the price is updated on Local Volts
                     delay = delay + 30
@@ -214,32 +210,6 @@ class BatteryScheduler:
         except Exception as e:
             logging.error(f"Error updating prices: {e}")
             return False
-
-    def _process_ai_scheduler(self):
-        schedule = self._get_battery_command()
-        load = self.get_project_status(phase=self.project_phase)
-        current_time = self.get_current_time()
-        schedule = self.scheduler.adjust_discharge_power(
-            schedule, load, current_time)
-        schedule = self.scheduler.adjust_charge_power(
-            schedule, load, current_time)
-        self.logger.info(f"Schedule: {schedule}")
-
-        for sn in self.sn_list:
-            battery_schedule = schedule.get(sn, {})
-            last_battery_schedule = self.last_schedule_ai.get(sn, {})
-            if all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in battery_schedule) and all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in last_battery_schedule):
-                # self.logger.info(f"Schedule for {sn} is the same as the last one, skip sending command.")
-                continue
-            try:
-                thread = Thread(target=self.send_battery_command,
-                                kwargs={'json': battery_schedule, 'sn': sn})
-                thread.start()
-            except Exception as e:
-                logging.error(f"Error sending battery command: {e}")
-                continue
-
-        self.last_schedule_ai = copy.deepcopy(schedule)
 
     def _process_peak_valley_scheduler(self):
         with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -447,6 +417,155 @@ class BatteryScheduler:
         }
         return self.monitor.get_current_time(state_timezone_map[state])
 
+    def get_current_battery_stats(self, sn):
+        return self.monitor.get_realtime_battery_stats(sn)
+
+    def send_battery_command(self, command=None, json=None, sn=None):
+        self.monitor.send_battery_command(
+            peak_valley_command=command, json=json, sn=sn)
+class ShawsbaySchedulerManager:
+
+    def __init__(self, scheduler_type='AIScheduler',
+                 battery_sn=[],
+                 test_mode=False,
+                 api_version='dev3',
+                 pv_sn=None,
+                 phase=2,
+                 config='config.toml',
+                 project_mode='normal'
+                 ):
+        '''
+        Args:
+        pv_sn: str, the serial number of the PV device in a Project
+        battery_sn: list, a list of serial numbers of the battery devices
+        test_mode: bool, if True, the scheduler will use the test mode for debugging
+        api_version: str, the version of the API, e.g., 'dev3', 'redx'
+        phase: int, the phase of the project
+        config: str, the path to the config file, config file should be in TOML format, see config.toml for an example
+        project_mode: str, the mode of the project of AI scheduler, e.g., 'Peak Shaving', 'Money Saving', 'Normal'
+        '''
+        self.config = load_config(config)
+        self.logger = logging.getLogger('shawsbay_logger')
+        self.scheduler = None
+        self.monitor = util.PriceAndLoadMonitor(api_version=api_version)
+        self.test_mode = test_mode
+        self.is_runing = False
+        self.pv_sn = pv_sn
+        self.sn_list = battery_sn if type(battery_sn) == list else [
+            battery_sn]
+        self.last_schedule_ai = {}
+        self.last_schedule_peakvalley = {}
+        self.schedule_before_hotfix = {}
+        self.last_scheduled_date = None
+        self.last_five_metre_readings = []
+        self.battery_original_discharging_powers = {}
+        self.battery_original_charging_powers = {}
+        self.project_phase = phase
+        self.project_mode = project_mode
+        self.sn_types = self.config.get('battery_types', {})
+        self.sn_locations = self.config.get('battery_locations', {})
+        self.sn_retailers = self.config.get('battery_retailers', {})
+        self.algo_types = self.config.get('battery_algo_types', {})
+        self.last_command_time = {}
+        self.current_prices = {sn: {'buy': 0.0, 'feedin': 0.0}
+                               for sn in self.sn_list}
+        scheduler_type == 'AIScheduler'
+        self.sample_interval = self.config.get(
+            'shawsbay', {}).get('SampleInterval', 900)
+        self.scheduler = AIScheduler(
+            sn_list=self.sn_list, api_version=api_version, pv_sn=pv_sn,
+            phase=self.project_phase,
+            mode=self.project_mode)
+
+    def _get_battery_command(self, **kwargs):
+        if not self.scheduler:
+            raise ValueError("Scheduler not set. Use set_scheduler() first.")
+
+        return self.scheduler.step(**kwargs)
+
+    def _make_battery_decision(self):
+        while True:
+            if not self.is_running:
+                self.logger.info("Exiting the battery scheduler...")
+                return
+
+            try:
+                self._process_ai_scheduler()
+                time.sleep(self.sample_interval)
+            except Exception as e:
+                logging.error(f"Scheduling error: {e}")
+                logging.error(f"Traceback: {traceback.format_exc()}")
+                time.sleep(self.sample_interval)
+                # self._make_battery_decision()
+
+    def _process_ai_scheduler(self):
+        schedule = self._get_battery_command()
+        load = self.get_project_status(phase=self.project_phase)
+        current_time = self.get_current_time()
+        schedule = self.scheduler.adjust_discharge_power(
+            schedule, load, current_time)
+        schedule = self.scheduler.adjust_charge_power(
+            schedule, load, current_time)
+        self.logger.info(f"Schedule: {schedule}")
+
+        for sn in self.sn_list:
+            battery_schedule = schedule.get(sn, {})
+            last_battery_schedule = self.last_schedule_ai.get(sn, {})
+            if all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in battery_schedule) and all(battery_schedule.get(k) == last_battery_schedule.get(k) for k in last_battery_schedule):
+                # self.logger.info(f"Schedule for {sn} is the same as the last one, skip sending command.")
+                continue
+            try:
+                thread = Thread(target=self.send_battery_command,
+                                kwargs={'json': battery_schedule, 'sn': sn})
+                thread.start()
+            except Exception as e:
+                logging.error(f"Error sending battery command: {e}")
+                continue
+
+        self.last_schedule_ai = copy.deepcopy(schedule)
+
+    def start(self):
+        '''
+        Main loop for the battery scheduler.
+        Steps:
+
+        1. Collect Amber prices Per 2 minutes
+        2. Collect LocalVolts prices Per 5 minutes
+        3. Make battery decision Periondically (Check SampleInterval in the config.toml file)
+        '''
+        self.is_running = True
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            time.sleep(5)
+            executor.submit(self._make_battery_decision)
+            executor.submit(self._health_checker_devices)
+
+    def stop(self):
+        self.is_runing = False
+        self.logger.info("Stopped.")
+
+    def _health_checker_devices(self):
+        # TODO: Implement health checker
+        pass
+
+    def get_logs(self):
+        with open('sb_logs.txt', 'r') as file:
+            logs = file.read()
+        return logs
+
+    def _init_device_profiles(self, sn):
+        self.current_prices[sn] = {'buy': 0.0, 'feedin': 0.0}
+        self.last_schedule_peakvalley[sn] = {'command': 'Idle'}
+
+    def get_current_price(self, location='qld', retailer='amber'):
+        return self.monitor.get_realtime_price(location=location, retailer=retailer)
+
+    def get_current_time(self, state='qld') -> str:
+        state_timezone_map = {
+            'qld': 'Australia/Brisbane',
+            'nsw': 'Australia/Sydney'
+        }
+        return self.monitor.get_current_time(state_timezone_map[state])
+
     def get_project_status(self, project_id: int = 1, phase: int = 2) -> float:
         if len(self.last_five_metre_readings) >= 2:
             self.last_five_metre_readings.pop(0)
@@ -463,6 +582,7 @@ class BatteryScheduler:
     def send_battery_command(self, command=None, json=None, sn=None):
         self.monitor.send_battery_command(
             peak_valley_command=command, json=json, sn=sn)
+
 
 
 @dataclass
@@ -653,7 +773,7 @@ class PeakValleyScheduler():
 
         # Charging logic
         if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pvkW > current_usage)):
-            maxpower, minpower = self._get_power_limits(device_type)
+            maxpower, minpower = self._calc_charge_power(device_type)
             power, grid_charge = self._calculate_charging_power(
                 current_time, current_pvkW, current_usage, minpower, maxpower, current_buy_price <= buy_price)
             command = {'command': 'Charge',
@@ -661,7 +781,7 @@ class PeakValleyScheduler():
 
         # Discharging logic
         if self._is_discharging_period(current_time) and (current_buy_price >= sell_price) and current_soc > 0.1:
-            power = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
+            power = self._calc_discharge_power(device_type)
             anti_backflow_threshold = np.percentile(
                 price_history, self.PeakPct)
             anti_backflow = current_buy_price <= anti_backflow_threshold
@@ -675,6 +795,7 @@ class PeakValleyScheduler():
                          f"time: {current_time}, command: {command}")
 
         return command
+
 
     def _algo_auto_time(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type: DeviceType, device_sn):
         # Use the Auto Mode (Now actually we are using charge with solar only, not using the auto mode) in the morning charging, and the Time Mode in the afternoon discharging
@@ -704,7 +825,7 @@ class PeakValleyScheduler():
 
         # Charging logic
         if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pv > current_usage)):
-            maxpower, minpower = self._get_power_limits(device_type)
+            maxpower, minpower = self._calc_charge_power(device_type)
             power, grid_charge = self._calculate_charging_power(
                 current_time, current_pv, current_usage, minpower, maxpower, current_buy_price <= buy_price)
             command = {'command': 'Charge',
@@ -712,7 +833,7 @@ class PeakValleyScheduler():
 
         # Discharging logic
         if self._is_discharging_period(current_time) and (current_buy_price >= sell_price) and current_soc > 0.1:
-            power = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
+            power = self._calc_discharge_power(device_type)
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': False}
 
@@ -753,7 +874,7 @@ class PeakValleyScheduler():
         if device_sn not in self.charging_costs:
             self.init_device_charge_cost(device_sn)
         if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pvkW > current_usagekW)):
-            maxpower, minpower = self._get_power_limits(device_type)
+            maxpower, minpower = self._calc_charge_power(device_type)
             powerkW, grid_charge = self._calculate_charging_power(
                 current_time, current_pvkW, current_usagekW, minpower, maxpower, current_buy_price <= buy_price)
             command = {'command': 'Charge',
@@ -770,7 +891,7 @@ class PeakValleyScheduler():
         # Turn off the debug flag to use the actual discharging period
         if self._is_discharging_period(current_time, debug=False) and (current_feedin_price >= weighted_price) and current_soc > 0.1 and current_pvkW < current_usagekW:
             anti_backflow = True
-            powerkW = 5000 if device_type == DeviceType.FIVETHOUSAND else 2500
+            powerkW = self._calc_discharge_power(device_type)
             device_charge_cost = self.charging_costs.get(device_sn, None)
 
             # Add dynamic discharging when price is very high
@@ -824,7 +945,7 @@ class PeakValleyScheduler():
             return self._algo_cover_usage(
                 current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn)
 
-    def _get_power_limits(self, device_type: DeviceType):
+    def _calc_charge_power(self, device_type: DeviceType):
         match device_type:
             case DeviceType.FIVETHOUSAND:
                 maxpower = 3000
@@ -1231,8 +1352,20 @@ class HybridScheduler():
             case DeviceType.TWOFIVEZEROFIVE:
                 maxpower = 1500
                 minpower = 700
+            case DeviceType.SEVENTHOUSAND:
+                maxpower = 7000
+                minpower = 1750
         return maxpower, minpower
 
+    def _calc_discharge_power(self, device_type):
+        match device_type:
+            case DeviceType.FIVETHOUSAND:
+                power = 5000
+            case DeviceType.TWOFIVEZEROFIVE:
+                power = 2500
+            case DeviceType.SEVENTHOUSAND:
+                power = 7000
+        return power
     def _calculate_charging_power(self, current_time, current_pv, current_usage, minpower, maxpower, low_price=False):
         power = 0
         grid_charge = True
@@ -1872,6 +2005,27 @@ def get_test_devices(count=100):
     sns = sns[:count]
     return sns
 
+def test_shawsbay(test_mode=False):
+    # For Phase 2
+    scheduler = ShawsbaySchedulerManager(
+        scheduler_type='AIScheduler',
+        battery_sn=['RX2505ACA10J0A180011', 'RX2505ACA10J0A170035', 'RX2505ACA10J0A170033', 'RX2505ACA10J0A160007', 'RX2505ACA10J0A180010'],
+        test_mode=False,
+        api_version='redx',
+        pv_sn=['RX2505ACA10J0A170033'],
+        phase=2)
+    scheduler.start()
+
+    # For Phase 3
+    # scheduler = BatteryScheduler(
+    #     scheduler_type='AIScheduler',
+    #     battery_sn=['RX2505ACA10J0A170013', 'RX2505ACA10J0A150006', 'RX2505ACA10J0A180002',
+    #                 'RX2505ACA10J0A170025', 'RX2505ACA10J0A170019', 'RX2505ACA10J0A150008'],
+    #     test_mode=False,
+    #     api_version='redx',
+    #     pv_sn=['RX2505ACA10J0A170033', 'RX2505ACA10J0A170019'],
+    #     phase=3)
+
 
 def test_scheduler(test_mode=False):
     # For Phase 2
@@ -1896,7 +2050,7 @@ def test_scheduler(test_mode=False):
     # For Amber Johnathan (QLD)
     # scheduler = BatteryScheduler(scheduler_type='PeakValley', test_mode=False, api_version='redx')
     # For Amber Dion (NSW)
-    scheduler = BatteryScheduler(
+    scheduler = BatterySchedulerManager(
         scheduler_type='PeakValley',
         battery_sn=['011LOKL140058B','011LOKL140104B','RX2505ACA10J0A160016'],
         test_mode=test_mode, api_version='redx')
@@ -1910,11 +2064,12 @@ def test_scheduler(test_mode=False):
 
 def multiple_random_devices_test(count=5):
     sns = get_test_devices(count=count)
-    scheduler = BatteryScheduler(
+    scheduler = BatterySchedulerManager(
         scheduler_type='PeakValley', battery_sn=sns, test_mode=True, api_version='redx')
     scheduler.start()
 
 
 if __name__ == '__main__':
     # multiple_random_devices_test()
-    test_scheduler()
+    # test_scheduler()
+    test_shawsbay()
