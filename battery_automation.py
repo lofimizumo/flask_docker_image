@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, time as datetime_time
 from enum import Enum
+from typing import Dict, List
 from dataclasses import dataclass
 import time
 import numpy as np
@@ -13,6 +14,7 @@ from threading import Thread
 import pickle
 from solar_prediction import WeatherInfoFetcher
 import concurrent.futures
+import asyncio
 import traceback
 from batteryexceptions import *
 import warnings
@@ -65,6 +67,11 @@ class BatteryScheduler:
         self.pv_sn = pv_sn
         self.sn_list = battery_sn if type(battery_sn) == list else [
             battery_sn]
+        self.prices = []
+        self.solar = []
+        self.load = []
+        self.last_price_update = None
+        self.schedule = None
         self.last_schedule_ai = {}
         self.last_schedule_peakvalley = {}
         self.schedule_before_hotfix = {}
@@ -317,6 +324,7 @@ class BatteryScheduler:
             if isinstance(self.scheduler, PeakValleyScheduler):
                 executor.submit(self._collect_amber_prices)
                 executor.submit(self._collect_localvolts_prices)
+                executor.submit(self.prepare_battery_schedule)
             time.sleep(5)
             executor.submit(self._make_battery_decision)
             executor.submit(self._health_checker_devices)
@@ -324,6 +332,68 @@ class BatteryScheduler:
     def stop(self):
         self.is_runing = False
         self.logger.info("Stopped.")
+    
+
+    async def get_prices(self) -> List[float]:
+        # Elmar's API call to get prices
+        pass
+
+    async def get_solar(self) -> List[float]:
+        # Elmar's API call to get solar prediction
+        pass
+
+    async def get_load(self) -> List[float]:
+        # Elmar's API call to get load prediction
+        pass
+
+    def optimize(self, prices: List[float], sell_prices: List[float], solars: List[float], loads: List[float]) -> List[Dict]:
+        # Charge_mast is a list of 0s and 1s, 1 means the battery can be charged at that time
+        # This is essential for a non-linear optimization problem, otherwise, the optimizer will not be able to solve the problem
+        charge_mask = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1,
+                    1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+        config = BatterySchedulerConfig({
+            'b': prices,
+            's': sell_prices,
+            'l': loads,
+            'p': solars,
+            'R_c': 2,
+            'R_d': 5,
+            'capacity': 10,
+            'charge_mask': charge_mask,
+        })
+        scheduler = BatteryScheduler(config)
+        model, results = scheduler.solve()
+        return results
+
+    async def prepare_battery_schedule(self):
+        current_time = datetime.now(tz=pytz.timezone('Australia/Brisbane')).time()
+        afternoon_update_time = datetime.time(16, 30)  # 4:30 PM
+
+        # We will force a price update at 4:30 PM 
+        if self.last_price_update and current_time >= afternoon_update_time and self.last_price_update.time() < afternoon_update_time:
+            self.prices = None  # Force a price update
+
+        prices, solar, load = await asyncio.gather(
+            self.get_prices() if not self.prices else asyncio.sleep(0),
+            self.get_solar() if not self.solar else asyncio.sleep(0),
+            self.get_load() if not self.load else asyncio.sleep(0)
+        )
+
+        if prices:
+            self.prices = prices
+            self.last_price_update = datetime.now()
+        if solar:
+            self.solar = solar
+        if load:
+            self.load = load
+
+        if self.prices and self.solar and self.load and self.schedule != None:
+            self.schedule = self.optimize(self.prices, self.solar, self.load)
+            return True
+        else:
+            return False
+
 
     def _health_checker_devices(self):
         while self.is_running:
@@ -757,11 +827,14 @@ class PeakValleyScheduler():
     def _get_power_limits(self, device_type: DeviceType):
         match device_type:
             case DeviceType.FIVETHOUSAND:
-                maxpower = 5000
+                maxpower = 3000
                 minpower = 1250
             case DeviceType.TWOFIVEZEROFIVE:
                 maxpower = 1500
                 minpower = 700
+            case DeviceType.SEVENTHOUSAND:
+                maxpower = 4600
+                minpower = 1750
         return maxpower, minpower
 
     def _calculate_charging_power(self, current_time, current_pv, current_usage, minpower, maxpower, low_price=False):
