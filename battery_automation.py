@@ -13,6 +13,7 @@ import tomli
 from threading import Thread
 import pickle
 from solar_prediction import WeatherInfoFetcher
+from optimizer.battery_optimizer import BatterySchedulerConfig, BatteryScheduler
 import concurrent.futures
 import asyncio
 import traceback

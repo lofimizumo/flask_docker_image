@@ -4,6 +4,7 @@ venv
 test/
 scratch/
 *.pyc
+*.db
 *.txt
 data/
 ignoreMe/
