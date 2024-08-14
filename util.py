@@ -1,3 +1,5 @@
+import json
+import base64
 from functools import wraps
 import requests
 import time
@@ -10,6 +12,9 @@ import tomli
 import os
 import numpy as np
 from batteryexceptions import *
+from typing import Dict, Any, Optional
+import asyncio
+import aiohttp
 # from algorithms import DemandPredictorFactory
 
 
@@ -17,6 +22,7 @@ def load_config(file_path='config.toml'):
     with open(file_path, 'rb') as file:
         config = tomli.load(file)
     return config
+
 
 def setup_logger(logger_name, log_file, level=logging.INFO):
     logger = logging.getLogger(logger_name)
@@ -30,9 +36,11 @@ def setup_logger(logger_name, log_file, level=logging.INFO):
     logger.addHandler(fileHandler)
     logger.addHandler(streamHandler)
 
+
 setup_logger('logger', 'logs.txt', logging.INFO)
 setup_logger('shawsbay_logger', 'sb_logs.txt', logging.INFO)
 logger = logging.getLogger('logger')
+
 
 def api_status_check(max_retries=10, delay=10):
     """
@@ -107,7 +115,7 @@ def api_status_check(max_retries=10, delay=10):
 
             sn = kwargs['sn']
             expected_status = kwargs
-            api = ApiCommunicator(base_url="https://dev3.redxvpp.com/restapi")
+            api = RedXServerClient(base_url="https://dev3.redxvpp.com/restapi")
             token = args[0].token
 
             # Send an API request to check the status
@@ -124,24 +132,38 @@ def api_status_check(max_retries=10, delay=10):
 
     return decorator
 
+
 def send_email(api_key, domain, sender, recipients, subject, text):
     api_url = f"https://api.mailgun.net/v3/{domain}/messages"
     auth = ("api", api_key)
-    
+
     data = {
         "from": sender,
         "to": recipients,
         "subject": subject,
         "text": text
     }
-    
+
     response = requests.post(api_url, auth=auth, data=data)
-    
+
     if response.status_code == 200:
         print("Email sent successfully!")
     else:
         print(f"Error sending email. Status code: {response.status_code}")
         print(response.text)
+
+
+def decode_model_data(encoded_data):
+    try:
+        # Decode from base64 to JSON string
+        model_data_json = base64.b64decode(encoded_data).decode('utf-8')
+        # Parse JSON string to list of floats
+        model_data = json.loads(model_data_json)
+        return model_data
+    except Exception as e:
+        print(f"Error decoding model_data: {e}")
+        return None
+
 
 class PriceAndLoadMonitor:
     def __init__(self,  test_mode=False, api_version='dev3'):
@@ -150,10 +172,10 @@ class PriceAndLoadMonitor:
         self.sim_time_iter = self.get_sim_time_iter()
         self.api = None
         if api_version == 'dev3':
-            self.api = ApiCommunicator(
+            self.api = RedXServerClient(
                 base_url="https://dev3.redxvpp.com/restapi")
         else:
-            self.api = ApiCommunicator(
+            self.api = RedXServerClient(
                 base_url="https://redxpower.com/restapi")
         self.token = None
         self.token_last_updated = datetime.now(
@@ -172,31 +194,33 @@ class PriceAndLoadMonitor:
         self.amber_api_key_nsw = os.getenv(self.config.get(
             'apikey_varnames', {}).get('apikey_varname_nsw', None))
 
-    def get_realtime_price(self, location = 'qld', retailer = 'amber'):
+    def get_realtime_price(self, location='qld', retailer='amber'):
         if retailer == 'amber':
             return self._get_realtime_amber_price(location)
         elif retailer == 'lv':
             return self._get_realtime_lv_price(location)
-    
+
     def get_realtime_price_from_server(self, sn):
         # TODO: implement the function to get the realtime price from the server
         # Send a request to the RedX Prod server to get the realtime price
         raise NotImplementedError
-    
-    def _get_realtime_lv_price(self, location = 'qld'):
+
+    def _get_realtime_lv_price(self, location='qld'):
         # TODO: replace the API key with the device's API key and partner ID
         url = "https://api.localvolts.com/v1/customer/interval?NMI=*"
-        header = {'Authorization': 'apikey 21b831bc02410319571a27250d49b4c4', 'partner': '25370'}
+        header = {
+            'Authorization': 'apikey 21b831bc02410319571a27250d49b4c4', 'partner': '25370'}
         try:
             r = requests.get(url, headers=header, timeout=5)
-            prices = [(x['costsFlexUp'], x['earningsFlexUp']) for x in r.json()]
+            prices = [(x['costsFlexUp'], x['earningsFlexUp'])
+                      for x in r.json()]
             cast_prices = [float(x) for x in prices[0]]
             is_expected_data = r.json()[0]['quality'] == 'Exp'
         except Exception as e:
             logger.error(f"Failed to get price data: {e}")
             return None, False
         return cast_prices, is_expected_data
-    
+
     def _get_realtime_amber_price(self, location='qld'):
         if location == 'qld':
             url = self.amber_api_url_qld
@@ -234,30 +258,32 @@ class PriceAndLoadMonitor:
             return prices
         else:
             raise ValueError(f"Retailer {retailer} is not supported")
-    
+
     def _get_device_info(self, sn):
         location = self.config.get('battery_locations', {}).get(sn, 'qld')
         retailer = self.config.get('retailers', {}).get(sn, 'amber')
-        return location, retailer 
+        return location, retailer
 
     def get_price_history(self, sn, length):
         location, retailer = self._get_device_info(sn)
         ret = None
         if retailer == 'amber':
             if self.default_prices.get('amber', None) is None:
-                self.default_prices['amber'] = self._init_default_prices(sn, location, retailer)
+                self.default_prices['amber'] = self._init_default_prices(
+                    sn, location, retailer)
             ret = self.default_prices.get('amber')
         elif retailer == 'lv':
             if self.default_prices.get('lv', None) is None:
-                self.default_prices['lv'] = self._init_default_prices(sn, location, retailer)
+                self.default_prices['lv'] = self._init_default_prices(
+                    sn, location, retailer)
             ret = self.default_prices.get('lv')
         ret = np.interp(
-                    np.linspace(0, 1, int(length)),
-                    np.linspace(0, 1, len(ret)),
-                    ret
-                ).tolist() 
+            np.linspace(0, 1, int(length)),
+            np.linspace(0, 1, len(ret)),
+            ret
+        ).tolist()
         return ret
-    
+
     def get_sim_price(self, current_time):
         _price_test = [20] * 48
         start_time = datetime.strptime('00:00', '%H:%M')
@@ -318,7 +344,7 @@ class PriceAndLoadMonitor:
         try:
             vpp = response.get('data', {}).get('operatingMode', 0)
         except Exception as e:
-            return False 
+            return False
         return True if vpp == '1' else False
 
     def get_project_stats(self, grid_ID=1, phase=2):
@@ -334,16 +360,16 @@ class PriceAndLoadMonitor:
             raise Exception('Get meter reading API failed')
         return response['data'][f'phase{phase}']
 
-    def get_device_demand_pred(self, sn):
-        factory = DemandPredictorFactory('config.toml')
-        model = factory.get_demand_predictor(sn)
-        return model.predict()
-    
-    def get_device_price_pred(self, sn):
-        raise NotImplementedError
-        factory = PricePredictorFactory('config.toml')
-        model = factory.get_price_predictor(sn)
-        return model.predict()
+    # def get_device_demand_pred(self, sn):
+    #     factory = DemandPredictorFactory('config.toml')
+    #     model = factory.get_demand_predictor(sn)
+    #     return model.predict()
+
+    # def get_device_price_pred(self, sn):
+    #     raise NotImplementedError
+    #     factory = PricePredictorFactory('config.toml')
+    #     model = factory.get_price_predictor(sn)
+    #     return model.predict()
 
     def get_project_demand_pred(self, grid_ID=1, phase=2):
         '''
@@ -525,7 +551,6 @@ class PriceAndLoadMonitor:
             current_time = datetime.strptime(current_time_str, '%H:%M')
             empty_time = '00:00'
 
-
             # Prepare the data for the command to be sent
             if command == 'Charge':
                 grid_charge = peak_valley_command.get('grid_charge', False)
@@ -623,23 +648,8 @@ class PriceAndLoadMonitor:
 
         return response
 
-class AIServerCommunicator:
-    '''
-    Communicate with the AI server to get the `PricePrediction`, `SolarPrediction` and `LoadPrediction` data.'''
-    def __init__(self) :
-        self.api = ApiCommunicator(
-            base_url="https://dev3.redxvpp.com/restapi")
-    
-    def get_price_prediction(self, sn):
-        raise NotImplementedError
-    
-    def get_solar_prediction(self, sn):
-        raise NotImplementedError
-    
-    def get_load_prediction(self, sn):
-        raise NotImplementedError
 
-class ApiCommunicator:
+class RedXServerClient:
     def __init__(self, base_url):
         self.base_url = base_url
         self.session = requests.Session()
@@ -671,7 +681,7 @@ class ApiCommunicator:
                 return response.json()
             except requests.RequestException as e:
                 if e.response is not None and e.response.status_code == 504:
-                    return None 
+                    return None
                 else:
                     logger.error(
                         f"Failed to connect to {url}. Retrying...")
@@ -679,11 +689,86 @@ class ApiCommunicator:
         raise ConnectionError(
             f"Failed to connect to {url} after {retries} attempts.")
 
-    def is_cmd_succ(self, api, expected_output, command, method="GET", json=None, headers=None, retries=3):
-        raise NotImplementedError
-        if expected_output != self.send_request(command, method, data, headers, retries):
-            raise ValueError(f"Command {command} failed to execute.")
-        return True
+
+class AIServerClient:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(AIServerClient, cls).__new__(cls)
+            cls._instance.base_url = "https://ai.redxvpp.com"
+            cls._instance.data_url = f"{cls._instance.base_url}/api/v1.0/data/"
+            cls._instance.session = None
+            cls._instance.id = None
+            cls._instance.email = None
+            cls._instance.token = None
+            cls._instance.token_expiry = None
+            cls._instance.credentials = None
+        return cls._instance
+
+    async def ensure_login(self, email: str, password: str):
+        self.credentials = (email, password)
+        if not self.is_logged_in:
+            await self.login(email, password)
+
+    async def login(self, email: str, password: str):
+        if not self.credentials:
+            raise ValueError("Credentials not set. Call ensure_login first.")
+        email, password = self.credentials
+        body_data = {"email": email, "password": password}
+        response_data = await self._request("/api/login", body_data)
+        if response_data and response_data.get('errorCode') == 0:
+            self.id = response_data['data']['id']
+            self.email = response_data['data']['email']
+            self.token = response_data['data']['token']
+            self.token_expiry = datetime.now(tz=pytz.timezone(
+                'Australia/Brisbane')) + timedelta(hours=24)
+        return response_data
+
+    @property
+    def is_logged_in(self):
+        return self.token is not None and datetime.now(tz=pytz.timezone('Australia/Brisbane')) < self.token_expiry
+
+    async def _request(self, url_slug: str, body_data: Dict[str, Any], is_data_api: bool = False) -> Optional[Dict[str, Any]]:
+        if not self.session:
+            self.session = aiohttp.ClientSession()
+
+        full_url = self.data_url + url_slug if is_data_api else self.base_url + url_slug
+
+        headers = {"Content-Type": "application/json"}
+        if is_data_api and self.id and self.email and self.token:
+            headers.update({
+                "id": str(self.id),
+                "email": self.email,
+                "token": self.token,
+            })
+
+        try:
+            async with self.session.post(full_url, headers=headers, json=body_data, timeout=10) as response:
+                if response.status == 200:
+                    response_data = await response.json()
+                    if response_data.get('errorCode') == 0:
+                        pass
+                    else:
+                        print(
+                            f"Error: Response status code: {response.status}, response error code: {response_data.get('errorCode')}, response info text: {response_data.get('infoText')}.")
+                    return response_data
+                else:
+                    print(f"Error: Response status code: {response.status}, whole response text: {await response.text()}")
+        except asyncio.TimeoutError:
+            print("Request timed out")
+        except aiohttp.ClientError as e:
+            print(f"Request failed: {e}")
+
+        return None
+
+    async def data_api_request(self, url_slug: str, body_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        return await self._request(url_slug, body_data, is_data_api=True)
+
+    async def close(self):
+        if self.session:
+            await self.session.close()
+            self.session = None
 
 
 class AmberFetcher:
@@ -694,9 +779,9 @@ class AmberFetcher:
 
     def get_site(self):
         header = {'Authorization': f'Bearer {self.api_key}',
-                'accept': 'application/json'}
+                  'accept': 'application/json'}
         response = requests.get(f"{self.base_url}/sites", headers=header)
-        response.raise_for_status()  
+        response.raise_for_status()
         data = response.json()
         if data:
             return data[0]['id']

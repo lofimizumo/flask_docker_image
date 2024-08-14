@@ -1,0 +1,18 @@
+title = "User Profiles"
+[users]
+
+[users.jchen]
+id = "jchen"
+plant_id = 27
+ai_control = true
+total_bat_discharge_power = 10 # kW
+total_bat_charge_power = 6 # kW
+capacity = 20 # kWh
+
+[users.dion]
+id = "dionmcphee@hotmail.com"
+plant_id = 317
+ai_control = true
+total_bat_discharge_power = 5 # kW
+total_bat_charge_power = 3 # kW
+capacity = 10 # kWh

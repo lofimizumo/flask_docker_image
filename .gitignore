@@ -6,6 +6,7 @@ scratch/
 *.pyc
 *.db
 *.txt
+*.pkl
 data/
 ignoreMe/
 demand_element.pkl

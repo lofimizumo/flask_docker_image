@@ -3,7 +3,7 @@ import time
 import pytz
 import tomli
 from enum import Enum
-from util import ApiCommunicator
+from util import RedXServerClient
 import logging
 import optuna
 from battery_automation import DeviceType
@@ -34,10 +34,10 @@ class RedXDemandPredictor:
         except AttributeError:
             raise ValueError("api_version missing in config")
         if api_version == 'dev3':
-            self.api = ApiCommunicator(
+            self.api = RedXServerClient(
                 base_url="https://dev3.redxvpp.com/restapi")
         else:
-            self.api = ApiCommunicator(
+            self.api = RedXServerClient(
                 base_url="https://redxpower.com/restapi")
         self.token = None
         self.token_last_updated = datetime.now(
