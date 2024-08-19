@@ -82,6 +82,7 @@ class BatterySchedulerManager:
         self.last_schedule_peakvalley = {}
         self.schedule_before_hotfix = {}
         self.last_scheduled_date = None
+        self.last_clear_time = None
         self.last_five_metre_readings = []
         self.battery_original_discharging_powers = {}
         self.battery_original_charging_powers = {}
@@ -384,7 +385,7 @@ class BatterySchedulerManager:
                 # Upsample to target_length
                 return np.interp(np.linspace(0, current_length - 1, target_length),
                                  np.arange(current_length), data).tolist()
-        
+
         # Resample the data to 48 points
         prices = resample_data(prices)
         sell_prices = resample_data(sell_prices)
@@ -406,6 +407,11 @@ class BatterySchedulerManager:
         # pickle.dump((config, x_vals, socs, charge_mask), open('battery_sched.pkl', 'wb'))
         return x_vals
 
+    def _is_clear_schedule_time(self, current_time, clear_time):
+        return (current_time >= clear_time and
+                (self.last_clear_time is None or
+                 self.last_clear_time > current_time))
+
     def _is_update_time(self, current_time, update_time):
         return (current_time >= update_time and
                 (self.last_bat_sched_time is None or
@@ -419,6 +425,10 @@ class BatterySchedulerManager:
                 tz=pytz.timezone('Australia/Brisbane')).time()
             morning_update_time = datetime_time(1, 00)  # 8:30 AM
             afternoon_update_time = datetime_time(16, 30)  # 4:30 PM
+
+            if self._is_clear_schedule_time(current_time, morning_update_time):
+                self.schedule = {}
+                self.last_clear_time = current_time
             # We will force a re-schedule update at 4:30 PM
             if self._is_update_time(current_time, afternoon_update_time) or self._is_update_time(current_time, morning_update_time):
                 self.prepare_battery_sched_loop.run_until_complete(
@@ -446,8 +456,12 @@ class BatterySchedulerManager:
             'users', {}).get(user_name, {}).get('total_bat_discharge_power', 0)
         capacity = self.config_new_model.get(
             'users', {}).get(user_name, {}).get('capacity', 0)
-        self.schedule[user_name] = self.optimize(
+        schedule = self.optimize(
             buy_prices, sell_prices, pvs, loads, plant_charge_power, plant_discharge_power, capacity)
+        if user_name not in self.schedule:
+            self.schedule[user_name] = schedule
+        else:
+            self.schedule[user_name] = self.schedule[:198] + schedule[198:]
 
         # TODO: Send the schedule to the AI server
         plant_id = self.config_new_model.get(
@@ -461,34 +475,34 @@ class BatterySchedulerManager:
         date = now.strftime('%Y-%m-%d')
         # Upsample schedule to 288 points
         schedule = np.interp(np.linspace(0, len(schedule), 288),
-                  np.arange(len(schedule)), schedule).tolist()
+                             np.arange(len(schedule)), schedule).tolist()
         # Round the float to 2 decimal places
         schedule = [round(x, 2) for x in schedule]
-        action_type = [1 if x > 0 else 0 if x == 0 else 2 for x in schedule]
-        anti_backflow_for_day = [0] * len(schedule)
-        grid_charge_for_day = [0] * len(schedule)
+        # Flip the schedule to match the AI server's format
+        schedule = [-x for x in schedule]
         model_data = {
             "plant_id": plant_id,
             "date": date,
-            "action_type": action_type,
             "action_power": schedule,
-            "anti_backflow": anti_backflow_for_day,
-            "grid_charge": grid_charge_for_day,
         }
         response = await self.ai_client.data_api_request("battery_actions/set", model_data)
         if response and response.get('errorCode') == 0:
             print(f"Schedule data pushed successfully for {plant_id}")
         elif response and response.get('errorCode') == 4:
-            print(f"Actual Pricing data already exists for {plant_id}. Overwritting the data..")
+            print(
+                f"Schedule data already exists for {plant_id}. Overwritting the data..")
             response = await self.ai_client.data_api_request("battery_actions/delete", {"plant_id": plant_id, "date": date})
             if response and response.get('errorCode') == 0:
                 response = await self.ai_client.data_api_request("battery_actions/set", model_data)
                 if response and response.get('errorCode') == 0:
-                    print(f"Actual Pricing data overwritten successfully for {plant_id}")
+                    print(
+                        f"Schedule data overwritten successfully for {plant_id}")
                 else:
-                    print(f"Error pushing actual price data for {plant_id}: {response.get('infoText')}")
+                    print(
+                        f"Error pushing actual price data for {plant_id}: {response.get('infoText')}")
         else:
-            print(f"Error pushing price data for {plant_id}: {response.get('infoText')}")
+            print(
+                f"Error pushing price data for {plant_id}: {response.get('infoText')}")
 
     def _health_checker_devices(self):
         while self.is_running:
