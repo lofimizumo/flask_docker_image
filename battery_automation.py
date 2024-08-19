@@ -1,3 +1,6 @@
+import numpy as np
+import pytz
+import aiohttp
 from datetime import datetime, timedelta, time as datetime_time
 from enum import Enum
 from typing import Dict, List
@@ -6,7 +9,6 @@ import time
 import copy
 import util
 import math
-import pytz
 import logging
 import tomli
 from threading import Thread
@@ -14,13 +16,10 @@ import pickle
 from solar_prediction import WeatherInfoFetcher
 from optimizer.battery_optimizer import BatteryScheduler
 import concurrent.futures
-import asyncio
-import aiohttp
 import traceback
 from batteryexceptions import *
 import warnings
 import asyncio
-import numpy as np
 
 
 class DeviceType(Enum):
