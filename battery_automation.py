@@ -76,7 +76,8 @@ class BatterySchedulerManager:
             'prices': [], 'loads': [], 'solars': []} for user_name in self.user_names}
         self.last_bat_sched_time = None
         self.schedule = {}
-        self.prepare_battery_sched_loop = asyncio.get_event_loop()
+        self.prepare_battery_sched_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.prepare_battery_sched_loop)
         self.last_schedule_ai = {}
         self.last_schedule_peakvalley = {}
         self.schedule_before_hotfix = {}
