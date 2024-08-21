@@ -29,7 +29,7 @@ total_bat_discharge_power = 5 # kW
 total_bat_charge_power = 3 # kW
 capacity = 10 # kWh
 devices = [
-    { id = "011LOKL140104B", type = 2505 }
+    { id = "011LOKL140104B", type = 5000 }
 ]
 api_key = "psk_95906d62a035391b450c0709a0790852"
 api_url = "https://api.amber.com.au/v1/sites/01HRDW17W9MVRM5PZCD5CNM0X6/prices/current?next=0&previous=0&resolution=30"

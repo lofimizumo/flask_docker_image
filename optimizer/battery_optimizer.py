@@ -109,7 +109,7 @@ class BatteryScheduler:
         self.define_constraints(model)
         solver = SolverFactory('mindtpy')
         _ = solver.solve(model, strategy='OA',
-                               mip_solver='glpk', nlp_solver='ipopt')
+                               mip_solver='glpk')
         __ = [model.state_of_charge[t]() for t in model.T]
         x_vals = [model.x[t]() for t in model.T]
         return x_vals, __

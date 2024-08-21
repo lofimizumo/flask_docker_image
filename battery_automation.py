@@ -1786,8 +1786,11 @@ def test_scheduler(test_mode=False):
     # For Amber Dion (NSW)
     scheduler = BatterySchedulerManager(
         scheduler_type='PeakValley',
-        battery_sn=['011LOKL140058B',
-                    '011LOKL140104B', 'RX2505ACA10J0A160016'],
+        battery_sn=['011LOKL140104B',
+                             '011LOKL140058B',
+                             'RX2505ACA10J0A180003',
+                             'RX2505ACA10J0A160016',
+                             ],
         test_mode=test_mode, api_version='redx')
     scheduler.start()
     # time.sleep(300)
