@@ -8,5 +8,4 @@ pandas
 tomli
 aiohttp
 pyomo
-glpk
 seaborn
