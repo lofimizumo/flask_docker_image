@@ -66,9 +66,11 @@ class BatterySchedulerManager:
         self.scheduler = None
         self.monitor = util.PriceAndLoadMonitor(api_version=api_version)
         self.ai_client = util.AIServerClient()
+        self.user_manager = util.UserManager()
         self.test_mode = test_mode
         self.is_runing = False
         self.pv_sn = pv_sn
+        self.plant_list = self.user_manager.get_plants()
         self.sn_list = battery_sn if type(battery_sn) == list else [
             battery_sn]
         self.user_names = [x for x in self.config_new_model.get('users', [])]
@@ -90,11 +92,9 @@ class BatterySchedulerManager:
         self.project_mode = project_mode
         self.sn_types = self.config_old_model.get('battery_types', {})
         self.sn_locations = self.config_old_model.get('battery_locations', {})
-        self.sn_retailers = self.config_old_model.get('battery_retailers', {})
-        self.algo_types = self.config_old_model.get('battery_algo_types', {})
         self.last_command_time = {}
-        self.current_prices = {sn: {'buy': 0.0, 'feedin': 0.0}
-                               for sn in self.sn_list}
+        self.current_prices = {plant: {'buy': 0.0, 'feedin': 0.0}
+                               for plant in self.plant_list}
 
         self.init_params = (scheduler_type, api_version, pv_sn)
 
@@ -189,34 +189,22 @@ class BatterySchedulerManager:
         Update prices for only the devices that are using the target retailer.
         e.g., if target_retailer is 'amber', only update prices for devices that are using Amber.
         """
-        def _update_prices_per_sn(retailer, location, sn):
+        def _update_prices_per_plant_id(retailer, plant_id):
             data, quality = self.get_current_price(
-                location=location, retailer=retailer)
+                retailer=retailer, plant_id=plant_id)
 
             if data and quality:
-                self.current_prices[sn]['buy'], self.current_prices[sn]['feedin'] = data
-                # self.logger.info(
-                #     f'Price for {sn}({retailer}) updated: {self.current_prices[sn]}')
+                self.current_prices[plant_id]['buy'], self.current_prices[plant_id]['feedin'] = data
                 return True
             else:
-                self.logger.info(
-                    f'Bad Quality: Got forecasted or invalid price for {sn}({retailer}) or price update failed, e.g. too many requests.')
                 return False
 
-        try:
-            for sn in self.sn_list:
-                sn_retailer_type = self.sn_retailers.get(sn, 'amber')
-                if target_retailer != sn_retailer_type:
-                    continue
-
-                location = self.sn_locations.get(sn, 'qld')
-                if not _update_prices_per_sn(retailer=sn_retailer_type, location=location, sn=sn):
-                    return False
-
-            return True
-        except Exception as e:
-            logging.error(f"Error updating prices: {e}")
-            return False
+        plants = self.user_manager.get_plants()
+        for plant_id in plants:
+            retailer_type = self.user_manager.get_retailer_type(plant_id)
+            if target_retailer != retailer_type:
+                continue
+            return _update_prices_per_plant_id(retailer=retailer_type, plant_id=plant_id)
 
     def _process_peak_valley_scheduler(self):
         with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -227,20 +215,19 @@ class BatterySchedulerManager:
     def _process_send_cmd_each_sn(self, sn):
         try:
             logging.info(f"Processing sn: {sn}")
+            plant_id = self.user_manager.get_plant_for_device(sn)
             bat_stats = self.get_current_battery_stats(sn)
             current_batP = bat_stats.get('batP', 0) if bat_stats else 0
             current_usage = bat_stats.get('loadP', 0) if bat_stats else 0
             current_soc = bat_stats.get(
                 'soc', 0) / 100.0 if bat_stats else 0
             current_pv = bat_stats.get('ppv', 0) if bat_stats else 0
-            device_type = DeviceType(self.sn_types.get(sn, 2505))
-            device_location = self.sn_locations.get(sn, 'qld')
-            algo_type = self.algo_types.get(sn, 'sell_to_grid')
-            buy_price = self.current_prices[sn]['buy']
-            feedin_price = self.current_prices[sn]['feedin']
+            device_type = DeviceType(self.user_manager.get_device_type(sn))
+            algo_type = self.user_manager.get_algo_type(plant_id)
+            buy_price = self.current_prices[plant_id]['buy'] if plant_id else 0.0
+            feedin_price = self.current_prices[plant_id]['feedin'] if plant_id else 0.0
             current_time = self.get_current_time(
                 state=self.sn_locations.get(sn, 'qld'))
-            algo_type = 'sell_to_grid' if device_location == 'qld' else 'cover_usage'
 
             command = self._get_battery_command(
                 current_buy_price=buy_price,
@@ -410,13 +397,13 @@ class BatterySchedulerManager:
     def _is_clear_schedule_time(self, current_time, clear_time):
         return (current_time >= clear_time and
                 (self.last_clear_time is None or
-                 self.last_clear_time > current_time))
+                 self.last_clear_time >= clear_time))
 
     def _is_update_time(self, current_time, update_time):
         return (current_time >= update_time and
                 (self.last_bat_sched_time is None or
                  self.last_bat_sched_time < update_time or
-                 self.last_bat_sched_time > current_time))
+                 self.last_bat_sched_time >= current_time))
 
     def prepare_bat_sched_loop(self):
         asyncio.set_event_loop(self.prepare_battery_sched_loop)
@@ -434,6 +421,7 @@ class BatterySchedulerManager:
                 self.prepare_battery_sched_loop.run_until_complete(
                     self.prepare_bat_sched_all_users())
                 self.last_bat_sched_time = current_time
+            time.sleep(60)
 
     async def prepare_bat_sched_all_users(self):
         async with aiohttp.ClientSession() as session:
@@ -443,30 +431,33 @@ class BatterySchedulerManager:
             await asyncio.gather(*tasks, return_exceptions=True)
 
     async def prep_bat_sched_each_user(self, user_name):
-        user_full_name = self.config_new_model.get(
-            'users', {}).get(user_name, {}).get('id')
-        prices = await self.get_prices(user_full_name)
-        pvs = await self.get_solar(user_full_name)
-        loads = await self.get_load(user_full_name)
-        buy_prices = prices['buy']
-        sell_prices = prices['sell']
-        plant_charge_power = self.config_new_model.get(
-            'users', {}).get(user_name, {}).get('total_bat_charge_power', 0)
-        plant_discharge_power = self.config_new_model.get(
-            'users', {}).get(user_name, {}).get('total_bat_discharge_power', 0)
-        capacity = self.config_new_model.get(
-            'users', {}).get(user_name, {}).get('capacity', 0)
-        schedule = self.optimize(
-            buy_prices, sell_prices, pvs, loads, plant_charge_power, plant_discharge_power, capacity)
-        if user_name not in self.schedule:
-            self.schedule[user_name] = schedule
-        else:
-            self.schedule[user_name] = self.schedule[:198] + schedule[198:]
+        try:
+            user_full_name = self.config_new_model.get(
+                'users', {}).get(user_name, {}).get('id')
+            prices = await self.get_prices(user_full_name)
+            pvs = await self.get_solar(user_full_name)
+            loads = await self.get_load(user_full_name)
+            buy_prices = prices['buy']
+            sell_prices = prices['sell']
+            plant_charge_power = self.config_new_model.get(
+                'users', {}).get(user_name, {}).get('total_bat_charge_power', 0)
+            plant_discharge_power = self.config_new_model.get(
+                'users', {}).get(user_name, {}).get('total_bat_discharge_power', 0)
+            capacity = self.config_new_model.get(
+                'users', {}).get(user_name, {}).get('capacity', 0)
+            schedule = self.optimize(
+                buy_prices, sell_prices, pvs, loads, plant_charge_power, plant_discharge_power, capacity)
+            if user_name not in self.schedule:
+                self.schedule[user_name] = schedule
+            else:
+                self.schedule[user_name] = self.schedule[:198] + schedule[198:]
 
-        # TODO: Send the schedule to the AI server
-        plant_id = self.config_new_model.get(
-            'users', {}).get(user_name, {}).get('plant_id')
-        await self.push_schedule_to_AI(plant_id, self.schedule[user_name])
+            plant_id = self.config_new_model.get(
+                'users', {}).get(user_name, {}).get('plant_id')
+            await self.push_schedule_to_AI(plant_id, self.schedule[user_name])
+        except Exception as e:
+            error_message = f"Error preparing schedule for {user_name}: {e} \n Traceback: {traceback.format_exc()}"
+            logging.error(error_message)
 
     async def push_schedule_to_AI(self, plant_id, schedule) -> List[float]:
         await self.ai_client.ensure_login("ye.tao@redx.com.au", "1111")
@@ -498,11 +489,11 @@ class BatterySchedulerManager:
                     print(
                         f"Schedule data overwritten successfully for {plant_id}")
                 else:
-                    print(
-                        f"Error pushing actual price data for {plant_id}: {response.get('infoText')}")
+                    raise RuntimeError(f"Error overwriting schedule for {plant_id}: {response.get('infoText')}")
+            else:
+                raise RuntimeError(f"Error deleting schedule for {plant_id}: {response.get('infoText')}")
         else:
-            print(
-                f"Error pushing price data for {plant_id}: {response.get('infoText')}")
+            raise RuntimeError(f"Error pushing schedule for {plant_id}: {response.get('infoText')}")
 
     def _health_checker_devices(self):
         while self.is_running:
@@ -531,7 +522,8 @@ class BatterySchedulerManager:
         return logs
 
     def _init_device_profiles(self, sn):
-        self.current_prices[sn] = {'buy': 0.0, 'feedin': 0.0}
+        plant_id = self.user_manager.get_plant_for_device(sn)
+        self.current_prices[plant_id] = {'buy': 0.0, 'feedin': 0.0}
         self.last_schedule_peakvalley[sn] = {'command': 'Idle'}
 
     def add_amber_device(self, sn):
@@ -545,8 +537,8 @@ class BatterySchedulerManager:
             self.sn_list.remove(sn)
             self.logger.info(f"Removed device {sn} from the scheduler.")
 
-    def get_current_price(self, location='qld', retailer='amber'):
-        return self.monitor.get_realtime_price(location=location, retailer=retailer)
+    def get_current_price(self, retailer='amber', plant_id=None):
+        return self.monitor.get_realtime_price(retailer=retailer, plant_id=plant_id)
 
     def get_current_time(self, state='qld') -> str:
         state_timezone_map = {
@@ -1813,6 +1805,6 @@ def multiple_random_devices_test(count=5):
 
 
 if __name__ == '__main__':
-    multiple_random_devices_test()
-    # test_scheduler()
+    # multiple_random_devices_test()
+    test_scheduler()
     # test_shawsbay()

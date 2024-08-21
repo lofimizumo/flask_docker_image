@@ -1,18 +1,36 @@
 title = "User Profiles"
+
 [users]
 
 [users.jchen]
 id = "jchen"
+retailer = "lv"
 plant_id = 27
 ai_control = true
 total_bat_discharge_power = 10 # kW
 total_bat_charge_power = 6 # kW
 capacity = 20 # kWh
+devices = [
+    { id = "011LOKL140058B", type = 5000 },
+    { id = "RX2505ACA10J0A180003", type = 2505},
+    { id = "RX2505ACA10J0A160016", type = 2505},
+]
+api_key = "21b831bc02410319571a27250d49b4c4"
+api_url = "https://api.localvolts.com/v1/customer/interval?NMI=*"
+partner_id = "25370"
+algo_type_old = "sell_to_grid"
 
 [users.dion]
 id = "dionmcphee@hotmail.com"
+retailer = "amber"
 plant_id = 317
 ai_control = true
 total_bat_discharge_power = 5 # kW
 total_bat_charge_power = 3 # kW
 capacity = 10 # kWh
+devices = [
+    { id = "011LOKL140104B", type = 2505 }
+]
+api_key = "psk_95906d62a035391b450c0709a0790852"
+api_url = "https://api.amber.com.au/v1/sites/01HRDW17W9MVRM5PZCD5CNM0X6/prices/current?next=0&previous=0&resolution=30"
+algo_type_old = "cover_usage"

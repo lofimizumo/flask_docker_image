@@ -12,7 +12,7 @@ import tomli
 import os
 import numpy as np
 from batteryexceptions import *
-from typing import Dict, Any, Optional
+from typing import Dict, List, Any, Optional
 import asyncio
 import aiohttp
 # from algorithms import DemandPredictorFactory
@@ -165,9 +165,101 @@ def decode_model_data(encoded_data):
         return None
 
 
+class UserManager:
+    def __init__(self, config_file='user_config.toml'):
+        self.plant_to_devices: Dict[int, List[str]] = {}
+        self.device_to_plant: Dict[str, int] = {}
+        self.device_to_type: Dict[str, int] = {}
+        self.plant_to_user: Dict[int, str] = {}
+        self.toml = load_config(config_file)
+        self.parse_plant_device()
+
+    def add_plant(self, plant_id: int):
+        if plant_id not in self.plant_to_devices:
+            self.plant_to_devices[plant_id] = []
+
+    def add_device(self, plant_id: int, device_id: str):
+        if plant_id not in self.plant_to_devices:
+            self.add_plant(plant_id)
+        self.plant_to_devices[plant_id].append(device_id)
+        self.device_to_plant[device_id] = plant_id
+
+    def get_devices_for_plant(self, plant_id: int) -> List[str]:
+        return self.plant_to_devices.get(plant_id, [])
+
+    def get_plant_for_device(self, device_id: str) -> int:
+        return self.device_to_plant.get(device_id)
+    
+    def get_plants(self) -> List[int]:
+        return list(self.plant_to_devices.keys())
+    
+    def get_users(self) -> List[str]:
+        users = self.toml.get('users', {})
+        return list(users.keys())
+    
+    def get_algo_type(self, plant_id: int) -> str:
+        user = self.get_user_for_plant(plant_id)
+        return self.get_user_profile(user).get('algo_type_old', 'sell_to_grid')
+    
+    def get_device_type(self, sn: str) -> str:
+        return self.device_to_type.get(sn, 2505)
+
+    def parse_plant_device(self):
+        user_profiles = self.toml.get('users', {})
+        for username, user_data in user_profiles.items():
+            plant_id = user_data.get('plant_id')
+            if plant_id is not None:
+                self.add_plant(plant_id)
+                self.plant_to_user[plant_id] = username
+                for device in user_data.get('devices', []):
+                    device_id = device.get('id')
+                    device_type = device.get('type')
+                    if device_id:
+                        self.add_device(plant_id, device_id)
+                    if device_type:
+                        self.device_to_type[device_id] = device_type
+
+    def get_user_profile(self, username: str) -> Dict[str, Any]:
+        user_profiles = self.toml.get('users', {})
+        return user_profiles.get(username, {})
+
+    def update_user_profile(self, username: str, profile_data: Dict[str, Any]):
+        user_profiles = self.toml.get('users', {})
+        if username not in user_profiles:
+            user_profiles[username] = {}
+        
+        user_profiles[username].update(profile_data)
+        
+        plant_id = profile_data.get('plant_id')
+        if plant_id is not None:
+            self.add_plant(plant_id)
+            for device in profile_data.get('devices', []):
+                device_id = device.get('id')
+                if device_id:
+                    self.add_device(plant_id, device_id)
+    def get_user_for_plant(self, plant_id: int) -> str:
+        return self.plant_to_user.get(plant_id, None)
+
+    def get_api_url(self, plant_id: str) -> str:
+        user = self.get_user_for_plant(plant_id)
+        return self.get_user_profile(user).get('api_url', None)
+    
+    def get_api_key(self, plant_id: str) -> str:
+        user = self.get_user_for_plant(plant_id)
+        return self.get_user_profile(user).get('api_key', None)
+    
+    def get_retailer_type(self, plant_id: str) -> str:
+        user = self.get_user_for_plant(plant_id)
+        return self.get_user_profile(user).get('retailer', 'amber')
+    
+    def get_partner_id(self, plant_id: str) -> str:
+        user = self.get_user_for_plant(plant_id)
+        return self.get_user_profile(user).get('partner_id', None)
+
 class PriceAndLoadMonitor:
     def __init__(self,  test_mode=False, api_version='dev3'):
         self.config = load_config()
+        self.user_manager = UserManager("user_config.toml")
         self.sim_load_iter = self.get_sim_load_iter()
         self.sim_time_iter = self.get_sim_time_iter()
         self.api = None
@@ -185,49 +277,37 @@ class PriceAndLoadMonitor:
 
         self.default_prices = {}
 
-        self.amber_api_url_qld = self.config.get(
-            'apiurls', {}).get('apiurl_qld', None)
-        self.amber_api_url_nsw = self.config.get(
-            'apiurls', {}).get('apiurl_nsw', None)
-        self.amber_api_key_qld = os.getenv(self.config.get(
-            'apikey_varnames', {}).get('apikey_varname_qld', None))
-        self.amber_api_key_nsw = os.getenv(self.config.get(
-            'apikey_varnames', {}).get('apikey_varname_nsw', None))
-
-    def get_realtime_price(self, location='qld', retailer='amber'):
+    def get_realtime_price(self, retailer='amber', plant_id=None):
         if retailer == 'amber':
-            return self._get_realtime_amber_price(location)
+            return self._get_realtime_amber_price(plant_id)
         elif retailer == 'lv':
-            return self._get_realtime_lv_price(location)
+            return self._get_realtime_lv_price(plant_id)
 
     def get_realtime_price_from_server(self, sn):
         # TODO: implement the function to get the realtime price from the server
         # Send a request to the RedX Prod server to get the realtime price
         raise NotImplementedError
 
-    def _get_realtime_lv_price(self, location='qld'):
+    def _get_realtime_lv_price(self, plant_id):
         # TODO: replace the API key with the device's API key and partner ID
-        url = "https://api.localvolts.com/v1/customer/interval?NMI=*"
+        url = self.user_manager.get_api_url(plant_id)
+        api_key = f'apikey {self.user_manager.get_api_key(plant_id)}'
+        partner_id = self.user_manager.get_partner_id(plant_id) 
         header = {
-            'Authorization': 'apikey 21b831bc02410319571a27250d49b4c4', 'partner': '25370'}
+            'Authorization': api_key, 'partner': partner_id}
         try:
             r = requests.get(url, headers=header, timeout=5)
             prices = [(x['costsFlexUp'], x['earningsFlexUp'])
                       for x in r.json()]
             cast_prices = [float(x) for x in prices[0]]
             is_expected_data = r.json()[0]['quality'] == 'Exp'
+            return cast_prices, is_expected_data
         except Exception as e:
-            logger.error(f"Failed to get price data: {e}")
-            return None, False
-        return cast_prices, is_expected_data
+            raise ValueError(f"Failed to get localvolts price data: {e}")
 
-    def _get_realtime_amber_price(self, location='qld'):
-        if location == 'qld':
-            url = self.amber_api_url_qld
-            api_key = self.amber_api_key_qld
-        elif location == 'nsw':
-            url = self.amber_api_url_nsw
-            api_key = self.amber_api_key_nsw
+    def _get_realtime_amber_price(self, plant_id):
+        url = self.user_manager.get_api_url(plant_id)
+        api_key = self.user_manager.get_api_key(plant_id)
         header = {'accept': 'application/json',
                   'Authorization': f'Bearer {api_key}'}
         try:
@@ -237,16 +317,16 @@ class PriceAndLoadMonitor:
         # True means it's expected data, Amber doesn't have forecast data, so we always return True
             return (prices[0], -prices[1]), True
         except Exception as e:
-            logger.error(f"Failed to get price data: {e}")
-            return None, False
+            raise ValueError(f"Failed to get price data: {e}")
 
-    def _init_default_prices(self, sn, location, retailer):
+    def _init_default_prices(self, retailer):
         # LocalVolts doesn't have historical price data, so we only need to get the historical price data from Amber instead
+        default_amber_plant_id = 317 # Plant ID of Dion's Amber account, We use this account to request the initial price data
         if retailer == 'amber' or retailer == 'lv':
-            if location == 'qld':
-                api_key = self.amber_api_key_qld
-            elif location == 'nsw':
-                api_key = self.amber_api_key_nsw
+            try:
+                api_key = self.user_manager.get_api_key(default_amber_plant_id)
+            except Exception as e:
+                raise ValueError(f"Failed to get API key at _init_default_prices: {e}")
             fetcher = AmberFetcher(api_key)
             yesterday_date = (datetime.now(tz=pytz.timezone(
                 'Australia/Sydney')) - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -265,17 +345,16 @@ class PriceAndLoadMonitor:
         return location, retailer
 
     def get_price_history(self, sn, length):
-        location, retailer = self._get_device_info(sn)
+        plant_id = self.user_manager.get_plant_for_device(sn)
+        retailer = self.user_manager.get_retailer_type(plant_id)
         ret = None
         if retailer == 'amber':
             if self.default_prices.get('amber', None) is None:
-                self.default_prices['amber'] = self._init_default_prices(
-                    sn, location, retailer)
+                self.default_prices['amber'] = self._init_default_prices(retailer)
             ret = self.default_prices.get('amber')
         elif retailer == 'lv':
             if self.default_prices.get('lv', None) is None:
-                self.default_prices['lv'] = self._init_default_prices(
-                    sn, location, retailer)
+                self.default_prices['lv'] = self._init_default_prices(retailer)
             ret = self.default_prices.get('lv')
         ret = np.interp(
             np.linspace(0, 1, int(length)),
