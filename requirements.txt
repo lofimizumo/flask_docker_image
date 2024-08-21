@@ -8,4 +8,5 @@ pandas
 tomli
 aiohttp
 pyomo
+pyomo.solvers
 seaborn
