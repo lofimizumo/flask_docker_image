@@ -1,42 +1,23 @@
-FROM --platform=$BUILDPLATFORM python:3.11-alpine AS builder
+FROM python:3.11-slim-buster
 
 RUN mkdir /notebooks
 WORKDIR /notebooks
 
-# Install system dependencies
-RUN apk update && \
-    apk --no-cache add \
-    linux-headers \
+# Install system dependencies and IPOPT
+RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
-    glpk \
-    glpk-dev \
-    openblas-dev \
-    gfortran \
-    pkgconfig \
-    wget \
-    make \
-    patch
-
-# Install IPOPT
-RUN wget https://github.com/coin-or/Ipopt/archive/releases/3.14.4.tar.gz && \
-    tar xvzf 3.14.4.tar.gz && \
-    cd Ipopt-releases-3.14.4 && \
-    ./configure --prefix=/usr/local && \
-    make && \
-    make install && \
-    cd .. && \
-    rm -rf Ipopt-releases-3.14.4 3.14.4.tar.gz
-
-# Set environment variables for IPOPT
-ENV IPOPT_DIR=/usr/local
+    glpk-utils \
+    libglpk-dev \
+    coinor-libipopt-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python packages
 COPY requirements.txt /notebooks/
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install Pyomo and its solver interfaces
-RUN pip install --no-cache-dir pyomo
+RUN pip install --no-cache-dir pyomo 
 
 COPY . /notebooks/
 
