@@ -319,8 +319,7 @@ class BatterySchedulerManager:
         self.is_runing = False
         self.logger.info("Stopped.")
     
-    def adjust_power_for_plant(self, schedule,  sn: str):
-        schedule_adjusted = copy.deepcopy(schedule)
+    def adjust_power_for_plant(self, schedule, sn: str):
         plant_id = self.user_manager.get_plant_for_device(sn)
         device_type = self.user_manager.get_device_type(sn)
         total_discharge_power = self.user_manager.get_user_profile(self.user_manager.get_user_for_plant(plant_id)).get('total_bat_discharge_power', 0)
@@ -328,11 +327,20 @@ class BatterySchedulerManager:
         
         adjustment_factor = device_discharge_power / total_discharge_power
         
-        for action in schedule_adjusted.actions:
-            action.action *= adjustment_factor
-            action.action = round(action.action, 2)  # Round to 2 decimal places
+        adjusted_actions = [
+            BatteryAction(
+                action=round(action.action * adjustment_factor, 2),
+                env=ActionEnvObservation(
+                    buy_price=action.env.buy_price,
+                    sell_price=action.env.sell_price,
+                    load=action.env.load,
+                    solar=action.env.solar
+                )
+            )
+            for action in schedule.actions
+        ]
         
-        return schedule_adjusted
+        return BatterySchedule(actions=adjusted_actions)
 
     async def get_prices(self, user_name) -> List[float]:
         # Elmar's API call to get prices
