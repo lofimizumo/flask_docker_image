@@ -18,7 +18,7 @@ devices = [
 api_key = "21b831bc02410319571a27250d49b4c4"
 api_url = "https://api.localvolts.com/v1/customer/interval?NMI=*"
 partner_id = "25370"
-algo_type_old = "sell_to_grid"
+algo_type = "smart"
 
 [users.dion]
 id = "dionmcphee@hotmail.com"

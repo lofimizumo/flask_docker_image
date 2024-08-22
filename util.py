@@ -190,6 +190,9 @@ class UserManager:
     def get_plant_for_device(self, device_id: str) -> int:
         return self.device_to_plant.get(device_id)
     
+    def get_user_for_plant(self, plant_id: int) -> str:
+        return self.plant_to_user.get(plant_id, None)
+
     def get_plants(self) -> List[int]:
         return list(self.plant_to_devices.keys())
     
@@ -199,7 +202,7 @@ class UserManager:
     
     def get_algo_type(self, plant_id: int) -> str:
         user = self.get_user_for_plant(plant_id)
-        return self.get_user_profile(user).get('algo_type_old', 'sell_to_grid')
+        return self.get_user_profile(user).get('algo_type', 'sell_to_grid')
     
     def get_device_type(self, sn: str) -> str:
         return self.device_to_type.get(sn, 2505)
@@ -237,8 +240,6 @@ class UserManager:
                 device_id = device.get('id')
                 if device_id:
                     self.add_device(plant_id, device_id)
-    def get_user_for_plant(self, plant_id: int) -> str:
-        return self.plant_to_user.get(plant_id, None)
 
     def get_api_url(self, plant_id: str) -> str:
         user = self.get_user_for_plant(plant_id)

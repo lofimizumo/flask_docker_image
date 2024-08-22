@@ -55,4 +55,4 @@ RUN echo "Checking IPOPT installation:" && \
 
 EXPOSE 5000
 
-ENTRYPOINT ["python", "app.py"]
+ENTRYPOINT ["python", "-u", "app.py"]

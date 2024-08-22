@@ -61,7 +61,6 @@ class BatterySchedulerManager:
         project_mode: str, the mode of the project of AI scheduler, e.g., 'Peak Shaving', 'Money Saving', 'Normal'
         '''
         self.config_old_model = load_config(config_old_model)
-        self.config_new_model = load_config(config_new_model)
         self.logger = logging.getLogger('logger')
         self.scheduler = None
         self.monitor = util.PriceAndLoadMonitor(api_version=api_version)
@@ -73,24 +72,17 @@ class BatterySchedulerManager:
         self.plant_list = self.user_manager.get_plants()
         self.sn_list = battery_sn if type(battery_sn) == list else [
             battery_sn]
-        self.user_names = [x for x in self.config_new_model.get('users', [])]
-        self.user_price_load_solar = {user_name: {
-            'prices': [], 'loads': [], 'solars': []} for user_name in self.user_names}
+        self.user_names = self.user_manager.get_users()
         self.last_bat_sched_time = None
+        self.last_schedule_merge_time = None
         self.schedule = {}
+        self.schedule_for_compare = {}
         self.prepare_battery_sched_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.prepare_battery_sched_loop)
-        self.last_schedule_ai = {}
         self.last_schedule_peakvalley = {}
-        self.schedule_before_hotfix = {}
-        self.last_scheduled_date = None
-        self.last_clear_time = None
-        self.last_five_metre_readings = []
-        self.battery_original_discharging_powers = {}
-        self.battery_original_charging_powers = {}
+        self.should_update_schedule = False
         self.project_phase = phase
         self.project_mode = project_mode
-        self.sn_types = self.config_old_model.get('battery_types', {})
         self.sn_locations = self.config_old_model.get('battery_locations', {})
         self.last_command_time = {}
         self.current_prices = {plant: {'buy': 0.0, 'feedin': 0.0}
@@ -118,6 +110,7 @@ class BatterySchedulerManager:
     def _get_battery_command(self, **kwargs):
         if not self.scheduler:
             raise ValueError("Scheduler not set. Use set_scheduler() first.")
+        
 
         return self.scheduler.step(**kwargs)
 
@@ -212,34 +205,62 @@ class BatterySchedulerManager:
                             for sn in self.sn_list]
             concurrent.futures.wait(self.futures)
 
+    def make_battery_schedule(self, actions: List[float], buy_prices: List[float], sell_prices: List[float], loads: List[float], solar_outputs: List[float]):
+        # Create new x values for interpolation
+        x = np.arange(len(actions))
+        x_new = np.linspace(0, len(actions) - 1, 288)
+
+        # Interpolate all lists to 288 points and round to 2 decimal places
+        actions_288 = np.round(np.interp(x_new, x, actions), 2)
+
+        battery_actions = [
+            BatteryAction(
+                action=actions_288[i],
+                env=ActionEnvObservation(
+                    buy_price=buy_prices[i],
+                    sell_price=sell_prices[i],
+                    load=loads[i],
+                    solar=solar_outputs[i]
+                )
+            )
+            for i in range(288)
+        ]
+        return BatterySchedule(actions=battery_actions)
+        
     def _process_send_cmd_each_sn(self, sn):
         try:
             logging.info(f"Processing sn: {sn}")
             plant_id = self.user_manager.get_plant_for_device(sn)
             bat_stats = self.get_current_battery_stats(sn)
             current_batP = bat_stats.get('batP', 0) if bat_stats else 0
-            current_usage = bat_stats.get('loadP', 0) if bat_stats else 0
+            current_usage_kw = bat_stats.get('loadP', 0) if bat_stats else 0
             current_soc = bat_stats.get(
                 'soc', 0) / 100.0 if bat_stats else 0
-            current_pv = bat_stats.get('ppv', 0) if bat_stats else 0
+            current_pv_kw = bat_stats.get('ppv', 0) if bat_stats else 0
             device_type = DeviceType(self.user_manager.get_device_type(sn))
             algo_type = self.user_manager.get_algo_type(plant_id)
-            buy_price = self.current_prices[plant_id]['buy'] if plant_id else 0.0
-            feedin_price = self.current_prices[plant_id]['feedin'] if plant_id else 0.0
+            buy_price_c = self.current_prices[plant_id]['buy'] if plant_id else 0.0
+            feedin_price_c = self.current_prices[plant_id]['feedin'] if plant_id else 0.0
             current_time = self.get_current_time(
                 state=self.sn_locations.get(sn, 'qld'))
+            
+            # Prepare for V2.0 Model
+            plant_id = self.user_manager.get_plant_for_device(sn)
+            schedule = self.schedule_for_compare.get(self.user_manager.get_user_for_plant(plant_id), None)
+
 
             command = self._get_battery_command(
-                current_buy_price=buy_price,
-                current_feedin_price=feedin_price,
-                current_usage=current_usage,
+                current_buy_price=buy_price_c,
+                current_feedin_price=feedin_price_c,
+                current_usage=current_usage_kw,
                 current_time=current_time,
                 current_soc=current_soc,
-                current_pv=current_pv,
+                current_pv=current_pv_kw,
                 current_batP=current_batP,
                 device_type=device_type,
                 device_sn=sn,
-                algo_type=algo_type
+                algo_type=algo_type,
+                schedule=schedule
             )
 
             last_command = self.last_schedule_peakvalley.get(sn, {})
@@ -394,10 +415,10 @@ class BatterySchedulerManager:
         # pickle.dump((config, x_vals, socs, charge_mask), open('battery_sched.pkl', 'wb'))
         return x_vals
 
-    def _is_clear_schedule_time(self, current_time, clear_time):
-        return (current_time >= clear_time and
-                (self.last_clear_time is None or
-                 self.last_clear_time >= clear_time))
+    def _is_update_schedule_time(self, current_time, update_time):
+        return (current_time >= update_time and
+                (self.last_schedule_merge_time is None or
+                 self.last_schedule_merge_time >= update_time))
 
     def _is_update_time(self, current_time, update_time):
         return (current_time >= update_time and
@@ -410,14 +431,15 @@ class BatterySchedulerManager:
         while self.is_running:
             current_time = datetime.now(
                 tz=pytz.timezone('Australia/Brisbane')).time()
-            morning_update_time = datetime_time(1, 00)  # 8:30 AM
-            afternoon_update_time = datetime_time(16, 30)  # 4:30 PM
+            morning_update_time = datetime_time(0, 30)  # 0:30 AM
+            afternoon_update_time = datetime_time(16, 45)  # 4:45 PM
 
-            if self._is_clear_schedule_time(current_time, morning_update_time):
-                self.schedule = {}
-                self.last_clear_time = current_time
-            # We will force a re-schedule update at 4:30 PM
+            # We will force a re-schedule update at 4:45 PM
             if self._is_update_time(current_time, afternoon_update_time) or self._is_update_time(current_time, morning_update_time):
+                # This line will turn on the flag after 4:45 PM so that the new evening schedule will leave morning schedule unchanged
+                if self._is_update_schedule_time(current_time, afternoon_update_time):
+                    self.should_update_schedule = True
+                # Push all customers' schedule to the AI server
                 self.prepare_battery_sched_loop.run_until_complete(
                     self.prepare_bat_sched_all_users())
                 self.last_bat_sched_time = current_time
@@ -432,29 +454,26 @@ class BatterySchedulerManager:
 
     async def prep_bat_sched_each_user(self, user_name):
         try:
-            user_full_name = self.config_new_model.get(
-                'users', {}).get(user_name, {}).get('id')
+            user_full_name = self.user_manager.get_user_profile(user_name).get('id')
             prices = await self.get_prices(user_full_name)
             pvs = await self.get_solar(user_full_name)
             loads = await self.get_load(user_full_name)
             buy_prices = prices['buy']
             sell_prices = prices['sell']
-            plant_charge_power = self.config_new_model.get(
-                'users', {}).get(user_name, {}).get('total_bat_charge_power', 0)
-            plant_discharge_power = self.config_new_model.get(
-                'users', {}).get(user_name, {}).get('total_bat_discharge_power', 0)
-            capacity = self.config_new_model.get(
-                'users', {}).get(user_name, {}).get('capacity', 0)
+            plant_charge_power = self.user_manager.get_user_profile(user_name).get('total_bat_charge_power', 0)
+            plant_discharge_power = self.user_manager.get_user_profile(user_name).get('total_bat_discharge_power', 0)
+            capacity = self.user_manager.get_user_profile(user_name).get('capacity', 0)
             schedule = self.optimize(
                 buy_prices, sell_prices, pvs, loads, plant_charge_power, plant_discharge_power, capacity)
-            if user_name not in self.schedule:
-                self.schedule[user_name] = schedule
-            else:
+            if self.should_update_schedule: 
                 self.schedule[user_name] = self.schedule[:198] + schedule[198:]
+                self.should_update_schedule = False
+            else:
+                self.schedule[user_name] = schedule
 
-            plant_id = self.config_new_model.get(
-                'users', {}).get(user_name, {}).get('plant_id')
+            plant_id = self.user_manager.get_user_profile(user_name).get('plant_id')
             await self.push_schedule_to_AI(plant_id, self.schedule[user_name])
+            self.schedule_for_compare[user_name] = self.make_battery_schedule(self.schedule[user_name], buy_prices, sell_prices, loads, pvs)
         except Exception as e:
             error_message = f"Error preparing schedule for {user_name}: {e} \n Traceback: {traceback.format_exc()}"
             logging.error(error_message)
@@ -478,15 +497,15 @@ class BatterySchedulerManager:
         }
         response = await self.ai_client.data_api_request("battery_actions/set", model_data)
         if response and response.get('errorCode') == 0:
-            print(f"Schedule data pushed successfully for {plant_id}")
+            logging.info(f"Schedule data pushed successfully for {plant_id}")
         elif response and response.get('errorCode') == 4:
-            print(
+            logging.info(
                 f"Schedule data already exists for {plant_id}. Overwritting the data..")
             response = await self.ai_client.data_api_request("battery_actions/delete", {"plant_id": plant_id, "date": date})
             if response and response.get('errorCode') == 0:
                 response = await self.ai_client.data_api_request("battery_actions/set", model_data)
                 if response and response.get('errorCode') == 0:
-                    print(
+                    logging.info(
                         f"Schedule data overwritten successfully for {plant_id}")
                 else:
                     raise RuntimeError(f"Error overwriting schedule for {plant_id}: {response.get('infoText')}")
@@ -494,6 +513,21 @@ class BatterySchedulerManager:
                 raise RuntimeError(f"Error deleting schedule for {plant_id}: {response.get('infoText')}")
         else:
             raise RuntimeError(f"Error pushing schedule for {plant_id}: {response.get('infoText')}")
+
+    async def get_schedule(self, plant_id) -> List[float]:
+        await self.ai_client.ensure_login("ye.tao@redx.com.au", "1111")
+
+        now = datetime.now(pytz.timezone('Australia/Brisbane'))
+        date = now.strftime('%Y-%m-%d')
+        model_data = {
+            "plant_id": plant_id,
+            "date": date,
+        }
+        response = await self.ai_client.data_api_request("battery_actions/get", model_data)
+        if response and response.get('errorCode') == 0:
+            logging.info(f"Schedule data obtained successfully for {plant_id}")
+        else:
+            raise RuntimeError(f"Error request schedule for {plant_id}: {response.get('infoText')}")
 
     def _health_checker_devices(self):
         while self.is_running:
@@ -587,8 +621,6 @@ class ShawsbaySchedulerManager:
             battery_sn]
         self.last_schedule_ai = {}
         self.last_schedule_peakvalley = {}
-        self.schedule_before_hotfix = {}
-        self.last_scheduled_date = None
         self.last_five_metre_readings = []
         self.battery_original_discharging_powers = {}
         self.battery_original_charging_powers = {}
@@ -728,7 +760,6 @@ class ChargingPoint:
     grid_charge_power: float
     battery_charge_power: float
 
-
 @dataclass
 class DayChargingData:
     '''
@@ -741,6 +772,25 @@ class DayChargingData:
     charging_points: list[ChargingPoint]
     weighted_charging_cost: float
 
+@dataclass
+class ActionEnvObservation:
+    buy_price: float
+    sell_price: float
+    load: float
+    solar: float
+
+@dataclass
+class BatteryAction:
+    action: float
+    env: ActionEnvObservation
+    def is_confident(self, real_env: ActionEnvObservation):
+        buy_price_diff = abs(self.env.buy_price- real_env.buy_price)
+        sell_price_diff = abs(self.env.sell_price- real_env.sell_price)
+        threshold_cent = 100
+        return ((buy_price_diff + sell_price_diff) / 2) < threshold_cent
+@dataclass
+class BatterySchedule:
+    actions: list[BatteryAction]
 
 class PeakValleyScheduler():
     def __init__(self, config_path='config.toml', monitor=None):
@@ -874,6 +924,81 @@ class PeakValleyScheduler():
         """
         conf_level = 0.97 - 0.8824 * math.exp(-0.033 * current_price)
         return conf_level
+
+
+    def _algo_smart(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pvkW, device_type: DeviceType, device_sn, schedule: BatterySchedule):
+        # Compare with the pre-calculated schedule
+        current_time = datetime.strptime(current_time, '%H:%M').time()
+        if schedule:
+            actual_env = ActionEnvObservation(
+                buy_price=current_buy_price, sell_price=current_feedin_price, load=current_usage, solar=current_pvkW)
+            current_total_min = current_time.hour * 60 + current_time.minute
+            current_time_idx = current_total_min // 5 # 5 minutes interval, 288 points in total
+            is_confident = schedule.actions[current_time_idx].is_confident(actual_env)
+        
+            if is_confident:
+                # Use the pre-calculated action from the schedule
+                scheduled_action = schedule.actions[current_time_idx].action
+                if scheduled_action > 0:
+                    command = {'command': 'Charge', 'power': abs(scheduled_action), 'grid_charge': True}
+                elif scheduled_action < 0:
+                    command = {'command': 'Discharge', 'power': abs(scheduled_action), 'anti_backflow': False}
+                else:
+                    command = {"command": "Idle"}
+                
+                self.logger.info(f"Using scheduled action for {device_sn}: {command}")
+                return command 
+
+        # If no schedule available or not confident, proceed with the original logic
+        # Update price history
+        price_history = self.price_historys.get(device_sn, None)
+        if price_history is None:
+            self.init_price_history(device_sn)
+            price_history = self.price_historys[device_sn]
+        last_updated_time = self.last_updated_times.get(device_sn, None)
+        if last_updated_time is None or current_time.minute != last_updated_time.minute:
+            self.last_updated_times[device_sn] = current_time
+            price_history.append(current_buy_price)
+            if len(price_history) > self.LookBackBars:
+                price_history.pop(0)
+
+        # Set current_price to the median of the last five minutes
+        sample_points_per_minute = 60 / self.sample_interval
+        if current_buy_price < self.PeakPrice:
+            current_buy_price = np.mean(
+                price_history[int(-5 * sample_points_per_minute):])
+
+        # Buy and sell price based on historical data
+        buy_price, sell_price = np.percentile(
+            price_history, [self.BuyPct, self.SellPct])
+        peak_price = self.PeakPrice
+
+        command = {"command": "Idle"}
+
+        # Charging logic
+        if self._is_charging_period(current_time) and ((current_buy_price <= buy_price) or (current_pvkW > current_usage)):
+            maxpower, minpower = self._get_charge_limit(device_type)
+            power, grid_charge = self._calculate_charging_power(
+                current_time, current_pvkW, current_usage, minpower, maxpower, current_buy_price <= buy_price)
+            command = {'command': 'Charge',
+                       'power': power, 'grid_charge': grid_charge}
+
+        # Discharging logic
+        if self._is_discharging_period(current_time) and (current_buy_price >= sell_price) and current_soc > 0.1:
+            power = self._get_discharge_limit(device_type)
+            anti_backflow_threshold = np.percentile(
+                price_history, self.PeakPct)
+            anti_backflow = current_buy_price <= anti_backflow_threshold
+            conf_level = self._discharge_confidence(
+                current_buy_price - anti_backflow_threshold)
+            power = max(min(power * conf_level + 900, power), 1000)
+            command = {'command': 'Discharge', 'power': power,
+                       'anti_backflow': anti_backflow}
+
+        self.logger.info(f"AmberModel (Sell to Grid): price: {current_buy_price}, sell price: {sell_price}, usage: {current_usage}, "
+                         f"time: {current_time}, command: {command}")
+
+        return command
 
     def _algo_sell_to_grid(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pvkW, device_type: DeviceType, device_sn):
         # Update price history
@@ -1064,13 +1189,17 @@ class PeakValleyScheduler():
         device_charge_cost.weighted_charging_cost = np.multiply(np.array(charging_prices), np.array(
             grid_charge_powers)).sum()/(np.array(battery_charge_powers).sum() + 1e-6)
 
-    def step(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn, algo_type='sell_to_grid'):
+    def step(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn, algo_type='sell_to_grid', schedule=None):
         if algo_type == 'sell_to_grid':
             return self._algo_sell_to_grid(
                 current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn)
-        if algo_type == 'auto_time':
+        elif algo_type == 'auto_time':
             return self._algo_auto_time(
                 current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn)
+        elif algo_type == 'smart':
+            return self._algo_smart(
+                current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn, schedule)
+        
         else:
             return self._algo_cover_usage(
                 current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn)
