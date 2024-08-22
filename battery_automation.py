@@ -247,6 +247,7 @@ class BatterySchedulerManager:
             # Prepare for V2.0 Model
             plant_id = self.user_manager.get_plant_for_device(sn)
             schedule = self.schedule_for_compare.get(self.user_manager.get_user_for_plant(plant_id), None)
+            schedule_adjusted = self.adjust_power_for_plant(schedule, sn)
 
 
             command = self._get_battery_command(
@@ -260,7 +261,7 @@ class BatterySchedulerManager:
                 device_type=device_type,
                 device_sn=sn,
                 algo_type=algo_type,
-                schedule=schedule
+                schedule=schedule_adjusted
             )
 
             last_command = self.last_schedule_peakvalley.get(sn, {})
@@ -317,6 +318,22 @@ class BatterySchedulerManager:
     def stop(self):
         self.is_runing = False
         self.logger.info("Stopped.")
+    
+    def adjust_power_for_plant(self, schedule,  sn: str):
+        schedule_adjusted = copy.deepcopy(schedule)
+        plant_id = self.user_manager.get_plant_for_device(sn)
+        devices = self.user_manager.get_devices_for_plant(plant_id)
+        device_types = [DeviceType(self.user_manager.get_device_type(device)) for device in devices]
+        total_discharge_power = self.user_manager.get_user_profile(self.user_manager.get_user_for_plant(plant_id)).get('total_bat_discharge_power', 0)
+        device_discharge_power = 5 if DeviceType.FIVETHOUSAND in device_types else 2.5
+        
+        adjustment_factor = device_discharge_power / total_discharge_power
+        
+        for action in schedule_adjusted.actions:
+            action.action *= adjustment_factor
+            action.action = round(action.action, 2)  # Round to 2 decimal places
+        
+        return schedule_adjusted
 
     async def get_prices(self, user_name) -> List[float]:
         # Elmar's API call to get prices
