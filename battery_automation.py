@@ -321,6 +321,8 @@ class BatterySchedulerManager:
         self.logger.info("Stopped.")
     
     def adjust_power_for_plant(self, schedule, sn: str):
+        if not schedule:
+            return None
         plant_id = self.user_manager.get_plant_for_device(sn)
         device_type = self.user_manager.get_device_type(sn)
         total_discharge_power = self.user_manager.get_user_profile(self.user_manager.get_user_for_plant(plant_id)).get('total_bat_discharge_power', 0)
@@ -490,15 +492,11 @@ class BatterySchedulerManager:
             capacity = self.user_manager.get_user_profile(user_name).get('capacity', 0)
             schedule = self.optimize(
                 buy_prices, sell_prices, pvs, loads, plant_charge_power, plant_discharge_power, capacity)
-            if self.should_update_schedule and self.schedule is not None and self.schedule.get(user_name) is not None:
-                self.schedule[user_name] = self.schedule[:198] + schedule[198:]
-                self.should_update_schedule = False
-            else:
-                self.schedule[user_name] = schedule
 
             plant_id = self.user_manager.get_user_profile(user_name).get('plant_id')
-            await self.push_schedule_to_AI(plant_id, self.schedule[user_name])
-            self.schedule_for_compare[user_name] = self.make_battery_schedule(self.schedule[user_name], buy_prices, sell_prices, loads, pvs)
+            await self.push_schedule_to_AI(plant_id, schedule)
+            self.schedule_for_compare[user_name] = self.make_battery_schedule(schedule, buy_prices, sell_prices, loads, pvs)
+            self.schedule[user_name] = schedule
         except Exception as e:
             error_message = f"Error preparing schedule for {user_name}: {e} \n Traceback: {traceback.format_exc()}"
             logging.error(error_message)
@@ -513,8 +511,18 @@ class BatterySchedulerManager:
                              np.arange(len(schedule_copy)), schedule_copy).tolist()
         # Round the float to 2 decimal places
         schedule_copy = [round(x, 2) for x in schedule_copy]
+
+        # Merge the schedule with the existing morning schedule at afternoon 4:30
+        if self.should_update_schedule and self.schedule is not None and self.schedule.get(user_name) is not None:
+            user_name = self.user_manager.get_user_for_plant(plant_id)
+            morning_schedule = copy.deepcopy(self.schedule[user_name])
+            morning_schedule = np.interp(np.linspace(0, len(morning_schedule), 288),
+                                np.arange(len(morning_schedule)), morning_schedule).tolist()
+            morning_schedule = [round(x, 2) for x in morning_schedule]
+            schedule_copy = morning_schedule[:198] + schedule_copy[198:]
+            self.should_update_schedule = False
+
         # Flip the schedule to match the AI server's format
-        
         schedule_copy = [-x for x in schedule_copy]
         model_data = {
             "plant_id": plant_id,
