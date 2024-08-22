@@ -465,7 +465,7 @@ class BatterySchedulerManager:
             capacity = self.user_manager.get_user_profile(user_name).get('capacity', 0)
             schedule = self.optimize(
                 buy_prices, sell_prices, pvs, loads, plant_charge_power, plant_discharge_power, capacity)
-            if self.should_update_schedule: 
+            if self.should_update_schedule and self.schedule is not None and self.schedule.get(user_name) is not None:
                 self.schedule[user_name] = self.schedule[:198] + schedule[198:]
                 self.should_update_schedule = False
             else:
