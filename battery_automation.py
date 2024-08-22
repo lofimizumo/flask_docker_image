@@ -322,10 +322,9 @@ class BatterySchedulerManager:
     def adjust_power_for_plant(self, schedule,  sn: str):
         schedule_adjusted = copy.deepcopy(schedule)
         plant_id = self.user_manager.get_plant_for_device(sn)
-        devices = self.user_manager.get_devices_for_plant(plant_id)
-        device_types = [DeviceType(self.user_manager.get_device_type(device)) for device in devices]
+        device_type = self.user_manager.get_device_type(sn)
         total_discharge_power = self.user_manager.get_user_profile(self.user_manager.get_user_for_plant(plant_id)).get('total_bat_discharge_power', 0)
-        device_discharge_power = 5 if DeviceType.FIVETHOUSAND in device_types else 2.5
+        device_discharge_power = 5 if DeviceType(device_type) == DeviceType.FIVETHOUSAND else 2.5
         
         adjustment_factor = device_discharge_power / total_discharge_power
         
