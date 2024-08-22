@@ -206,12 +206,13 @@ class BatterySchedulerManager:
             concurrent.futures.wait(self.futures)
 
     def make_battery_schedule(self, actions: List[float], buy_prices: List[float], sell_prices: List[float], loads: List[float], solar_outputs: List[float]):
+        actions_copy = copy.deepcopy(actions)
         # Create new x values for interpolation
-        x = np.arange(len(actions))
-        x_new = np.linspace(0, len(actions) - 1, 288)
+        x = np.arange(len(actions_copy))
+        x_new = np.linspace(0, len(actions_copy), 288)
 
         # Interpolate all lists to 288 points and round to 2 decimal places
-        actions_288 = np.round(np.interp(x_new, x, actions), 2)
+        actions_288 = np.round(np.interp(x_new, x, actions_copy), 2)
 
         battery_actions = [
             BatteryAction(
@@ -503,21 +504,22 @@ class BatterySchedulerManager:
             logging.error(error_message)
 
     async def push_schedule_to_AI(self, plant_id, schedule) -> List[float]:
+        schedule_copy = copy.deepcopy(schedule)
         await self.ai_client.ensure_login("ye.tao@redx.com.au", "1111")
-
         now = datetime.now(pytz.timezone('Australia/Brisbane'))
         date = now.strftime('%Y-%m-%d')
         # Upsample schedule to 288 points
-        schedule = np.interp(np.linspace(0, len(schedule), 288),
-                             np.arange(len(schedule)), schedule).tolist()
+        schedule_copy = np.interp(np.linspace(0, len(schedule_copy), 288),
+                             np.arange(len(schedule_copy)), schedule_copy).tolist()
         # Round the float to 2 decimal places
-        schedule = [round(x, 2) for x in schedule]
+        schedule_copy = [round(x, 2) for x in schedule_copy]
         # Flip the schedule to match the AI server's format
-        schedule = [-x for x in schedule]
+        
+        schedule_copy = [-x for x in schedule_copy]
         model_data = {
             "plant_id": plant_id,
             "date": date,
-            "action_power": schedule,
+            "action_power": schedule_copy,
         }
         response = await self.ai_client.data_api_request("battery_actions/set", model_data)
         if response and response.get('errorCode') == 0:
