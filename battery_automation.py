@@ -956,7 +956,7 @@ class PeakValleyScheduler():
             if is_confident:
                 # Use the pre-calculated action from the schedule
                 scheduled_action = schedule.actions[current_time_idx].action
-                scheduled_action_w = scheduled_action * 1000
+                scheduled_action = scheduled_action * 1000
                 if scheduled_action > 0:
                     command = {'command': 'Charge', 'power': abs(scheduled_action), 'grid_charge': True}
                 elif scheduled_action < 0:
