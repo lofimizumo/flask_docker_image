@@ -200,6 +200,7 @@ class BatterySchedulerManager:
             return _update_prices_per_plant_id(retailer=retailer_type, plant_id=plant_id)
 
     def _process_peak_valley_scheduler(self):
+        #TODO refactor to asyncio
         with concurrent.futures.ThreadPoolExecutor() as executor:
             self.futures = [executor.submit(self._process_send_cmd_each_sn, sn)
                             for sn in self.sn_list]
@@ -513,8 +514,8 @@ class BatterySchedulerManager:
         schedule_copy = [round(x, 2) for x in schedule_copy]
 
         # Merge the schedule with the existing morning schedule at afternoon 4:30
+        user_name = self.user_manager.get_user_for_plant(plant_id)
         if self.should_update_schedule and self.schedule is not None and self.schedule.get(user_name) is not None:
-            user_name = self.user_manager.get_user_for_plant(plant_id)
             morning_schedule = copy.deepcopy(self.schedule[user_name])
             morning_schedule = np.interp(np.linspace(0, len(morning_schedule), 288),
                                 np.arange(len(morning_schedule)), morning_schedule).tolist()
