@@ -231,7 +231,7 @@ class BatterySchedulerManager:
         
     def _process_send_cmd_each_sn(self, sn):
         try:
-            logging.info(f"Processing sn: {sn}")
+            self.logger.info(f"Processing sn: {sn}")
             plant_id = self.user_manager.get_plant_for_device(sn)
             bat_stats = self.get_current_battery_stats(sn)
             current_batP = bat_stats.get('batP', 0) if bat_stats else 0
@@ -364,7 +364,7 @@ class BatterySchedulerManager:
                 data[0].get('model_price_buy'))
             price_sell_decoded = util.decode_model_data(
                 data[0].get('model_price_sell'))
-            print(f"Price data accessed successfully for {user_name}")
+            self.logger.info(f"Price data accessed successfully for {user_name}")
             return {'buy': price_buy_decoded, 'sell': price_sell_decoded}
 
     async def get_solar(self, user_name) -> List[float]:
@@ -381,7 +381,7 @@ class BatterySchedulerManager:
         if response and response.get('errorCode') == 0:
             data = response.get('data')
             pv = util.decode_model_data(data[0].get('model_pv'))
-            print(f"PV data accessed successfully for {user_name}")
+            self.logger.info(f"PV data accessed successfully for {user_name}")
             return pv
 
     async def get_load(self, user_name) -> List[float]:
@@ -398,7 +398,7 @@ class BatterySchedulerManager:
         if response and response.get('errorCode') == 0:
             data = response.get('data')
             load = util.decode_model_data(data[0].get('model_prediction_load'))
-            print(f"Load data accessed successfully for {user_name}")
+            self.logger.info(f"Load data accessed successfully for {user_name}")
             return load
 
     def optimize(self, prices: List[float], sell_prices: List[float], solars: List[float], loads: List[float], max_charge_power: float, max_discharge_power: float, capacity: float) -> List[float]:
@@ -471,6 +471,7 @@ class BatterySchedulerManager:
                 self.prepare_battery_sched_loop.run_until_complete(
                     self.prepare_bat_sched_all_users())
                 self.last_bat_sched_time = current_time
+                self.should_update_schedule = False
             time.sleep(60)
 
     async def prepare_bat_sched_all_users(self):
@@ -521,7 +522,6 @@ class BatterySchedulerManager:
                                 np.arange(len(morning_schedule)), morning_schedule).tolist()
             morning_schedule = [round(x, 2) for x in morning_schedule]
             schedule_copy = morning_schedule[:198] + schedule_copy[198:]
-            self.should_update_schedule = False
 
         # Flip the schedule to match the AI server's format
         schedule_copy = [-x for x in schedule_copy]
@@ -532,15 +532,15 @@ class BatterySchedulerManager:
         }
         response = await self.ai_client.data_api_request("battery_actions/set", model_data)
         if response and response.get('errorCode') == 0:
-            logging.info(f"Schedule data pushed successfully for {plant_id}")
+            self.logger.info(f"Schedule data pushed successfully for {plant_id}")
         elif response and response.get('errorCode') == 4:
-            logging.info(
+            self.logger.info(
                 f"Schedule data already exists for {plant_id}. Overwritting the data..")
             response = await self.ai_client.data_api_request("battery_actions/delete", {"plant_id": plant_id, "date": date})
             if response and response.get('errorCode') == 0:
                 response = await self.ai_client.data_api_request("battery_actions/set", model_data)
                 if response and response.get('errorCode') == 0:
-                    logging.info(
+                    self.logger.info(
                         f"Schedule data overwritten successfully for {plant_id}")
                 else:
                     raise RuntimeError(f"Error overwriting schedule for {plant_id}: {response.get('infoText')}")
@@ -560,7 +560,7 @@ class BatterySchedulerManager:
         }
         response = await self.ai_client.data_api_request("battery_actions/get", model_data)
         if response and response.get('errorCode') == 0:
-            logging.info(f"Schedule data obtained successfully for {plant_id}")
+            self.logger.info(f"Schedule data obtained successfully for {plant_id}")
         else:
             raise RuntimeError(f"Error request schedule for {plant_id}: {response.get('infoText')}")
 
@@ -1297,7 +1297,7 @@ class PeakValleyScheduler():
 class AIScheduler():
 
     def __init__(self, sn_list, pv_sn, api_version='redx', phase=2, mode='normal'):
-        self.logger = logging.getLogger('logger')
+        self.logger = logging.getLogger('shawsbay_logger')
         self.battery_max_capacity_kwh = 5
         if sn_list is None:
             raise ValueError('sn_list is None')
@@ -1820,7 +1820,7 @@ class AIScheduler():
             def generate_json_commands(self):
                 for task_type, task_time, task_duration in self.tasks:
                     if not self.allocate_battery(task_time, task_type, task_duration):
-                        logging.info(
+                        self.logger.info(
                             f'task {task_time} {task_type} {task_duration} failed to allocate battery')
 
                 def unit_to_time(unit, sample_interval):
