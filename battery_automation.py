@@ -74,7 +74,6 @@ class BatterySchedulerManager:
             battery_sn]
         self.user_names = self.user_manager.get_users()
         self.last_bat_sched_time = None
-        self.last_schedule_merge_time = None
         self.schedule = {}
         self.schedule_for_compare = {}
         self.prepare_battery_sched_loop = asyncio.new_event_loop()
@@ -446,9 +445,7 @@ class BatterySchedulerManager:
         return x_vals
 
     def _is_update_schedule_time(self, current_time, update_time):
-        return (current_time >= update_time and
-                (self.last_schedule_merge_time is None or
-                 self.last_schedule_merge_time >= update_time))
+        return current_time >= update_time 
 
     def _is_update_time(self, current_time, update_time):
         return (current_time >= update_time and
@@ -467,13 +464,13 @@ class BatterySchedulerManager:
             # We will force a re-schedule update at 4:45 PM
             if self._is_update_time(current_time, afternoon_update_time) or self._is_update_time(current_time, morning_update_time):
                 # This line will turn on the flag after 4:45 PM so that the new evening schedule will leave morning schedule unchanged
+                self.should_update_schedule = False
                 if self._is_update_schedule_time(current_time, afternoon_update_time):
                     self.should_update_schedule = True
                 # Push all customers' schedule to the AI server
                 self.prepare_battery_sched_loop.run_until_complete(
                     self.prepare_bat_sched_all_users())
                 self.last_bat_sched_time = current_time
-                self.should_update_schedule = False
             time.sleep(60)
 
     async def prepare_bat_sched_all_users(self):
@@ -825,7 +822,7 @@ class BatteryAction:
     @property
     def is_anti_backflow_on(self):
         threshold = 0.5
-        return abs(self.action_plant - self.env.load) < threshold
+        return abs(-self.action_plant - self.env.load) < threshold
     
     @property
     def is_grid_charge_on(self):
