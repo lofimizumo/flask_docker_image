@@ -404,8 +404,8 @@ class BatterySchedulerManager:
     def optimize(self, prices: List[float], sell_prices: List[float], solars: List[float], loads: List[float], max_charge_power: float, max_discharge_power: float, capacity: float) -> List[float]:
         # Charge_mast is a list of 0s and 1s, 1 means the battery can be charged at that time
         # This is essential for a non-linear optimization problem, otherwise, the optimizer will not be able to solve the problem
-        charge_mask = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1,
-                       1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        charge_mask = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1,
+                       1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
 
         def resample_data(data, target_length=48):
             data = [float(x) for x in data]
@@ -818,6 +818,18 @@ class ActionEnvObservation:
 class BatteryAction:
     action: float
     env: ActionEnvObservation
+
+    @property
+    def is_anti_backflow_on(self):
+        threshold = 0.5
+        return abs(self.action - self.env.load) < threshold
+    
+    @property
+    def is_grid_charge_on(self):
+        threshold = 0.5
+        return abs(self.action - self.env.solar) < threshold
+
+
     def is_confident(self, real_env: ActionEnvObservation):
         buy_price_diff = abs(self.env.buy_price- real_env.buy_price)
         sell_price_diff = abs(self.env.sell_price- real_env.sell_price)
@@ -969,16 +981,19 @@ class PeakValleyScheduler():
                 buy_price=current_buy_price, sell_price=current_feedin_price, load=current_usage, solar=current_pvkW)
             current_total_min = current_time.hour * 60 + current_time.minute
             current_time_idx = current_total_min // 5 # 5 minutes interval, 288 points in total
-            is_confident = schedule.actions[current_time_idx].is_confident(actual_env)
+            battery_action = schedule.actions[current_time_idx]
+            is_confident = battery_action.is_confident(actual_env)
         
             if is_confident:
                 # Use the pre-calculated action from the schedule
-                scheduled_action = schedule.actions[current_time_idx].action
+                scheduled_action = battery_action.action
                 scheduled_action = scheduled_action * 1000
                 if scheduled_action > 0:
-                    command = {'command': 'Charge', 'power': abs(scheduled_action), 'grid_charge': True}
+                    is_grid_charge_on = battery_action.is_grid_charge_on
+                    command = {'command': 'Charge', 'power': abs(scheduled_action), 'grid_charge': is_grid_charge_on}
                 elif scheduled_action < 0:
-                    command = {'command': 'Discharge', 'power': abs(scheduled_action), 'anti_backflow': False}
+                    is_anti_backflow_on = battery_action.is_anti_backflow_on
+                    command = {'command': 'Discharge', 'power': abs(scheduled_action), 'anti_backflow': is_anti_backflow_on}
                 else:
                     command = {"command": "Idle"}
                 
