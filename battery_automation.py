@@ -217,7 +217,8 @@ class BatterySchedulerManager:
 
         battery_actions = [
             BatteryAction(
-                action=actions_288[i],
+                action_plant=actions_288[i],
+                action_device=None,
                 env=ActionEnvObservation(
                     buy_price=buy_prices[i],
                     sell_price=sell_prices[i],
@@ -333,7 +334,8 @@ class BatterySchedulerManager:
         
         adjusted_actions = [
             BatteryAction(
-                action=round(action.action * adjustment_factor, 2),
+                action_plant=action.action_plant,
+                action_device=round(action.action_plant * adjustment_factor, 2),
                 env=ActionEnvObservation(
                     buy_price=action.env.buy_price,
                     sell_price=action.env.sell_price,
@@ -816,18 +818,19 @@ class ActionEnvObservation:
 
 @dataclass
 class BatteryAction:
-    action: float
+    action_plant: float
+    action_device: float
     env: ActionEnvObservation
 
     @property
     def is_anti_backflow_on(self):
         threshold = 0.5
-        return abs(self.action - self.env.load) < threshold
+        return abs(self.action_plant - self.env.load) < threshold
     
     @property
     def is_grid_charge_on(self):
         threshold = 0.5
-        return abs(self.action - self.env.solar) < threshold
+        return abs(self.action_plant - (self.env.solar - self.env.load)) > threshold
 
 
     def is_confident(self, real_env: ActionEnvObservation):
@@ -986,7 +989,7 @@ class PeakValleyScheduler():
         
             if is_confident:
                 # Use the pre-calculated action from the schedule
-                scheduled_action = battery_action.action
+                scheduled_action = battery_action.action_device
                 scheduled_action = scheduled_action * 1000
                 if scheduled_action > 0:
                     is_grid_charge_on = battery_action.is_grid_charge_on
