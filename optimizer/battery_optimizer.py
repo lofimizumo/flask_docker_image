@@ -7,6 +7,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pickle
+import numpy as np
 
 
 @dataclass
@@ -24,6 +25,7 @@ class BatterySchedulerConfig():
 class BatteryScheduler:
     def __init__(self, config):
         self.config = BatterySchedulerConfig(**config)
+        self.interval_coef = 60 / (1440 / len(self.config.b))
 
     def create_model(self):
         model = ConcreteModel()
@@ -48,7 +50,7 @@ class BatteryScheduler:
                 # Initialize SOC to full
                 return model.state_of_charge[t] <= 0.01
             else:
-                return model.state_of_charge[t] == model.state_of_charge[t-1] + (model.x[t-1])/2
+                return model.state_of_charge[t] == model.state_of_charge[t-1] + (model.x[t-1])/self.interval_coef
         model.soc_constraint = Constraint(model.T, rule=soc_constraint_rule)
 
         def soc_bounds_rule(model, t):
@@ -108,7 +110,7 @@ class BatteryScheduler:
         self.define_objective(model)
         self.define_constraints(model)
         solver = SolverFactory('mindtpy')
-        _ = solver.solve(model)
+        _ = solver.solve(model, strategy = 'OA', mip_solver='glpk', nlp_solver='ipopt')
         __ = [model.state_of_charge[t]() for t in model.T]
         x_vals = [model.x[t]() for t in model.T]
         return x_vals, __
@@ -196,9 +198,30 @@ class BatteryScheduler:
         x_vals = [model.x[t]() for t in model.T]
         return x_vals, socs
 
+def resample_data(data, target_length=48):
+    data = [float(x) for x in data]
+    current_length = len(data)
+    if current_length == target_length:
+        return data
+    elif current_length > target_length:
+        # Downsample to target_length
+        indices = np.linspace(
+            0, current_length - 1, target_length, dtype=int)
+        return [data[i] for i in indices]
+    else:
+        # Upsample to target_length
+        return np.interp(np.linspace(0, current_length - 1, target_length),
+                            np.arange(current_length), data).tolist()
+
 
 if __name__ == '__main__':
     config, x_vals, socs, charge_mask = pickle.load(open('battery_sched.pkl', 'rb'))
+    config['b'] = resample_data(config['b'], 48)
+    config['s'] = resample_data(config['s'], 48)
+    config['l'] = resample_data(config['l'], 48)
+    config['p'] = resample_data(config['p'], 48)
+    config['charge_mask'] = resample_data(config['charge_mask'], 48)
     scheduler = BatteryScheduler(config)
-    scheduler.plot(charge_mask, socs, x_vals)
+    x_vals, socs = scheduler.solve()
+    scheduler.plot(config['charge_mask'], socs, x_vals)
 

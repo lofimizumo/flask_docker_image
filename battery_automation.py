@@ -827,7 +827,7 @@ class BatteryAction:
     @property
     def is_grid_charge_on(self):
         threshold = 0.5
-        return abs(self.action_plant - (self.env.solar - self.env.load)) > threshold
+        return abs(self.action_plant > (self.env.solar - self.env.load)) 
 
 
     def is_confident(self, real_env: ActionEnvObservation):
@@ -990,7 +990,13 @@ class PeakValleyScheduler():
                 scheduled_action = scheduled_action * 1000
                 if scheduled_action > 0:
                     is_grid_charge_on = battery_action.is_grid_charge_on
-                    command = {'command': 'Charge', 'power': abs(scheduled_action), 'grid_charge': is_grid_charge_on}
+                    # if the scheduled action is grid charge, use the scheduled action
+                    # otherwise, use the max power with battery grid charge off to absorb the solar
+                    if is_grid_charge_on:
+                        command = {'command': 'Charge', 'power': abs(scheduled_action), 'grid_charge': is_grid_charge_on}
+                    else:
+                        maxpower, _ = self._get_charge_limit(device_type)
+                        command = {'command': 'Charge', 'power': maxpower, 'grid_charge': is_grid_charge_on}
                 elif scheduled_action < 0:
                     is_anti_backflow_on = battery_action.is_anti_backflow_on
                     command = {'command': 'Discharge', 'power': abs(scheduled_action), 'anti_backflow': is_anti_backflow_on}
