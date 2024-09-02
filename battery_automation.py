@@ -535,16 +535,12 @@ class BatterySchedulerManager:
         elif response and response.get('errorCode') == 4:
             self.logger.info(
                 f"Schedule data already exists for {plant_id}. Overwritting the data..")
-            response = await self.ai_client.data_api_request("battery_actions/delete", {"plant_id": plant_id, "date": date})
+            response = await self.ai_client.data_api_request("battery_actions/update", model_data)
             if response and response.get('errorCode') == 0:
-                response = await self.ai_client.data_api_request("battery_actions/set", model_data)
-                if response and response.get('errorCode') == 0:
-                    self.logger.info(
-                        f"Schedule data overwritten successfully for {plant_id}")
-                else:
-                    raise RuntimeError(f"Error overwriting schedule for {plant_id}: {response.get('infoText')}")
+                self.logger.info(
+                    f"Schedule data overwritten successfully for {plant_id}")
             else:
-                raise RuntimeError(f"Error deleting schedule for {plant_id}: {response.get('infoText')}")
+                raise RuntimeError(f"Error overwriting schedule for {plant_id}: {response.get('infoText')}")
         else:
             raise RuntimeError(f"Error pushing schedule for {plant_id}: {response.get('infoText')}")
 

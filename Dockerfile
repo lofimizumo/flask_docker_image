@@ -53,6 +53,6 @@ RUN echo "Checking IPOPT installation:" && \
     echo "Checking Pyomo solvers:" && \
     python -c "from pyomo.environ import *; print('IPOPT available:', SolverFactory('ipopt').available()); print('GLPK available:', SolverFactory('glpk').available())"
 
-EXPOSE 5133
+EXPOSE 5000
 
 ENTRYPOINT ["python", "-u", "app.py"]
