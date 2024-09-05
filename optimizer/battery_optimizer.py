@@ -34,13 +34,14 @@ class BatteryScheduler:
         model.state_of_charge = Var(
             range(len(self.config.b)), bounds=(0, self.config.capacity))
         model.q = Var(model.T, within=NonNegativeIntegers)
+        model.p = Var(model.T, within=NonNegativeIntegers)
         return model
 
     def define_objective(self, model):
         def obj_rule(model):
-            return sum((self.config.l[t] - self.config.p[t] + model.x[t]) *
-                       (self.config.b[t] * (1 - model.q[t]) +
-                        self.config.s[t] * model.q[t])
+            return sum((1-model.p[t])*(model.q[t]*((self.config.l[t] - self.config.p[t] + model.x[t]) * self.config.s[t] - self.config.l[t]*self.config.b[t]) +
+                       (1-model.q[t])*model.x[t] * self.config.b[t])
+                       + model.p[t] * (self.config.l[t] - self.config.p[t] + model.x[t]) * self.config.b[t]
                        for t in model.T)
         model.obj = Objective(rule=obj_rule, sense=minimize)
 
@@ -72,6 +73,14 @@ class BatteryScheduler:
         def q_constraint_rule2(model, t):
             return self.config.l[t] - self.config.p[t] + model.x[t] >= -10000000 * model.q[t]
         model.q_constraint2 = Constraint(model.T, rule=q_constraint_rule2)
+
+        def p_constraint_rule(model, t):
+            return model.x[t] <= 1000000000 * model.p[t]
+        model.p_constraint = Constraint(model.T, rule=p_constraint_rule)
+
+        def p_constraint_rule2(model, t):
+            return model.x[t] >= -1000000000 * (1 - model.p[t])
+        model.p_constraint2 = Constraint(model.T, rule=p_constraint_rule2)
 
         def final_soc_constraint_rule(model):
             return model.state_of_charge[len(self.config.b)-1] <= 0.01
@@ -110,7 +119,8 @@ class BatteryScheduler:
         self.define_objective(model)
         self.define_constraints(model)
         solver = SolverFactory('mindtpy')
-        _ = solver.solve(model, strategy = 'OA', mip_solver='glpk', nlp_solver='ipopt')
+        # _ = solver.solve(model, strategy = 'OA', mip_solver='glpk', nlp_solver='ipopt')
+        _ = solver.solve(model)
         __ = [model.state_of_charge[t]() for t in model.T]
         x_vals = [model.x[t]() for t in model.T]
         return x_vals, __
@@ -213,6 +223,22 @@ def resample_data(data, target_length=48):
         return np.interp(np.linspace(0, current_length - 1, target_length),
                             np.arange(current_length), data).tolist()
 
+def adjust_middle_value(arr, window_size=3, threshold=0.5):
+    if len(arr) < window_size:
+        return arr
+
+    result = arr.copy()
+
+    for i in range(1, len(arr) - 1):
+        left = arr[i - 1]
+        middle = arr[i]
+        right = arr[i + 1]
+
+        if middle > left * (1 - threshold) and middle > right * (1 - threshold):
+            new_value = 0.80 * ((left + right) / 2)
+            result[i] = new_value
+
+    return result
 
 if __name__ == '__main__':
     config, x_vals, socs, charge_mask = pickle.load(open('battery_sched.pkl', 'rb'))
@@ -223,5 +249,6 @@ if __name__ == '__main__':
     config['charge_mask'] = resample_data(config['charge_mask'], 48)
     scheduler = BatteryScheduler(config)
     x_vals, socs = scheduler.solve()
+    x_vals = adjust_middle_value(x_vals)
     scheduler.plot(config['charge_mask'], socs, x_vals)
 

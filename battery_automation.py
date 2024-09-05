@@ -405,8 +405,29 @@ class BatterySchedulerManager:
     def optimize(self, prices: List[float], sell_prices: List[float], solars: List[float], loads: List[float], max_charge_power: float, max_discharge_power: float, capacity: float) -> List[float]:
         # Charge_mast is a list of 0s and 1s, 1 means the battery can be charged at that time
         # This is essential for a non-linear optimization problem, otherwise, the optimizer will not be able to solve the problem
-        charge_mask = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1,
+        charge_mask = [0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1,
                        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+        
+        def adjust_middle_value(arr, window_size=3, threshold=0.5):
+            if len(arr) < window_size:
+                return arr
+
+            result = arr.copy()
+
+            for i in range(1, len(arr) - 1):
+                left = arr[i - 1]
+                middle = arr[i]
+                right = arr[i + 1]
+
+                # only adjust discharging time schedules.
+                if left == 0 or right == 0 or any(x > 0 for x in [left, middle, right]):
+                    continue
+
+                if middle > left * (1 - threshold) and middle > right * (1 - threshold):
+                    new_value = 0.80 * ((left + right) / 2)
+                    result[i] = new_value
+
+            return result
 
         def resample_data(data, target_length=48):
             data = [float(x) for x in data]
@@ -441,7 +462,8 @@ class BatterySchedulerManager:
         }
         scheduler = BatteryScheduler(config)
         x_vals, _ = scheduler.solve()
-        # pickle.dump((config, x_vals, socs, charge_mask), open('battery_sched.pkl', 'wb'))
+        x_vals = adjust_middle_value(x_vals)
+        # pickle.dump((config, x_vals, _, charge_mask), open('battery_sched.pkl', 'wb'))
         return x_vals
 
     def _is_update_schedule_time(self, current_time, update_time):

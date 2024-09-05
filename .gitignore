@@ -14,3 +14,4 @@ timesetting.txt
 __pycache__/util.cpython-310.pyc
 sb_logs.txt
 logs.txt
+zero2prod.session.sql
