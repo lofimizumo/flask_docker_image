@@ -844,8 +844,8 @@ class BatteryAction:
     
     @property
     def is_grid_charge_on(self):
-        threshold = 0.5
-        return abs(self.action_plant > (self.env.solar - self.env.load)) 
+        threshold = 1.0
+        return self.action_plant - (self.env.solar - self.env.load) > threshold
 
 
     def is_confident(self, real_env: ActionEnvObservation):
