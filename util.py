@@ -630,6 +630,9 @@ class PriceAndLoadMonitor:
                 time_zone='Australia/Brisbane')
             current_time = datetime.strptime(current_time_str, '%H:%M')
             empty_time = '00:00'
+            default_charge2_start_time = '08:00'
+            default_charge2_end_time = '16:20'
+            default_charge2_power = 3000
 
             # Prepare the data for the command to be sent
             if command == 'Charge':
@@ -677,6 +680,10 @@ class PriceAndLoadMonitor:
                     'dischargeEnd1': empty_time,
                     'chargeStart1': empty_time,
                     'chargeEnd1': empty_time,
+                    'chargeStart2': default_charge2_start_time,
+                    'chargeEnd2': default_charge2_end_time,
+                    'chargePower2': default_charge2_power,
+                    'enableGridCharge2': 0,
                 }
 
             # Sometimes the device will lose all the settings, so we need to set the settings every 30 minutes in case of the settings lost
