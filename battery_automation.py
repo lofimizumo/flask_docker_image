@@ -851,8 +851,8 @@ class BatteryAction:
     def is_confident(self, real_env: ActionEnvObservation):
         buy_price_diff = abs(self.env.buy_price- real_env.buy_price)
         sell_price_diff = abs(self.env.sell_price- real_env.sell_price)
-        threshold_cent = 100
-        return ((buy_price_diff + sell_price_diff) / 2) < threshold_cent
+        threshold_dollar = 1.0
+        return ((buy_price_diff + sell_price_diff) / 2) < threshold_dollar
 @dataclass
 class BatterySchedule:
     actions: list[BatteryAction]
