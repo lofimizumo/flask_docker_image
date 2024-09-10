@@ -1,5 +1,4 @@
 # battery_scheduler/scheduler.py
-
 from pyomo.environ import *
 from typing import List
 from dataclasses import dataclass
@@ -8,6 +7,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import pickle
 import numpy as np
+import gurobipy as gp
+from gurobipy import GRB
 
 
 @dataclass
@@ -28,102 +29,70 @@ class BatteryScheduler:
         self.interval_coef = 60 / (1440 / len(self.config.b))
 
     def create_model(self):
-        model = ConcreteModel()
-        model.T = Set(initialize=range(len(self.config.b)))
-        model.x = Var(model.T, bounds=(-self.config.R_d, self.config.R_c))
-        model.state_of_charge = Var(
-            range(len(self.config.b)), bounds=(0, self.config.capacity))
-        model.q = Var(model.T, within=NonNegativeIntegers)
-        model.p = Var(model.T, within=NonNegativeIntegers)
-        return model
+        model = gp.Model("BatteryScheduler")
 
-    def define_objective(self, model):
-        def obj_rule(model):
-            return sum((1-model.p[t])*(model.q[t]*((self.config.l[t] - self.config.p[t] + model.x[t]) * self.config.s[t] - self.config.l[t]*self.config.b[t]) +
-                       (1-model.q[t])*model.x[t] * self.config.b[t])
-                       + model.p[t] * (self.config.l[t] - self.config.p[t] + model.x[t]) * self.config.b[t]
-                       for t in model.T)
-        model.obj = Objective(rule=obj_rule, sense=minimize)
+        T = range(len(self.config.b))
 
-    def define_constraints(self, model):
-        def soc_constraint_rule(model, t):
-            if t == 0:
-                # Initialize SOC to full
-                return model.state_of_charge[t] <= 0.01
-            else:
-                return model.state_of_charge[t] == model.state_of_charge[t-1] + (model.x[t-1])/self.interval_coef
-        model.soc_constraint = Constraint(model.T, rule=soc_constraint_rule)
+        # Variables
+        x = model.addVars(T, lb=-self.config.R_d, ub=self.config.R_c, name="x")
+        state_of_charge = model.addVars(T, lb=0, ub=self.config.capacity, name="state_of_charge")
+        g_c = model.addVars(T, lb=-1e6, ub=1e6, name="g_c")  # Use large but finite bounds
+        z = model.addVars(T, lb=-1e6, ub=1e6, name="z")  # Use large but finite bounds
 
-        def soc_bounds_rule(model, t):
-            return (0, model.state_of_charge[t], self.config.capacity)
-        model.soc_bounds = Constraint(model.T, rule=soc_bounds_rule)
+        # Constraints
+        model.addConstrs((g_c[t] == self.config.l[t] - self.config.p[t] + x[t] for t in T), "grid_consumption")
+        
+        model.addConstr(state_of_charge[0] <= 0.01, "initial_soc")
+        model.addConstrs((state_of_charge[t] == state_of_charge[t-1] + x[t-1]/self.interval_coef for t in range(1, len(T))), "soc_evolution")
+        model.addConstrs((x[t] >= -state_of_charge[t-1]*self.interval_coef for t in range(1, len(T))), "discharge_limit")
+        model.addConstr(x[0] >= -self.config.capacity, "initial_discharge_limit")
+        model.addConstr(state_of_charge[len(T)-1] <= self.config.capacity*0.5, "final_soc")
+        
+        model.addConstrs((x[t] <= 0 for t in T if self.config.charge_mask[t] == 0), "charge_mask_discharge")
+        model.addConstrs((x[t] >= 0 for t in T if self.config.charge_mask[t] == 1), "charge_mask_charge")
 
-        def discharge_constraint_rule(model, t):
-            if t == 0:
-                return model.x[t] >= -self.config.capacity
-            else:
-                return model.x[t] >= -model.state_of_charge[t-1]
-        model.discharge_constraint = Constraint(
-            model.T, rule=discharge_constraint_rule)
+        # Piecewise linear constraint for z
+        max_g_c = max(max(self.config.l), max(self.config.p)) + max(self.config.R_c, self.config.R_d)
+        for t in T:
+            model.addGenConstrPWL(g_c[t], z[t], 
+                                  [-max_g_c, 0, max_g_c], 
+                                  [-max_g_c * self.config.s[t], 0, max_g_c * self.config.b[t]])
 
-        def q_constraint_rule1(model, t):
-            return self.config.l[t] - self.config.p[t] + model.x[t] <= 10000000 * (1 - model.q[t])
-        model.q_constraint1 = Constraint(model.T, rule=q_constraint_rule1)
+        # Objective
+        model.setObjective(gp.quicksum(z[t] for t in T), GRB.MINIMIZE)
 
-        def q_constraint_rule2(model, t):
-            return self.config.l[t] - self.config.p[t] + model.x[t] >= -10000000 * model.q[t]
-        model.q_constraint2 = Constraint(model.T, rule=q_constraint_rule2)
-
-        def p_constraint_rule(model, t):
-            return model.x[t] <= 1000000000 * model.p[t]
-        model.p_constraint = Constraint(model.T, rule=p_constraint_rule)
-
-        def p_constraint_rule2(model, t):
-            return model.x[t] >= -1000000000 * (1 - model.p[t])
-        model.p_constraint2 = Constraint(model.T, rule=p_constraint_rule2)
-
-        def final_soc_constraint_rule(model):
-            return model.state_of_charge[len(self.config.b)-1] <= 0.01
-        model.final_soc_constraint = Constraint(rule=final_soc_constraint_rule)
-
-        # Cycle Count Constraint
-        # def cycle_indicator_rule(model, t):
-        #     if t > 0:
-        #         return model.x[t] * model.x[t-1] >= -model.M * model.cycle_indicator[t]
-        #     else:
-        #         return Constraint.Skip
-        # model.cycle_indicator_constraint = Constraint(model.T, rule=cycle_indicator_rule)
-
-        # def cycle_count_rule(model):
-        #     return model.cycle_count == sum(model.cycle_indicator[t] for t in model.T)
-        # model.cycle_count_constraint = Constraint(rule=cycle_count_rule)
-
-        # def total_cycle_constraint_rule(model):
-        #     return model.cycle_count <= 2
-        # model.total_cycle_constraint = Constraint(rule=total_cycle_constraint_rule)
-
-        # Define the charge constraint based on the mask
-        def charge_constraint_rule(model, t):
-            # If charge mask is 0, then the battery should not charge
-            if self.config.charge_mask[t] == 0:
-                return model.x[t] <= 0
-            elif self.config.charge_mask[t] == 1:
-                return model.x[t] >= 0
-            else:
-                return Constraint.Skip
-        model.charge_constraint = Constraint(
-            model.T, rule=charge_constraint_rule)
+        return model, x, state_of_charge, g_c, z
 
     def solve(self):
-        model = self.create_model()
-        self.define_objective(model)
-        self.define_constraints(model)
-        solver = SolverFactory('mindtpy')
-        # _ = solver.solve(model, strategy = 'OA', mip_solver='glpk', nlp_solver='ipopt')
-        _ = solver.solve(model)
-        __ = [model.state_of_charge[t]() for t in model.T]
-        x_vals = [model.x[t]() for t in model.T]
-        return x_vals, __
+        model, x, state_of_charge, g_c, z = self.create_model()
+        
+        # Set solver parameters
+        model.Params.TimeLimit = 30
+        model.Params.MIPFocus = 3
+        model.Params.MIPGap = 0.001
+        model.Params.Cuts = 2
+        model.Params.Presolve = 2
+        model.Params.Heuristics = 0.05
+        model.Params.ImproveStartTime = 300
+        model.Params.ImproveStartGap = 0.02
+        model.Params.NodefileStart = 0.5
+        model.Params.NodefileDir = "."
+        model.Params.Threads = 0
+
+        model.optimize()
+
+        if model.status == GRB.OPTIMAL:
+            x_vals = [x[t].X for t in range(len(self.config.b))]
+            soc_vals = [state_of_charge[t].X for t in range(len(self.config.b))]
+            g_c_vals = [g_c[t].X for t in range(len(self.config.b))]
+            
+            print(f"Optimization finished successfully")
+            print(f"Best objective value: {model.ObjVal}")
+            
+            return x_vals, soc_vals
+        else:
+            print(f"Optimization failed with status {model.status}")
+            return None, None
 
     def plot(self, charge_mask, socs, x_vals):
         config = self.config
