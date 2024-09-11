@@ -1,4 +1,5 @@
 # battery_scheduler/scheduler.py
+import os
 from pyomo.environ import *
 from typing import List
 from dataclasses import dataclass
@@ -29,7 +30,17 @@ class BatteryScheduler:
         self.interval_coef = 60 / (1440 / len(self.config.b))
 
     def create_model(self):
-        model = gp.Model("BatteryScheduler")
+        WLSACCESSID = os.environ.get('WLSACCESSID')
+        WLSSECRET = os.environ.get('WLSSECRET')
+        LICENSEID = int(os.environ.get('LICENSEID'))
+
+        options = {
+            "WLSACCESSID": WLSACCESSID,
+            "WLSSECRET": WLSSECRET,
+            "LICENSEID": LICENSEID,
+        }
+        env = gp.Env(params=options)
+        model = gp.Model("BatteryScheduler", env=env)
 
         T = range(len(self.config.b))
 
