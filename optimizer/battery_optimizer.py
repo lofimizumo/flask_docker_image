@@ -18,9 +18,9 @@ class BatterySchedulerConfig():
     s: List[float]
     l: List[float]
     p: List[float]
-    R_c: int
-    R_d: int
-    capacity: int
+    R_c: float
+    R_d: float
+    capacity: float
     charge_mask: List[int]
 
 
@@ -234,6 +234,6 @@ if __name__ == '__main__':
     scheduler = BatteryScheduler(config)
     # scheduler.plot(config['charge_mask'], socs, x_vals)
     x_vals, socs = scheduler.solve()
-    x_vals = adjust_middle_value(x_vals)
+    # x_vals = adjust_middle_value(x_vals)
     scheduler.plot(config['charge_mask'], socs, x_vals)
 

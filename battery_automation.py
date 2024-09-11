@@ -157,6 +157,7 @@ class BatterySchedulerManager:
         return self.scheduler.step(**kwargs)
 
     async def _make_battery_decision(self):
+        await asyncio.sleep(5)
         while self.is_running:
             try:
                 await self._process_peak_valley_scheduler()
@@ -1107,9 +1108,9 @@ class HybridAlgo():
                         command = {'command': 'Charge', 'power': abs(
                             scheduled_action), 'grid_charge': is_grid_charge_on}
                     else:
-                        maxpower, _ = self._get_charge_limit(device_type)
-                        command = {'command': 'Charge', 'power': maxpower,
-                                   'grid_charge': is_grid_charge_on}
+                        # TODO: calculate the power based on the plant level solar and load
+                        command = {'command': 'Charge', 'power': abs(
+                            scheduled_action), 'grid_charge': is_grid_charge_on}
                 elif scheduled_action < 0:
                     is_anti_backflow_on = battery_action.is_anti_backflow_on
                     command = {'command': 'Discharge', 'power': abs(
