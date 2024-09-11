@@ -477,10 +477,6 @@ class BatterySchedulerManager:
                 middle = arr[i]
                 right = arr[i + 1]
 
-                # only adjust discharging time schedules.
-                if left == 0 or right == 0 or any(x > 0 for x in [left, middle, right]):
-                    continue
-
                 if middle > left * (1 - threshold) and middle > right * (1 - threshold):
                     new_value = 0.80 * ((left + right) / 2)
                     result[i] = new_value
@@ -521,7 +517,9 @@ class BatterySchedulerManager:
         scheduler = BatteryScheduler(config)
         x_vals, _ = scheduler.solve()
         x_vals = adjust_middle_value(x_vals)
-        # pickle.dump((config, x_vals, _, charge_mask), open('battery_sched.pkl', 'wb'))
+        # import random 
+        # rand_file_names = ['battery_sched.pkl', 'battery_sched_2.pkl', 'battery_sched_3.pkl', 'battery_sched_4.pkl', 'battery_sched_5.pkl']
+        # pickle.dump((config, x_vals, _, charge_mask), open(random.choice(rand_file_names), 'wb'))
         return x_vals
 
     def _is_update_schedule_time(self, current_time, update_time):
