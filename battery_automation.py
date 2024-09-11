@@ -320,7 +320,7 @@ class BatterySchedulerManager:
 
             if command != last_command or minute_passed >= 5:
                 if not self.test_mode:
-                    self.send_battery_command(command=command, sn=sn)
+                    await self.send_battery_command(command=command, sn=sn)
                 self.last_command_time[sn] = c_datetime
                 self.last_schedule_peakvalley[sn] = command
                 self.logger.info(
