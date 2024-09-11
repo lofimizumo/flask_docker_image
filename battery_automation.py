@@ -562,6 +562,7 @@ class BatterySchedulerManager:
 
     async def prep_bat_sched_each_user(self, user_name):
         try:
+            self.logger.info(f"Preparing schedule for {user_name}")
             user_full_name = self.user_manager.get_user_profile(
                 user_name).get('id')
             prices = await self.get_prices(user_full_name)

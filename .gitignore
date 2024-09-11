@@ -15,3 +15,5 @@ __pycache__/util.cpython-310.pyc
 sb_logs.txt
 logs.txt
 zero2prod.session.sql
+.vscode
+.vscode/launch.json

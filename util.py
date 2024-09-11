@@ -512,11 +512,11 @@ class PriceAndLoadMonitor:
             logger.error(f"Connection error occurred: {e}")
             return None
 
-    def set_antibackflow_register(self, data):
+    async def set_antibackflow_register(self, data):
         try:
             headers = {'token': self.get_token()}
             sn = data.get('deviceSn', None)
-            response = self.api.send_request(
+            response = await self.api.send_request_async(
                 "device/set_register", method='POST', json={
                     "deviceSn": sn,
                     "addr": 58,
@@ -723,7 +723,7 @@ class PriceAndLoadMonitor:
 
         try:
             headers = {'token': self.get_token()}
-            self.set_antibackflow_register(data)
+            await self.set_antibackflow_register(data)
             response = await self.api.send_request_async(
                 "device/set_params", method='POST', json=data, headers=headers)
         except Exception as e:
@@ -869,23 +869,20 @@ class AIServerClient:
             })
 
         try:
-            async with self.session.post(full_url, headers=headers, json=body_data, timeout=10) as response:
+            async with self.session.post(full_url, headers=headers, json=body_data) as response:
                 if response.status == 200:
                     response_data = await response.json()
-                    if response_data.get('errorCode') == 0:
-                        pass
-                    else:
-                        print(
-                            f"Error: Response status code: {response.status}, response error code: {response_data.get('errorCode')}, response info text: {response_data.get('infoText')}.")
                     return response_data
                 else:
-                    print(f"Error: Response status code: {response.status}, whole response text: {await response.text()}")
+                    logger.error(f"Error: Response status code: {response.status}")
+                    raise ValueError(f"HTTP error: {response.status}")
         except asyncio.TimeoutError:
-            print("Request timed out")
+            logger.error("Request timed out")
+            raise
         except aiohttp.ClientError as e:
-            print(f"Request failed: {e}")
+            logger.error(f"Request failed: {e}")
+            raise
 
-        return None
 
     async def data_api_request(self, url_slug: str, body_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return await self._request(url_slug, body_data, is_data_api=True)

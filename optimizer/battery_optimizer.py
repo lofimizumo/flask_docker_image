@@ -32,13 +32,17 @@ class BatteryScheduler:
     def create_model(self):
         WLSACCESSID = os.environ.get('WLSACCESSID')
         WLSSECRET = os.environ.get('WLSSECRET')
-        LICENSEID = int(os.environ.get('LICENSEID'))
+        LICENSEID = os.environ.get('LICENSEID')
 
-        options = {
-            "WLSACCESSID": WLSACCESSID,
-            "WLSSECRET": WLSSECRET,
-            "LICENSEID": LICENSEID,
-        }
+        if WLSACCESSID and WLSSECRET and LICENSEID:
+            options = {
+                "WLSACCESSID": WLSACCESSID,
+                "WLSSECRET": WLSSECRET,
+                "LICENSEID": int(LICENSEID),
+            }
+        else:
+            options = {}
+
         env = gp.Env(params=options)
         model = gp.Model("BatteryScheduler", env=env)
 
