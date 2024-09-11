@@ -189,21 +189,21 @@ class UserManager:
 
     def get_plant_for_device(self, device_id: str) -> int:
         return self.device_to_plant.get(device_id)
-    
+
     def get_user_for_plant(self, plant_id: int) -> str:
         return self.plant_to_user.get(plant_id, None)
 
     def get_plants(self) -> List[int]:
         return list(self.plant_to_devices.keys())
-    
+
     def get_users(self) -> List[str]:
         users = self.toml.get('users', {})
         return list(users.keys())
-    
+
     def get_algo_type(self, plant_id: int) -> str:
         user = self.get_user_for_plant(plant_id)
         return self.get_user_profile(user).get('algo_type', 'sell_to_grid')
-    
+
     def get_device_type(self, sn: str) -> str:
         return self.device_to_type.get(sn, 2505)
 
@@ -230,9 +230,9 @@ class UserManager:
         user_profiles = self.toml.get('users', {})
         if username not in user_profiles:
             user_profiles[username] = {}
-        
+
         user_profiles[username].update(profile_data)
-        
+
         plant_id = profile_data.get('plant_id')
         if plant_id is not None:
             self.add_plant(plant_id)
@@ -244,18 +244,19 @@ class UserManager:
     def get_api_url(self, plant_id: str) -> str:
         user = self.get_user_for_plant(plant_id)
         return self.get_user_profile(user).get('api_url', None)
-    
+
     def get_api_key(self, plant_id: str) -> str:
         user = self.get_user_for_plant(plant_id)
         return self.get_user_profile(user).get('api_key', None)
-    
+
     def get_retailer_type(self, plant_id: str) -> str:
         user = self.get_user_for_plant(plant_id)
         return self.get_user_profile(user).get('retailer', 'amber')
-    
+
     def get_partner_id(self, plant_id: str) -> str:
         user = self.get_user_for_plant(plant_id)
         return self.get_user_profile(user).get('partner_id', None)
+
 
 class PriceAndLoadMonitor:
     def __init__(self,  test_mode=False, api_version='dev3'):
@@ -293,7 +294,7 @@ class PriceAndLoadMonitor:
         # TODO: replace the API key with the device's API key and partner ID
         url = self.user_manager.get_api_url(plant_id)
         api_key = f'apikey {self.user_manager.get_api_key(plant_id)}'
-        partner_id = self.user_manager.get_partner_id(plant_id) 
+        partner_id = self.user_manager.get_partner_id(plant_id)
         header = {
             'Authorization': api_key, 'partner': partner_id}
         try:
@@ -322,12 +323,14 @@ class PriceAndLoadMonitor:
 
     def _init_default_prices(self, retailer):
         # LocalVolts doesn't have historical price data, so we only need to get the historical price data from Amber instead
-        default_amber_plant_id = 317 # Plant ID of Dion's Amber account, We use this account to request the initial price data
+        # Plant ID of Dion's Amber account, We use this account to request the initial price data
+        default_amber_plant_id = 317
         if retailer == 'amber' or retailer == 'lv':
             try:
                 api_key = self.user_manager.get_api_key(default_amber_plant_id)
             except Exception as e:
-                raise ValueError(f"Failed to get API key at _init_default_prices: {e}")
+                raise ValueError(
+                    f"Failed to get API key at _init_default_prices: {e}")
             fetcher = AmberFetcher(api_key)
             yesterday_date = (datetime.now(tz=pytz.timezone(
                 'Australia/Sydney')) - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -351,7 +354,8 @@ class PriceAndLoadMonitor:
         ret = None
         if retailer == 'amber':
             if self.default_prices.get('amber', None) is None:
-                self.default_prices['amber'] = self._init_default_prices(retailer)
+                self.default_prices['amber'] = self._init_default_prices(
+                    retailer)
             ret = self.default_prices.get('amber')
         elif retailer == 'lv':
             if self.default_prices.get('lv', None) is None:
@@ -587,7 +591,7 @@ class PriceAndLoadMonitor:
 
     # @api_status_check(max_retries=1, delay=60)
     # Device status check is not enabled for now, consider enabling it in the future
-    def send_battery_command(self, peak_valley_command=None, json=None, sn=None):
+    async def send_battery_command(self, peak_valley_command=None, json=None, sn=None):
         if self.test_mode:
             return
 
@@ -680,9 +684,9 @@ class PriceAndLoadMonitor:
                     'dischargeEnd1': empty_time,
                     'chargeStart1': empty_time,
                     'chargeEnd1': empty_time,
-                    'chargeStart2': default_charge2_start_time,
-                    'chargeEnd2': default_charge2_end_time,
-                    'chargePower2': default_charge2_power,
+                    'chargeStart2': empty_time,
+                    'chargeEnd2': empty_time,
+                    'chargePower2': 0,
                     'enableGridCharge2': 0,
                 }
 
@@ -719,14 +723,8 @@ class PriceAndLoadMonitor:
 
         try:
             headers = {'token': self.get_token()}
-            # self.set_hour_register(data)
-            # self.set_min_register(data)
             self.set_antibackflow_register(data)
-            # data.pop('chargeStart1', None)
-            # data.pop('chargeEnd1', None)
-            # data.pop('dischargeStart1', None)
-            # data.pop('dischargeEnd1', None)
-            response = self.api.send_request(
+            response = await self.api.send_request_async(
                 "device/set_params", method='POST', json=data, headers=headers)
         except Exception as e:
             logger.error(
@@ -739,7 +737,7 @@ class PriceAndLoadMonitor:
 class RedXServerClient:
     def __init__(self, base_url):
         self.base_url = base_url
-        self.session = requests.Session()
+        self.session = None
 
     def send_request(self, command, method="GET", data=None, json=None, headers=None, retries=2):
         """
@@ -748,6 +746,7 @@ class RedXServerClient:
         :param command: API command/endpoint to be accessed.
         :param method: HTTP method like GET, POST, PUT, DELETE.
         :param data: Payload to send (if any).
+        :param json: JSON payload to send (if any).
         :param headers: Additional headers to be sent.
         :param retries: Number of retries in case of a failure.
         :return: Response from the server.
@@ -756,22 +755,61 @@ class RedXServerClient:
 
         for _ in range(retries):
             try:
-                if method == "GET":
-                    response = self.session.get(url, headers=headers)
-                elif method == "POST":
-                    response = self.session.post(
-                        url, data=data, json=json, headers=headers, timeout=None)
+                with requests.Session() as session:
+                    if method == "GET":
+                        response = session.get(url, headers=headers)
+                    elif method == "POST":
+                        response = session.post(
+                            url, data=data, json=json, headers=headers)
+                    else:
+                        raise ValueError(f"Unsupported HTTP method: {method}")
 
-                # Raises an exception for HTTP errors.
-                response.raise_for_status()
-                # Assuming JSON response. Modify as needed.
-                return response.json()
-            except requests.RequestException as e:
-                if e.response is not None and e.response.status_code == 504:
-                    return None
-                else:
+                    response.raise_for_status()
+                    return response.json()
+
+            except requests.exceptions.RequestException as e:
+                logger.error(
+                    f"Failed to connect to {url}. Error: {e}. Retrying...")
+
+        raise ConnectionError(
+            f"Failed to connect to {url} after {retries} attempts.")
+
+    async def send_request_async(self, command, method="GET", data=None, json=None, headers=None, retries=2):
+        """
+        Send an asynchronous request to the API.
+
+        :param command: API command/endpoint to be accessed.
+        :param method: HTTP method like GET, POST, PUT, DELETE.
+        :param data: Payload to send (if any).
+        :param json: JSON payload to send (if any).
+        :param headers: Additional headers to be sent.
+        :param retries: Number of retries in case of a failure.
+        :return: Response from the server.
+        """
+        url = f"{self.base_url}/{command}"
+
+        async with aiohttp.ClientSession() as session:
+            for _ in range(retries):
+                try:
+                    if method == "GET":
+                        async with session.get(url, headers=headers) as response:
+                            response.raise_for_status()
+                            return await response.json()
+                    elif method == "POST":
+                        async with session.post(url, data=data, json=json, headers=headers) as response:
+                            response.raise_for_status()
+                            return await response.json()
+                    else:
+                        raise ValueError(f"Unsupported HTTP method: {method}")
+
+                except aiohttp.ClientResponseError as e:
+                    if e.status == 504:
+                        return None
                     logger.error(
-                        f"Failed to connect to {url}. Retrying...")
+                        f"Failed to connect to {url}. Error: {e}. Retrying...")
+                except aiohttp.ClientError as e:
+                    logger.error(
+                        f"Failed to connect to {url}. Error: {e}. Retrying...")
 
         raise ConnectionError(
             f"Failed to connect to {url} after {retries} attempts.")
