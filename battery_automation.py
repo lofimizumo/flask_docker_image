@@ -1090,7 +1090,7 @@ class HybridAlgo():
         current_time = datetime.strptime(current_time, '%H:%M').time()
         if schedule:
             actual_env = ActionEnvObservation(
-                buy_price=current_buy_price, sell_price=current_feedin_price, load=current_usage, solar=current_pvkW)
+                buy_price=current_buy_price/100, sell_price=current_feedin_price/100, load=current_usage, solar=current_pvkW)
             current_total_min = current_time.hour * 60 + current_time.minute
             # 5 minutes interval, 288 points in total
             current_time_idx = current_total_min // 5
