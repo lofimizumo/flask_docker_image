@@ -1146,8 +1146,8 @@ class HybridAlgo():
                         # TODO: calculate the power based on the plant level solar and load
                         plant_load_pred = battery_action.env.load
                         excess_solar = max(0, plant_pvKW - plant_load_pred)
-                        adjusted_power = excess_solar * device_percentage
-                        command = {'command': 'Charge', 'power': adjusted_power, 'grid_charge': is_grid_charge_on}
+                        adjusted_power_w = excess_solar * device_percentage * 1000
+                        command = {'command': 'Charge', 'power': adjusted_power_w, 'grid_charge': is_grid_charge_on}
                 elif scheduled_action < 0:
                     is_anti_backflow_on = battery_action.is_anti_backflow_on
                     command = {'command': 'Discharge', 'power': abs(
