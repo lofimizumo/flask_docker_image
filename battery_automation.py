@@ -593,6 +593,7 @@ class BatterySchedulerManager:
                 user_name).get('total_bat_discharge_power', 0)
             capacity = self.user_manager.get_user_profile(
                 user_name).get('capacity', 0)
+            self.logger.info(f"Params for optmization: Buy Prices: {buy_prices},\n Sell Prices: {sell_prices},\n Solars: {pvs},\n Loads: {loads},\n Charge Power: {plant_charge_power},\n Discharge Power: {plant_discharge_power},\n Capacity: {capacity}")
             schedule = self.optimize(
                 buy_prices, sell_prices, pvs, loads, plant_charge_power, plant_discharge_power, capacity)
 
