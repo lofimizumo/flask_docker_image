@@ -279,9 +279,9 @@ class BatterySchedulerManager:
     async def _process_send_cmd_each_sn(self, sn):
         try:
             self.logger.info(f"Processing sn: {sn}")
-            self.get_current_plant_stats(sn)
+            await self.get_current_plant_stats(sn)
             plant_id = self.user_manager.get_plant_for_device(sn)
-            bat_stats = self.get_current_battery_stats(sn)
+            bat_stats = await self.get_current_battery_stats(sn)
             current_batP = bat_stats.get('batP', 0) if bat_stats else 0
             current_usage_kw = bat_stats.get('loadP', 0) if bat_stats else 0
             current_soc = bat_stats.get(
@@ -700,25 +700,33 @@ class BatterySchedulerManager:
         }
         return self.monitor.get_current_time(state_timezone_map[state])
     
-    def get_current_plant_stats(self, sn):
+    async def get_current_plant_stats(self, sn):
         plant_id = self.user_manager.get_plant_for_device(sn)
         devices = self.user_manager.get_devices_for_plant(plant_id)
         if sn not in self.plant_data:
             self.plant_data[plant_id] = {}
         if 'load' not in self.plant_data[plant_id]:
-            self.plant_data[plant_id]['load'] = self._get_plant_load(devices)
+            self.plant_data[plant_id]['load'] = await self._get_plant_load(devices)
         if 'solar' not in self.plant_data[plant_id]:
-            self.plant_data[plant_id]['solar'] = self._get_plant_solar(devices)
+            self.plant_data[plant_id]['solar'] = await self._get_plant_solar(devices)
         return self.plant_data[plant_id]
     
-    def _get_plant_load(self, devices):
-        return sum([self.monitor.get_realtime_battery_stats(device)['loadP'] for device in devices])
+    async def _get_plant_load(self, devices):
+        load_values = await asyncio.gather(
+            *[self.monitor.get_realtime_battery_stats(device) for device in devices]
+        )
+        total_load = sum(load['loadP'] for load in load_values)
+        return total_load
     
-    def _get_plant_solar(self, devices):
-        return sum([self.monitor.get_realtime_battery_stats(device)['ppv'] for device in devices])
+    async def _get_plant_solar(self, devices):
+        solar_values = await asyncio.gather(
+            *[self.monitor.get_realtime_battery_stats(device) for device in devices]
+        )
+        total_solar = sum(solar['ppv'] for solar in solar_values)
+        return total_solar
     
-    def get_current_battery_stats(self, sn):
-        return self.monitor.get_realtime_battery_stats(sn)
+    async def get_current_battery_stats(self, sn):
+        return await self.monitor.get_realtime_battery_stats(sn)
 
     async def send_battery_command(self, command=None, json=None, sn=None):
         await self.monitor.send_battery_command(
@@ -917,8 +925,8 @@ class ShawsbaySchedulerManager:
         except AttributeError:
             return 0
 
-    def get_current_battery_stats(self, sn):
-        return self.monitor.get_realtime_battery_stats(sn)
+    async def get_current_battery_stats(self, sn):
+        return await self.monitor.get_realtime_battery_stats(sn)
 
     async def send_battery_command(self, command=None, json=None, sn=None):
         await self.monitor.send_battery_command(

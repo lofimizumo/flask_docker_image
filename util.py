@@ -406,13 +406,13 @@ class PriceAndLoadMonitor:
             raise Exception('API failed: get_token')
         return response['data']['token']
     
-    def get_realtime_battery_stats(self, sn):
+    async def get_realtime_battery_stats(self, sn):
         # Test Get latest summary data
         # raise BatteryStatsUpdateFailure(
         #     f"Failed to get latest summary data for device {sn}")
         data = {'deviceSn': sn}
         headers = {'token': self.get_token()}
-        response = self.api.send_request(
+        response = await self.api.send_request_async(
             "device/get_latest_data", method='POST', json=data, headers=headers)
         if response.get('data', None) is None:
             # raise custom exception
