@@ -612,7 +612,7 @@ class BatterySchedulerManager:
         now = datetime.now(pytz.timezone('Australia/Brisbane'))
         date = now.strftime('%Y-%m-%d')
         # Upsample schedule to 288 points
-        schedule_copy = np.interp(np.linspace(0, len(schedule_copy), 288),
+        schedule_copy = np.interp(np.linspace(0, len(schedule_copy)-1, 288),
                                   np.arange(len(schedule_copy)), schedule_copy).tolist()
         # Round the float to 2 decimal places
         schedule_copy = [round(x, 2) for x in schedule_copy]
@@ -621,7 +621,7 @@ class BatterySchedulerManager:
         user_name = self.user_manager.get_user_for_plant(plant_id)
         if self.should_update_schedule and self.schedule is not None and self.schedule.get(user_name) is not None:
             morning_schedule = copy.deepcopy(self.schedule[user_name])
-            morning_schedule = np.interp(np.linspace(0, len(morning_schedule), 288),
+            morning_schedule = np.interp(np.linspace(0, len(morning_schedule)-1, 288),
                                          np.arange(len(morning_schedule)), morning_schedule).tolist()
             morning_schedule = [round(x, 2) for x in morning_schedule]
             schedule_copy = morning_schedule[:198] + schedule_copy[198:]
