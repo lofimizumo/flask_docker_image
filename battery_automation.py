@@ -123,6 +123,7 @@ class BatterySchedulerManager:
         self.prepare_battery_sched_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.prepare_battery_sched_loop)
         self.last_schedule_peakvalley = {}
+        self.plant_data = {}
         self.should_update_schedule = False
         self.project_phase = phase
         self.project_mode = project_mode
@@ -278,6 +279,7 @@ class BatterySchedulerManager:
     async def _process_send_cmd_each_sn(self, sn):
         try:
             self.logger.info(f"Processing sn: {sn}")
+            self.get_current_plant_stats(sn)
             plant_id = self.user_manager.get_plant_for_device(sn)
             bat_stats = self.get_current_battery_stats(sn)
             current_batP = bat_stats.get('batP', 0) if bat_stats else 0
@@ -285,6 +287,8 @@ class BatterySchedulerManager:
             current_soc = bat_stats.get(
                 'soc', 0) / 100.0 if bat_stats else 0
             current_pv_kw = bat_stats.get('ppv', 0) if bat_stats else 0
+            plant_pv_kw = self.plant_data.get(plant_id, {}).get('solar', 0) if self.plant_data else 0
+            plant_load_kw = self.plant_data.get(plant_id, {}).get('load', 0) if self.plant_data else 0
             device_type = DeviceType(self.user_manager.get_device_type(sn))
             algo_type = self.user_manager.get_algo_type(plant_id)
             buy_price_c = self.current_prices[plant_id]['buy'] if plant_id else 0.0
@@ -297,6 +301,7 @@ class BatterySchedulerManager:
             schedule = self.schedule_for_compare.get(
                 self.user_manager.get_user_for_plant(plant_id), None)
             schedule_adjusted = self.adjust_power_for_plant(schedule, sn)
+            device_percentage = self.get_device_power_percentage(sn)
 
             command = self._get_battery_command(
                 current_buy_price=buy_price_c,
@@ -309,7 +314,10 @@ class BatterySchedulerManager:
                 device_type=device_type,
                 device_sn=sn,
                 algo_type=algo_type,
-                schedule=schedule_adjusted
+                schedule=schedule_adjusted,
+                device_percentage=device_percentage,
+                plant_pvKW=plant_pv_kw,
+                plant_loadKW=plant_load_kw
             )
 
             last_command = self.last_schedule_peakvalley.get(sn, {})
@@ -374,7 +382,17 @@ class BatterySchedulerManager:
         self.logger.info("Stopped.")
         for task in asyncio.all_tasks(asyncio.get_event_loop()):
             task.cancel()
+    
+    def get_device_power_percentage(self, sn):
+        plant_id = self.user_manager.get_plant_for_device(sn)
+        device_type = self.user_manager.get_device_type(sn)
+        total_discharge_power = self.user_manager.get_user_profile(
+            self.user_manager.get_user_for_plant(plant_id)).get('total_bat_discharge_power', 0)
+        device_discharge_power = 5 if DeviceType(
+            device_type) == DeviceType.FIVETHOUSAND else 2.5
 
+        adjustment_factor = device_discharge_power / total_discharge_power
+        return adjustment_factor
     def adjust_power_for_plant(self, schedule, sn: str):
         if not schedule:
             return None
@@ -680,7 +698,24 @@ class BatterySchedulerManager:
             'nsw': 'Australia/Sydney'
         }
         return self.monitor.get_current_time(state_timezone_map[state])
-
+    
+    def get_current_plant_stats(self, sn):
+        plant_id = self.user_manager.get_plant_for_device(sn)
+        devices = self.user_manager.get_devices_for_plant(plant_id)
+        if sn not in self.plant_data:
+            self.plant_data[plant_id] = {}
+        if 'load' not in self.plant_data[plant_id]:
+            self.plant_data[plant_id]['load'] = self._get_plant_load(devices)
+        if 'solar' not in self.plant_data[plant_id]:
+            self.plant_data[plant_id]['solar'] = self._get_plant_solar(devices)
+        return self.plant_data[plant_id]
+    
+    def _get_plant_load(self, devices):
+        return sum([self.monitor.get_realtime_battery_stats(device)['loadP'] for device in devices])
+    
+    def _get_plant_solar(self, devices):
+        return sum([self.monitor.get_realtime_battery_stats(device)['ppv'] for device in devices])
+    
     def get_current_battery_stats(self, sn):
         return self.monitor.get_realtime_battery_stats(sn)
 
@@ -1084,7 +1119,7 @@ class HybridAlgo():
         conf_level = 0.97 - 0.8824 * math.exp(-0.033 * current_price)
         return conf_level
 
-    def _algo_smart(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pvkW, device_type: DeviceType, device_sn, schedule: BatterySchedule):
+    def _algo_smart(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pvkW, device_type: DeviceType, device_sn, schedule: BatterySchedule, device_percentage, plant_pvKW=None, plant_loadKW=None):
         # Compare with the pre-calculated schedule
         current_time = datetime.strptime(current_time, '%H:%M').time()
         if schedule:
@@ -1103,14 +1138,15 @@ class HybridAlgo():
                 if scheduled_action > 0:
                     is_grid_charge_on = battery_action.is_grid_charge_on
                     # if the scheduled action is grid charge, use the scheduled action
-                    # otherwise, use the max power with battery grid charge off to absorb the solar
+                    # otherwise, absorb the excess solar with the adjusted power
                     if is_grid_charge_on:
                         command = {'command': 'Charge', 'power': abs(
                             scheduled_action), 'grid_charge': is_grid_charge_on}
                     else:
                         # TODO: calculate the power based on the plant level solar and load
-                        command = {'command': 'Charge', 'power': abs(
-                            scheduled_action), 'grid_charge': is_grid_charge_on}
+                        excess_solar = max(0, plant_pvKW - plant_loadKW)
+                        adjusted_power = excess_solar * device_percentage
+                        command = {'command': 'Charge', 'power': adjusted_power, 'grid_charge': is_grid_charge_on}
                 elif scheduled_action < 0:
                     is_anti_backflow_on = battery_action.is_anti_backflow_on
                     command = {'command': 'Discharge', 'power': abs(
@@ -1362,7 +1398,7 @@ class HybridAlgo():
         device_charge_cost.weighted_charging_cost = np.multiply(np.array(charging_prices), np.array(
             grid_charge_powers)).sum()/(np.array(battery_charge_powers).sum() + 1e-6)
 
-    def step(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn, algo_type='sell_to_grid', schedule=None):
+    def step(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn, algo_type='sell_to_grid', schedule=None, device_percentage=None, plant_pvKW=None, plant_loadKW=None):
         if algo_type == 'sell_to_grid':
             return self._algo_sell_to_grid(
                 current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn)
@@ -1371,7 +1407,7 @@ class HybridAlgo():
                 current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, current_batP, device_type, device_sn)
         elif algo_type == 'smart':
             return self._algo_smart(
-                current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn, schedule)
+                current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pv, device_type, device_sn, schedule, device_percentage, plant_pvKW, plant_loadKW)
 
         else:
             return self._algo_cover_usage(

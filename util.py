@@ -405,7 +405,7 @@ class PriceAndLoadMonitor:
         if response is None:
             raise Exception('API failed: get_token')
         return response['data']['token']
-
+    
     def get_realtime_battery_stats(self, sn):
         # Test Get latest summary data
         # raise BatteryStatsUpdateFailure(
