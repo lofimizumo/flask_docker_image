@@ -1144,7 +1144,8 @@ class HybridAlgo():
                             scheduled_action), 'grid_charge': is_grid_charge_on}
                     else:
                         # TODO: calculate the power based on the plant level solar and load
-                        excess_solar = max(0, plant_pvKW - plant_loadKW)
+                        plant_load_pred = battery_action.env.load
+                        excess_solar = max(0, plant_pvKW - plant_load_pred)
                         adjusted_power = excess_solar * device_percentage
                         command = {'command': 'Charge', 'power': adjusted_power, 'grid_charge': is_grid_charge_on}
                 elif scheduled_action < 0:
