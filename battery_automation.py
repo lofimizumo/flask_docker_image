@@ -535,7 +535,7 @@ class BatterySchedulerManager:
         }
         scheduler = BatteryScheduler(config)
         x_vals, _ = scheduler.solve()
-        x_vals = adjust_middle_value(x_vals)
+        # x_vals = adjust_middle_value(x_vals)
         # import random 
         # rand_file_names = ['battery_sched.pkl', 'battery_sched_2.pkl', 'battery_sched_3.pkl', 'battery_sched_4.pkl', 'battery_sched_5.pkl']
         # pickle.dump((config, x_vals, _, charge_mask), open(random.choice(rand_file_names), 'wb'))

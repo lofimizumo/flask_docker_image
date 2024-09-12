@@ -225,15 +225,15 @@ def adjust_middle_value(arr, window_size=3, threshold=0.5):
     return result
 
 if __name__ == '__main__':
-    config, x_vals, socs, charge_mask = pickle.load(open('battery_sched_2.pkl', 'rb'))
+    config, x_vals, socs, charge_mask = pickle.load(open('battery_sched.pkl', 'rb'))
     config['b'] = resample_data(config['b'], 48)
     config['s'] = resample_data(config['s'], 48)
     config['l'] = resample_data(config['l'], 48)
     config['p'] = resample_data(config['p'], 48)
     config['charge_mask'] = resample_data(config['charge_mask'], 48)
     scheduler = BatteryScheduler(config)
-    # scheduler.plot(config['charge_mask'], socs, x_vals)
-    x_vals, socs = scheduler.solve()
-    # x_vals = adjust_middle_value(x_vals)
     scheduler.plot(config['charge_mask'], socs, x_vals)
+    x_vals, socs = scheduler.solve()
+    x_vals = adjust_middle_value(x_vals)
+    # scheduler.plot(config['charge_mask'], socs, x_vals)
 
