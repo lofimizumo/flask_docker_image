@@ -256,7 +256,7 @@ class BatterySchedulerManager:
         actions_copy = copy.deepcopy(actions)
         # Create new x values for interpolation
         x = np.arange(len(actions_copy))
-        x_new = np.linspace(0, len(actions_copy), 288)
+        x_new = np.linspace(0, len(actions_copy)-1, 288)
 
         # Interpolate all lists to 288 points and round to 2 decimal places
         actions_288 = np.round(np.interp(x_new, x, actions_copy), 2)
