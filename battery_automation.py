@@ -27,6 +27,10 @@ class DeviceType(Enum):
     TWOFIVEZEROFIVE = 2505
     SEVENTHOUSAND = 7000
 
+class ErrorCode(Enum):
+    SUCCESS = 0
+    ALREADY_EXIST = 3005
+
 
 def load_config(file_path):
     with open(file_path, 'rb') as file:
@@ -434,7 +438,7 @@ class BatterySchedulerManager:
             "plant_id": plant_id,
         }
         response = await self.ai_client.data_api_request("price_prediction/get", model_data)
-        if response and response.get('errorCode') == 0:
+        if response and ErrorCode(response.get('errorCode')) == ErrorCode.SUCCESS:
             data = response.get('data')
             price_buy_decoded = util.decode_model_data(
                 data[0].get('model_price_buy'))
@@ -455,7 +459,7 @@ class BatterySchedulerManager:
             "plant_id": plant_id,
         }
         response = await self.ai_client.data_api_request("pv_prediction/get", model_data)
-        if response and response.get('errorCode') == 0:
+        if response and ErrorCode(response.get('errorCode')) == ErrorCode.SUCCESS:
             data = response.get('data')
             pv = util.decode_model_data(data[0].get('model_adjusted_pv'))
             self.logger.info(f"PV data accessed successfully for {plant_id}")
@@ -472,7 +476,7 @@ class BatterySchedulerManager:
             "plant_id": plant_id,
         }
         response = await self.ai_client.data_api_request("load_prediction/get", model_data)
-        if response and response.get('errorCode') == 0:
+        if response and ErrorCode(response.get('errorCode')) == ErrorCode.SUCCESS:
             data = response.get('data')
             load = util.decode_model_data(data[0].get('model_prediction_load'))
             self.logger.info(
@@ -634,14 +638,14 @@ class BatterySchedulerManager:
         }
         self.logger.info(f"Pushing schedule for {plant_id}: {model_data}")
         response = await self.ai_client.data_api_request("battery_actions/set", model_data)
-        if response and response.get('errorCode') == 0:
+        if response and ErrorCode(response.get('errorCode')) == ErrorCode.SUCCESS:
             self.logger.info(
                 f"Schedule data pushed successfully for {plant_id}")
-        elif response and response.get('errorCode') == 4:
+        elif response and ErrorCode(response.get('errorCode')) == ErrorCode.ALREADY_EXIST:
             self.logger.info(
                 f"Schedule data already exists for {plant_id}. Overwritting the data..")
             response = await self.ai_client.data_api_request("battery_actions/update", model_data)
-            if response and response.get('errorCode') == 0:
+            if response and ErrorCode(response.get('errorCode')) == ErrorCode.SUCCESS:
                 self.logger.info(
                     f"Schedule data overwritten successfully for {plant_id}")
             else:
@@ -661,7 +665,7 @@ class BatterySchedulerManager:
             "date": date,
         }
         response = await self.ai_client.data_api_request("battery_actions/get", model_data)
-        if response and response.get('errorCode') == 0:
+        if response and ErrorCode(response.get('errorCode')) == ErrorCode.SUCCESS:
             self.logger.info(
                 f"Schedule data obtained successfully for {plant_id}")
         else:
