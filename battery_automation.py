@@ -422,7 +422,7 @@ class BatterySchedulerManager:
 
         return BatterySchedule(actions=adjusted_actions)
 
-    async def get_prices(self, user_name) -> List[float]:
+    async def get_prices(self, plant_id) -> List[float]:
         # Elmar's API call to get prices
         # Ensure login before making the request
         await self.ai_client.ensure_login("ye.tao@redx.com.au", "1111")
@@ -431,7 +431,7 @@ class BatterySchedulerManager:
         day = now.strftime('%Y-%m-%d')
         model_data = {
             "model_date": day,
-            "user_name": user_name,
+            "plant_id": plant_id,
         }
         response = await self.ai_client.data_api_request("price_prediction/get", model_data)
         if response and response.get('errorCode') == 0:
@@ -441,10 +441,10 @@ class BatterySchedulerManager:
             price_sell_decoded = util.decode_model_data(
                 data[0].get('model_price_sell'))
             self.logger.info(
-                f"Price data accessed successfully for {user_name}")
+                f"Price data accessed successfully for {plant_id}")
             return {'buy': price_buy_decoded, 'sell': price_sell_decoded}
 
-    async def get_solar(self, user_name) -> List[float]:
+    async def get_solar(self, plant_id) -> List[float]:
         # Elmar's API call to get solar prediction
         await self.ai_client.ensure_login("ye.tao@redx.com.au", "1111")
 
@@ -452,16 +452,16 @@ class BatterySchedulerManager:
         day = now.strftime('%Y-%m-%d')
         model_data = {
             "model_date": day,
-            "user_name": user_name,
+            "plant_id": plant_id,
         }
         response = await self.ai_client.data_api_request("pv_prediction/get", model_data)
         if response and response.get('errorCode') == 0:
             data = response.get('data')
             pv = util.decode_model_data(data[0].get('model_adjusted_pv'))
-            self.logger.info(f"PV data accessed successfully for {user_name}")
+            self.logger.info(f"PV data accessed successfully for {plant_id}")
             return pv
 
-    async def get_load(self, user_name) -> List[float]:
+    async def get_load(self, plant_id) -> List[float]:
         # Elmar's API call to get load prediction
         await self.ai_client.ensure_login("ye.tao@redx.com.au", "1111")
 
@@ -469,14 +469,14 @@ class BatterySchedulerManager:
         day = now.strftime('%Y-%m-%d')
         model_data = {
             "model_date": day,
-            "user_name": user_name,
+            "plant_id": plant_id,
         }
         response = await self.ai_client.data_api_request("load_prediction/get", model_data)
         if response and response.get('errorCode') == 0:
             data = response.get('data')
             load = util.decode_model_data(data[0].get('model_prediction_load'))
             self.logger.info(
-                f"Load data accessed successfully for {user_name}")
+                f"Load data accessed successfully for {plant_id}")
             return load
 
     def optimize(self, prices: List[float], sell_prices: List[float], solars: List[float], loads: List[float], max_charge_power: float, max_discharge_power: float, capacity: float) -> List[float]:
@@ -580,11 +580,12 @@ class BatterySchedulerManager:
     async def prep_bat_sched_each_user(self, user_name):
         try:
             self.logger.info(f"Preparing schedule for {user_name}")
-            user_full_name = self.user_manager.get_user_profile(
-                user_name).get('id')
-            prices = await self.get_prices(user_full_name)
-            pvs = await self.get_solar(user_full_name)
-            loads = await self.get_load(user_full_name)
+            plant_id = self.user_manager.get_user_profile(
+                user_name).get('plant_id')
+            
+            prices = await self.get_prices(plant_id)
+            pvs = await self.get_solar(plant_id)
+            loads = await self.get_load(plant_id)
             buy_prices = prices['buy']
             sell_prices = prices['sell']
             plant_charge_power = self.user_manager.get_user_profile(
@@ -596,8 +597,6 @@ class BatterySchedulerManager:
             schedule = self.optimize(
                 buy_prices, sell_prices, pvs, loads, plant_charge_power, plant_discharge_power, capacity)
 
-            plant_id = self.user_manager.get_user_profile(
-                user_name).get('plant_id')
             await self.push_schedule_to_AI(plant_id, schedule)
             self.schedule_for_compare[user_name] = self.make_battery_schedule(
                 schedule, buy_prices, sell_prices, loads, pvs)

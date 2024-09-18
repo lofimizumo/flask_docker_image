@@ -822,7 +822,7 @@ class AIServerClient:
         if cls._instance is None:
             cls._instance = super(AIServerClient, cls).__new__(cls)
             cls._instance.base_url = "https://ai.redxvpp.com"
-            cls._instance.data_url = f"{cls._instance.base_url}/api/v1.0/data/"
+            cls._instance.data_url = f"{cls._instance.base_url}/api/v1.1/data/"
             cls._instance.session = None
             cls._instance.id = None
             cls._instance.email = None
