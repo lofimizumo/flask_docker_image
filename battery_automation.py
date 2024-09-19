@@ -293,6 +293,7 @@ class BatterySchedulerManager:
             current_pv_kw = bat_stats.get('ppv', 0) if bat_stats else 0
             plant_pv_kw = self.plant_data.get(plant_id, {}).get('solar', 0) if self.plant_data else 0
             plant_load_kw = self.plant_data.get(plant_id, {}).get('load', 0) if self.plant_data else 0
+            plant_device_soc_pair = self.plant_data.get(plant_id, {}).get('device_soc_pair', []) if self.plant_data else []
             device_type = DeviceType(self.user_manager.get_device_type(sn))
             algo_type = self.user_manager.get_algo_type(plant_id)
             buy_price_c = self.current_prices[plant_id]['buy'] if plant_id else 0.0
@@ -305,7 +306,7 @@ class BatterySchedulerManager:
             schedule = self.schedule_for_compare.get(
                 self.user_manager.get_user_for_plant(plant_id), None)
             schedule_adjusted = self.adjust_power_for_plant(schedule, sn)
-            device_percentage = self.get_device_power_percentage(sn)
+            device_percentage = self.get_device_power_percentage(sn, plant_device_soc_pair)
 
             command = self._get_battery_command(
                 current_buy_price=buy_price_c,
@@ -387,16 +388,20 @@ class BatterySchedulerManager:
         for task in asyncio.all_tasks(asyncio.get_event_loop()):
             task.cancel()
     
-    def get_device_power_percentage(self, sn):
+    def get_device_power_percentage(self, sn, plant_device_soc_pair):
         plant_id = self.user_manager.get_plant_for_device(sn)
         device_type = self.user_manager.get_device_type(sn)
-        total_discharge_power = self.user_manager.get_user_profile(
-            self.user_manager.get_user_for_plant(plant_id)).get('total_bat_discharge_power', 0)
+        device_chargable = [device for device, soc in plant_device_soc_pair if soc < 97]
+        user_name = self.user_manager.get_user_for_plant(plant_id)
+        devices_meta_data = self.user_manager.get_user_profile(user_name).get('devices', [])
+        bat_powers =[dev.get('discharge_power', 2.5) for dev in devices_meta_data if dev.get('id') in device_chargable] 
+        total_discharge_power = sum(bat_powers)
         device_discharge_power = 5 if DeviceType(
             device_type) == DeviceType.FIVETHOUSAND else 2.5
 
-        adjustment_factor = device_discharge_power / total_discharge_power
+        adjustment_factor = device_discharge_power / total_discharge_power if total_discharge_power > 0 else 0 # avoid division by zero
         return adjustment_factor
+
     def adjust_power_for_plant(self, schedule, sn: str):
         if not schedule:
             return None
@@ -712,7 +717,16 @@ class BatterySchedulerManager:
             self.plant_data[plant_id]['load'] = await self._get_plant_load(devices)
         if 'solar' not in self.plant_data[plant_id]:
             self.plant_data[plant_id]['solar'] = await self._get_plant_solar(devices)
+        if 'socs' not in self.plant_data[plant_id]:
+            self.plant_data[plant_id]['device_soc_pair'] = await self._get_plant_device_socs(devices)
         return self.plant_data[plant_id]
+
+    async def _get_plant_device_socs(self, devices):
+        socs_values = await asyncio.gather(
+            *[self.monitor.get_realtime_battery_stats(device) for device in devices]
+        )
+        device_soc_pair = [(device, soc['soc']) for device, soc in zip(devices, socs_values)]
+        return device_soc_pair
     
     async def _get_plant_load(self, devices):
         load_values = await asyncio.gather(
@@ -1131,7 +1145,7 @@ class HybridAlgo():
         conf_level = 0.97 - 0.8824 * math.exp(-0.033 * current_price)
         return conf_level
 
-    def _algo_smart(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pvkW, device_type: DeviceType, device_sn, schedule: BatterySchedule, device_percentage, plant_pvKW=None, plant_loadKW=None):
+    def _algo_smart(self, current_buy_price, current_feedin_price, current_time, current_usage, current_soc, current_pvkW, device_type: DeviceType, device_sn, schedule: BatterySchedule, device_percentage, plant_pvKW, plant_loadKW):
         # Compare with the pre-calculated schedule
         current_time = datetime.strptime(current_time, '%H:%M').time()
         if schedule:
