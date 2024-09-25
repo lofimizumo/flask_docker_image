@@ -33,4 +33,4 @@ devices = [
 ]
 api_key = "psk_95906d62a035391b450c0709a0790852"
 api_url = "https://api.amber.com.au/v1/sites/01HRDW17W9MVRM5PZCD5CNM0X6/prices/current?next=0&previous=0&resolution=30"
-algo_type = "cover_usage"
+algo_type = "smart"
