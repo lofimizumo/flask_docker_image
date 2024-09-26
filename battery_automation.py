@@ -229,8 +229,7 @@ class BatterySchedulerManager:
         def _update_prices_per_plant_id(retailer, plant_id):
             data, quality = self.get_current_price(
                 retailer=retailer, plant_id=plant_id)
-
-            if data and quality:
+            if data:
                 self.current_prices[plant_id]['buy'], self.current_prices[plant_id]['feedin'] = data
                 return True
             else:
