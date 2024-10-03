@@ -1152,15 +1152,15 @@ class HybridAlgo():
                     is_grid_charge_on = battery_action.is_grid_charge_on
                     # if the scheduled action is grid charge, use the scheduled action
                     # otherwise, absorb the excess solar with the adjusted power
-                    if is_grid_charge_on:
-                        command = {'command': 'Charge', 'power': abs(
-                            scheduled_action), 'grid_charge': is_grid_charge_on}
-                    else:
-                        # TODO: calculate the power based on the plant level solar and load
-                        # plant_load_pred = battery_action.env.load
-                        excess_solar = max(0, plant_pvKW - plant_loadKW)
-                        adjusted_power_w = excess_solar * device_percentage * 1000
-                        command = {'command': 'Charge', 'power': adjusted_power_w, 'grid_charge': True} # enable grid_charge in case some devices have extra solar but some don't, force all to follow plan to achieve plant level charge alignment
+                    # if is_grid_charge_on:
+                    #     command = {'command': 'Charge', 'power': abs(
+                    #         scheduled_action), 'grid_charge': is_grid_charge_on}
+                    # else:
+                    #     excess_solar = max(0, plant_pvKW - plant_loadKW)
+                    #     adjusted_power_w = excess_solar * device_percentage * 1000
+                    #     command = {'command': 'Charge', 'power': adjusted_power_w, 'grid_charge': True} # enable grid_charge in case some devices have extra solar but some don't, force all to follow plan to achieve plant level charge alignment
+                    command = {'command': 'Charge', 'power': abs(
+                        scheduled_action), 'grid_charge': is_grid_charge_on}
                 elif scheduled_action < 0:
                     is_anti_backflow_on = battery_action.is_anti_backflow_on
                     command = {'command': 'Discharge', 'power': abs(
