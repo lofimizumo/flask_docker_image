@@ -282,17 +282,17 @@ class BatterySchedulerManager:
     async def _process_send_cmd_each_sn(self, sn):
         try:
             self.logger.info(f"Processing sn: {sn}")
-            await self.get_current_plant_stats(sn)
             plant_id = self.user_manager.get_plant_for_device(sn)
+            plant_stats = await self.get_current_plant_stats(sn, is_sn=True)
             bat_stats = await self.get_current_battery_stats(sn)
             current_batP = bat_stats.get('batP', 0) if bat_stats else 0
             current_usage_kw = bat_stats.get('loadP', 0) if bat_stats else 0
             current_soc = bat_stats.get(
                 'soc', 0) / 100.0 if bat_stats else 0
             current_pv_kw = bat_stats.get('ppv', 0) if bat_stats else 0
-            plant_pv_kw = self.plant_data.get(plant_id, {}).get('solar', 0) if self.plant_data else 0
-            plant_load_kw = self.plant_data.get(plant_id, {}).get('load', 0) if self.plant_data else 0
-            plant_device_soc_pair = self.plant_data.get(plant_id, {}).get('device_soc_pair', []) if self.plant_data else []
+            plant_pv_kw = sum(plant_stats.get('ppv', 0) for plant_stats in plant_stats.values())
+            plant_load_kw = sum(plant_stats.get('loadP', 0) for plant_stats in plant_stats.values())
+            devices_need_charge = [device for device, stats in plant_stats.items() if stats.get('soc', 0) < 97]
             device_type = DeviceType(self.user_manager.get_device_type(sn))
             algo_type = self.user_manager.get_algo_type(plant_id)
             buy_price_c = self.current_prices[plant_id]['buy'] if plant_id else 0.0
@@ -305,7 +305,7 @@ class BatterySchedulerManager:
             schedule = self.schedule_for_compare.get(
                 self.user_manager.get_user_for_plant(plant_id), None)
             schedule_adjusted = self.adjust_power_for_plant(schedule, sn)
-            device_percentage = self.get_device_power_percentage(sn, plant_device_soc_pair)
+            device_percentage = self.get_device_power_percentage(sn, devices_need_charge)
 
             command = self._get_battery_command(
                 current_buy_price=buy_price_c,
@@ -387,13 +387,12 @@ class BatterySchedulerManager:
         for task in asyncio.all_tasks(asyncio.get_event_loop()):
             task.cancel()
     
-    def get_device_power_percentage(self, sn, plant_device_soc_pair):
+    def get_device_power_percentage(self, sn, devices_need_charge):
         plant_id = self.user_manager.get_plant_for_device(sn)
         device_type = self.user_manager.get_device_type(sn)
-        device_chargable = [device for device, soc in plant_device_soc_pair if soc < 97]
         user_name = self.user_manager.get_user_for_plant(plant_id)
         devices_meta_data = self.user_manager.get_user_profile(user_name).get('devices', [])
-        bat_powers =[dev.get('discharge_power', 2.5) for dev in devices_meta_data if dev.get('id') in device_chargable] 
+        bat_powers =[dev.get('discharge_power', 2.5) for dev in devices_meta_data if dev.get('id') in devices_need_charge] 
         total_discharge_power = sum(bat_powers)
         device_discharge_power = 5 if DeviceType(
             device_type) == DeviceType.FIVETHOUSAND else 2.5
@@ -487,7 +486,7 @@ class BatterySchedulerManager:
                 f"Load data accessed successfully for {plant_id}")
             return load
 
-    def optimize(self, prices: List[float], sell_prices: List[float], solars: List[float], loads: List[float], max_charge_power: float, max_discharge_power: float, capacity: float) -> List[float]:
+    def optimize(self, prices: List[float], sell_prices: List[float], solars: List[float], loads: List[float], max_charge_power: float, max_discharge_power: float, capacity: float, initial_soc: float, current_time_index: int) -> List[float]:
         # Charge_mast is a list of 0s and 1s, 1 means the battery can be charged at that time
         # This is essential for a non-linear optimization problem, otherwise, the optimizer will not be able to solve the problem
         charge_mask = [0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1,
@@ -539,6 +538,8 @@ class BatterySchedulerManager:
             'R_c': max_charge_power,
             'R_d': max_discharge_power,
             'capacity': capacity,
+            'initial_soc': initial_soc,
+            'current_time_index': current_time_index,
             'charge_mask': charge_mask,
         }
         scheduler = BatteryScheduler(config)
@@ -567,10 +568,6 @@ class BatterySchedulerManager:
 
             # We will force a re-schedule update at 4:45 PM
             if self._is_update_time(current_time, afternoon_update_time) or self._is_update_time(current_time, morning_update_time):
-                # This line will turn on the flag after 4:45 PM so that the new evening schedule will leave morning schedule unchanged
-                self.should_update_schedule = False
-                if self._is_update_schedule_time(current_time, afternoon_update_time):
-                    self.should_update_schedule = True
                 # Push all customers' schedule to the AI server
                 await self.prepare_bat_sched_all_users()
                 self.last_bat_sched_time = current_time
@@ -585,15 +582,22 @@ class BatterySchedulerManager:
                 tasks.append(self.prep_bat_sched_each_user(user_name))
             await asyncio.gather(*tasks, return_exceptions=True)
 
+    def get_current_time_index(self, time_interval):
+        now = datetime.now(pytz.timezone('Australia/Brisbane'))
+        minutes_since_midnight = now.hour * 60 + now.minute
+        index = (minutes_since_midnight * time_interval) // (24 * 60)
+        return index
+
     async def prep_bat_sched_each_user(self, user_name):
         try:
             self.logger.info(f"Preparing schedule for {user_name}")
-            plant_id = self.user_manager.get_user_profile(
-                user_name).get('plant_id')
+            plant_id = self.user_manager.get_plant_for_user(user_name)
             
             prices = await self.get_prices(plant_id)
             pvs = await self.get_solar(plant_id)
             loads = await self.get_load(plant_id)
+            plant_stats = await self.get_current_plant_stats(plant_id)
+            soc_percentage = sum(device.get('soc', 0) for device in plant_stats.values()) / (len(plant_stats)*100)
             buy_prices = prices['buy']
             sell_prices = prices['sell']
             plant_charge_power = self.user_manager.get_user_profile(
@@ -602,8 +606,9 @@ class BatterySchedulerManager:
                 user_name).get('total_bat_discharge_power', 0)
             capacity = self.user_manager.get_user_profile(
                 user_name).get('capacity', 0)
+            current_time_index = self.get_current_time_index(48)
             schedule = self.optimize(
-                buy_prices, sell_prices, pvs, loads, plant_charge_power, plant_discharge_power, capacity)
+                buy_prices, sell_prices, pvs, loads, plant_charge_power, plant_discharge_power, capacity, soc_percentage, current_time_index)
 
             await self.push_schedule_to_AI(plant_id, schedule)
             self.schedule_for_compare[user_name] = self.make_battery_schedule(
@@ -624,14 +629,11 @@ class BatterySchedulerManager:
         # Round the float to 2 decimal places
         schedule_copy = [round(x, 2) for x in schedule_copy]
 
-        # Merge the schedule with the existing morning schedule at afternoon 4:30
-        user_name = self.user_manager.get_user_for_plant(plant_id)
-        if self.should_update_schedule and self.schedule is not None and self.schedule.get(user_name) is not None:
-            morning_schedule = copy.deepcopy(self.schedule[user_name])
-            morning_schedule = np.interp(np.linspace(0, len(morning_schedule)-1, 288),
-                                         np.arange(len(morning_schedule)), morning_schedule).tolist()
-            morning_schedule = [round(x, 2) for x in morning_schedule]
-            schedule_copy = morning_schedule[:198] + schedule_copy[198:]
+        # Merge the schedule with the existing schedule when pushing the schedule
+        existing_schedule = await self.get_schedule(plant_id)
+        if existing_schedule is not None:
+            current_time_index = self.get_current_time_index(288)
+            schedule_copy = existing_schedule[:current_time_index] + schedule_copy[current_time_index:]
 
         # Flip the schedule to match the AI server's format
         schedule_copy = [-x for x in schedule_copy]
@@ -670,11 +672,14 @@ class BatterySchedulerManager:
         }
         response = await self.ai_client.data_api_request("battery_actions/get", model_data)
         if response and ErrorCode(response.get('errorCode')) == ErrorCode.SUCCESS:
+            battery_actions = util.decode_model_data(response.get('data')[0].get('action_power'))
+            battery_actions = [-x for x in battery_actions] # Flip the schedule to match the AI server's format
             self.logger.info(
                 f"Schedule data obtained successfully for {plant_id}")
+            return battery_actions
         else:
-            raise RuntimeError(
-                f"Error request schedule for {plant_id}: {response.get('infoText')}")
+            self.logger.info(f"Error request schedule for {plant_id}: {response.get('infoText')}")
+            return None
 
     def get_logs(self):
         with open('logs.txt', 'r') as file:
@@ -707,39 +712,22 @@ class BatterySchedulerManager:
         }
         return self.monitor.get_current_time(state_timezone_map[state])
     
-    async def get_current_plant_stats(self, sn):
-        plant_id = self.user_manager.get_plant_for_device(sn)
+    async def get_current_plant_stats(self, identifier, is_sn=False):
+        if is_sn:
+            sn = identifier
+            plant_id = self.user_manager.get_plant_for_device(sn)
+        else:
+            plant_id = identifier
         devices = self.user_manager.get_devices_for_plant(plant_id)
-        if sn not in self.plant_data:
-            self.plant_data[plant_id] = {}
-        if 'load' not in self.plant_data[plant_id]:
-            self.plant_data[plant_id]['load'] = await self._get_plant_load(devices)
-        if 'solar' not in self.plant_data[plant_id]:
-            self.plant_data[plant_id]['solar'] = await self._get_plant_solar(devices)
-        if 'socs' not in self.plant_data[plant_id]:
-            self.plant_data[plant_id]['device_soc_pair'] = await self._get_plant_device_socs(devices)
-        return self.plant_data[plant_id]
+        stats = await self._get_plant_stats(devices)
+        stats_dict = {device: stats for device, stats in zip(devices, stats)}
+        return stats_dict
 
-    async def _get_plant_device_socs(self, devices):
-        socs_values = await asyncio.gather(
+    async def _get_plant_stats(self, devices):
+        stats = await asyncio.gather(
             *[self.monitor.get_realtime_battery_stats(device) for device in devices]
         )
-        device_soc_pair = [(device, soc['soc']) for device, soc in zip(devices, socs_values)]
-        return device_soc_pair
-    
-    async def _get_plant_load(self, devices):
-        load_values = await asyncio.gather(
-            *[self.monitor.get_realtime_battery_stats(device) for device in devices]
-        )
-        total_load = sum(load['loadP'] for load in load_values)
-        return total_load
-    
-    async def _get_plant_solar(self, devices):
-        solar_values = await asyncio.gather(
-            *[self.monitor.get_realtime_battery_stats(device) for device in devices]
-        )
-        total_solar = sum(solar['ppv'] for solar in solar_values)
-        return total_solar
+        return stats
     
     async def get_current_battery_stats(self, sn):
         return await self.monitor.get_realtime_battery_stats(sn)

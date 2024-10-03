@@ -192,6 +192,9 @@ class UserManager:
 
     def get_user_for_plant(self, plant_id: int) -> str:
         return self.plant_to_user.get(plant_id, None)
+    
+    def get_plant_for_user(self, user_name: str) -> int:
+        return self.get_user_profile(user_name).get('plant_id')
 
     def get_plants(self) -> List[int]:
         return list(self.plant_to_devices.keys())
