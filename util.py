@@ -41,7 +41,26 @@ setup_logger('logger', 'logs.txt', logging.INFO)
 setup_logger('shawsbay_logger', 'sb_logs.txt', logging.INFO)
 logger = logging.getLogger('logger')
 
-
+def async_retry(max_retries=3, delay=5):
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            retries = 0
+            while retries < max_retries:
+                try:
+                    result = await func(*args, **kwargs)
+                    if result is not None:
+                        return result
+                    raise ValueError("Function returned None")
+                except Exception as e:
+                    retries += 1
+                    if retries == max_retries:
+                        logging.error(f"Failed after {max_retries} attempts: {str(e)}")
+                        raise
+                    logging.warning(f"Attempt {retries} failed: {str(e)}. Retrying in {delay} seconds...")
+                    await asyncio.sleep(delay)
+        return wrapper
+    return decorator
 def api_status_check(max_retries=10, delay=10):
     """
     A decorator function that checks the status of a device after executing a command.

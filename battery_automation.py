@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import time
 import copy
 import util
+from util import async_retry
 import math
 import logging
 import tomli
@@ -435,6 +436,7 @@ class BatterySchedulerManager:
 
         return BatterySchedule(actions=adjusted_actions)
 
+    @async_retry(max_retries=3, delay=5)
     async def get_prices(self, plant_id) -> List[float]:
         # Elmar's API call to get prices
         # Ensure login before making the request
@@ -457,6 +459,7 @@ class BatterySchedulerManager:
                 "Price data accessed successfully for %s", plant_id)
             return {'buy': price_buy_decoded, 'sell': price_sell_decoded}
 
+    @async_retry(max_retries=3, delay=5)
     async def get_solar(self, plant_id) -> List[float]:
         # Elmar's API call to get solar prediction
         await self.ai_client.ensure_login("ye.tao@redx.com.au", "1111")
@@ -474,6 +477,7 @@ class BatterySchedulerManager:
             self.logger.info("PV data accessed successfully for %s", plant_id)
             return pv
 
+    @async_retry(max_retries=3, delay=5)
     async def get_load(self, plant_id) -> List[float]:
         # Elmar's API call to get load prediction
         await self.ai_client.ensure_login("ye.tao@redx.com.au", "1111")
@@ -649,7 +653,10 @@ class BatterySchedulerManager:
                 user_name).get('capacity', 0)
             current_time_index = self.get_current_time_index(48)
             existing_schedule = await self.get_schedule(plant_id)
-            init_kwh = -existing_schedule[0]
+            if existing_schedule is None:
+                init_kwh = 0
+            else:
+                init_kwh = -existing_schedule[0]
             schedule = self.optimize(
                 buy_prices, sell_prices, pvs, loads, plant_charge_power, plant_discharge_power, capacity, init_kwh, bat_kwh_now, current_time_index)
 
@@ -706,26 +713,31 @@ class BatterySchedulerManager:
                 "Error pushing schedule for %s: %s" % (plant_id, response.get('infoText')))
 
     async def get_schedule(self, plant_id) -> List[float]:
-        await self.ai_client.ensure_login("ye.tao@redx.com.au", "1111")
+        try:
+            await self.ai_client.ensure_login("ye.tao@redx.com.au", "1111")
 
-        now = datetime.now(pytz.timezone('Australia/Brisbane'))
-        date = now.strftime('%Y-%m-%d')
-        model_data = {
-            "plant_id": plant_id,
-            "date": date,
-        }
-        response = await self.ai_client.data_api_request("battery_actions/get", model_data)
-        if response and ErrorCode(response.get('errorCode')) == ErrorCode.SUCCESS:
-            battery_actions = util.decode_model_data(
-                response.get('data')[0].get('action_power'))
-            # Flip the schedule to match the AI server's format
-            battery_actions = [-x for x in battery_actions]
-            self.logger.info(
-                "Schedule data obtained successfully for %s", plant_id)
-            return battery_actions
-        else:
-            self.logger.info("Error request schedule for %s: %s",
-                             plant_id, response.get('infoText'))
+            now = datetime.now(pytz.timezone('Australia/Brisbane'))
+            date = now.strftime('%Y-%m-%d')
+            model_data = {
+                "plant_id": plant_id,
+                "date": date,
+            }
+            response = await self.ai_client.data_api_request("battery_actions/get", model_data)
+            if response and ErrorCode(response.get('errorCode')) == ErrorCode.SUCCESS:
+                battery_actions = util.decode_model_data(
+                    response.get('data')[0].get('action_power'))
+                # Flip the schedule to match the AI server's format
+                battery_actions = [-x for x in battery_actions]
+                self.logger.info(
+                    "Schedule data obtained successfully for %s", plant_id)
+                return battery_actions
+            else:
+                self.logger.info("Error request schedule for %s: %s",
+                                plant_id, response.get('infoText'))
+                return None
+        except Exception as e:
+            self.logger.error("Error getting schedule for %s: %s",
+                             plant_id, e)
             return None
 
     def get_logs(self):
