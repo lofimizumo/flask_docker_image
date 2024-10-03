@@ -21,7 +21,8 @@ class BatterySchedulerConfig():
     R_c: float
     R_d: float
     capacity: float
-    initial_soc: float
+    bat_kwh_now: float
+    init_kwh: float
     current_time_index: int
     charge_mask: List[int]
 
@@ -59,8 +60,11 @@ class BatteryScheduler:
         # Constraints
         model.addConstrs((g_c[t] == self.config.l[t] - self.config.p[t] + x[t] for t in T), "grid_consumption")
         
-        model.addConstr(state_of_charge[self.config.current_time_index] <= self.config.initial_soc, "initial_soc")
-        model.addConstr(state_of_charge[self.config.current_time_index] >= self.config.initial_soc, "initial_soc")
+        # model.addConstr(state_of_charge[0] <= 0.01, "initial_soc")
+        model.addConstr(state_of_charge[0] <= self.config.init_kwh, "initial_soc")
+        model.addConstr(state_of_charge[0] >= self.config.init_kwh, "initial_soc")
+        model.addConstr(state_of_charge[self.config.current_time_index] <= self.config.bat_kwh_now, "initial_soc")
+        model.addConstr(state_of_charge[self.config.current_time_index] >= self.config.bat_kwh_now, "initial_soc")
         model.addConstrs((state_of_charge[t] == state_of_charge[t-1] + x[t-1]/self.interval_coef for t in range(1, len(T))), "soc_evolution")
         model.addConstrs((x[t] >= -state_of_charge[t-1]*self.interval_coef for t in range(1, len(T))), "discharge_limit")
         model.addConstr(x[0] >= -self.config.capacity, "initial_discharge_limit")
@@ -234,7 +238,9 @@ if __name__ == '__main__':
     config['l'] = resample_data(config['l'], 48)
     config['p'] = resample_data(config['p'], 48)
     config['charge_mask'] = resample_data(config['charge_mask'], 48)
-    config['initial_soc'] = 15.51
+    config['init_kwh'] = 0.0
+    config['bat_kwh_now'] = 2.0
+    config['current_time_index'] = 28
     scheduler = BatteryScheduler(config)
     x_vals, socs = scheduler.solve()
     # x_vals = adjust_middle_value(x_vals)

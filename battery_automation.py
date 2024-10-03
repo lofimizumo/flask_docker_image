@@ -27,6 +27,7 @@ class DeviceType(Enum):
     TWOFIVEZEROFIVE = 2505
     SEVENTHOUSAND = 7000
 
+
 class ErrorCode(Enum):
     SUCCESS = 0
     ALREADY_EXIST = 3005
@@ -168,13 +169,11 @@ class BatterySchedulerManager:
                 await self._process_peak_valley_scheduler()
                 await asyncio.sleep(self.sample_interval)
             except Exception as e:
-                self.logger.error(f"Scheduling error: {e}")
-                self.logger.error(f"Traceback: {traceback.format_exc()}")
+                self.logger.error("Scheduling error: %s", e)
+                self.logger.error("Traceback: %s", traceback.format_exc())
                 await asyncio.sleep(self.sample_interval)
 
     def _seconds_to_next_n_minutes(self, current_time, n=5):
-        # self.logger.info(
-        #     f"Calculating seconds until the next {n}-minute interval...")
         next_time = current_time + timedelta(minutes=n)
         next_time = next_time.replace(
             minute=(next_time.minute // n) * n, second=0, microsecond=0)
@@ -192,15 +191,14 @@ class BatterySchedulerManager:
                     current_time=datetime.now(pytz.timezone('Australia/Brisbane')), n=2)
                 await asyncio.sleep(delay)
             except Exception as e:
-                logging.error(
-                    f"An exception occurred while updating Amber Prices: {str(e)}")
+                self.logger.error(
+                    "An exception occurred while updating Amber Prices: %s", str(e))
                 await asyncio.sleep(5)
 
     async def _collect_localvolts_prices(self):
         while self.is_running:
             try:
                 self.logger.info("Updating LocalVolts Prices...")
-                # self.logger.info("Now: " + str(datetime.now()))
                 quality = self._update_prices('lv')
                 if quality:
                     # Local Volts updates prices every 5 minutes
@@ -209,16 +207,14 @@ class BatterySchedulerManager:
                     delay = self._seconds_to_next_n_minutes(current_time, n=5)
                     # add 30 seconds to make sure the price is updated on Local Volts
                     delay = delay + 30
-                    # self.logger.info(
-                    # f"Next Price Update at: {current_time + timedelta(seconds=delay)}")
                     await asyncio.sleep(delay)
                 else:
                     self.logger.info(
                         "Quality is not good or Error happened, waiting for 10 seconds...")
                     await asyncio.sleep(10)
             except Exception as e:
-                logging.error(
-                    f"An exception occurred while updating LocalVolts Prices: {str(e)}")
+                self.logger.error(
+                    "An exception occurred while updating LocalVolts Prices: %s", str(e))
                 await asyncio.sleep(5)
 
     def _update_prices(self, target_retailer):
@@ -249,8 +245,9 @@ class BatterySchedulerManager:
 
             for sn, result in zip(self.sn_list, results):
                 if isinstance(result, Exception):
-                    self.logger.error(f"Processing failed for sn {sn}: {result}")
-                    self.logger.info(f"Restarting processing for sn {sn}")
+                    self.logger.error(
+                        "Processing failed for sn %s: %s", sn, result)
+                    self.logger.info("Restarting processing for sn %s", sn)
                     asyncio.create_task(self._process_send_cmd_each_sn(sn))
 
             await asyncio.sleep(self.sample_interval)
@@ -281,7 +278,7 @@ class BatterySchedulerManager:
 
     async def _process_send_cmd_each_sn(self, sn):
         try:
-            self.logger.info(f"Processing sn: {sn}")
+            self.logger.info("Processing sn: %s", sn)
             plant_id = self.user_manager.get_plant_for_device(sn)
             plant_stats = await self.get_current_plant_stats(sn, is_sn=True)
             bat_stats = await self.get_current_battery_stats(sn)
@@ -290,9 +287,12 @@ class BatterySchedulerManager:
             current_soc = bat_stats.get(
                 'soc', 0) / 100.0 if bat_stats else 0
             current_pv_kw = bat_stats.get('ppv', 0) if bat_stats else 0
-            plant_pv_kw = sum(plant_stats.get('ppv', 0) for plant_stats in plant_stats.values())
-            plant_load_kw = sum(plant_stats.get('loadP', 0) for plant_stats in plant_stats.values())
-            devices_need_charge = [device for device, stats in plant_stats.items() if stats.get('soc', 0) < 97]
+            plant_pv_kw = sum(plant_stats.get('ppv', 0)
+                              for plant_stats in plant_stats.values())
+            plant_load_kw = sum(plant_stats.get('loadP', 0)
+                                for plant_stats in plant_stats.values())
+            devices_need_charge = [
+                device for device, stats in plant_stats.items() if stats.get('soc', 0) < 97]
             device_type = DeviceType(self.user_manager.get_device_type(sn))
             algo_type = self.user_manager.get_algo_type(plant_id)
             buy_price_c = self.current_prices[plant_id]['buy'] if plant_id else 0.0
@@ -305,7 +305,8 @@ class BatterySchedulerManager:
             schedule = self.schedule_for_compare.get(
                 self.user_manager.get_user_for_plant(plant_id), None)
             schedule_adjusted = self.adjust_power_for_plant(schedule, sn)
-            device_percentage = self.get_device_power_percentage(sn, devices_need_charge)
+            device_percentage = self.get_device_power_percentage(
+                sn, devices_need_charge)
 
             command = self._get_battery_command(
                 current_buy_price=buy_price_c,
@@ -337,15 +338,16 @@ class BatterySchedulerManager:
                 self.last_command_time[sn] = c_datetime
                 self.last_schedule_peakvalley[sn] = command
                 self.logger.info(
-                    f"Successfully sent command for {sn}: {command}")
+                    "Successfully sent command for %s: %s", sn, command)
             else:
                 self.logger.info(
-                    f"Command Skipped: Command: {command}, Last Command: {last_command}, Time: {c_datetime}, Last Time: {last_command_time}")
+                    "Command Skipped: Command: %s, Last Command: %s, Time: %s, Last Time: %s", command, last_command, c_datetime, last_command_time)
         except BatteryStatsUpdateFailure:
             self.logger.error(
-                f"Failed to update battery stats for {sn}.")
+                "Failed to update battery stats for %s.", sn)
         except Exception as e:
-            error_message = f"Error processing sn:{sn}: {e} \n Traceback: {traceback.format_exc()}"
+            error_message = "Error processing sn:%s: %s \n Traceback: %s" % (
+                sn, e, traceback.format_exc())
             self.logger.error(error_message)
             raise e
 
@@ -369,14 +371,15 @@ class BatterySchedulerManager:
         3. Make battery decision Periodically (Check SampleInterval in the config.toml file)
         '''
         self.is_running = True
-        
+
         # Create a new event loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
         try:
             # Run the async setup and keep the tasks running
-            background_tasks = loop.run_until_complete(asyncio.gather(*self._setup()))
+            background_tasks = loop.run_until_complete(
+                asyncio.gather(*self._setup()))
             loop.run_forever()
         except KeyboardInterrupt:
             pass
@@ -386,18 +389,21 @@ class BatterySchedulerManager:
         self.logger.info("Stopped.")
         for task in asyncio.all_tasks(asyncio.get_event_loop()):
             task.cancel()
-    
+
     def get_device_power_percentage(self, sn, devices_need_charge):
         plant_id = self.user_manager.get_plant_for_device(sn)
         device_type = self.user_manager.get_device_type(sn)
         user_name = self.user_manager.get_user_for_plant(plant_id)
-        devices_meta_data = self.user_manager.get_user_profile(user_name).get('devices', [])
-        bat_powers =[dev.get('discharge_power', 2.5) for dev in devices_meta_data if dev.get('id') in devices_need_charge] 
+        devices_meta_data = self.user_manager.get_user_profile(
+            user_name).get('devices', [])
+        bat_powers = [dev.get('discharge_power', 2.5)
+                      for dev in devices_meta_data if dev.get('id') in devices_need_charge]
         total_discharge_power = sum(bat_powers)
         device_discharge_power = 5 if DeviceType(
             device_type) == DeviceType.FIVETHOUSAND else 2.5
 
-        adjustment_factor = device_discharge_power / total_discharge_power if total_discharge_power > 0 else 0 # avoid division by zero
+        adjustment_factor = device_discharge_power / \
+            total_discharge_power if total_discharge_power > 0 else 0  # avoid division by zero
         return adjustment_factor
 
     def adjust_power_for_plant(self, schedule, sn: str):
@@ -448,7 +454,7 @@ class BatterySchedulerManager:
             price_sell_decoded = util.decode_model_data(
                 data[0].get('model_price_sell'))
             self.logger.info(
-                f"Price data accessed successfully for {plant_id}")
+                "Price data accessed successfully for %s", plant_id)
             return {'buy': price_buy_decoded, 'sell': price_sell_decoded}
 
     async def get_solar(self, plant_id) -> List[float]:
@@ -465,7 +471,7 @@ class BatterySchedulerManager:
         if response and ErrorCode(response.get('errorCode')) == ErrorCode.SUCCESS:
             data = response.get('data')
             pv = util.decode_model_data(data[0].get('model_adjusted_pv'))
-            self.logger.info(f"PV data accessed successfully for {plant_id}")
+            self.logger.info("PV data accessed successfully for %s", plant_id)
             return pv
 
     async def get_load(self, plant_id) -> List[float]:
@@ -483,10 +489,40 @@ class BatterySchedulerManager:
             data = response.get('data')
             load = util.decode_model_data(data[0].get('model_prediction_load'))
             self.logger.info(
-                f"Load data accessed successfully for {plant_id}")
+                "Load data accessed successfully for %s", plant_id)
             return load
 
-    def optimize(self, prices: List[float], sell_prices: List[float], solars: List[float], loads: List[float], max_charge_power: float, max_discharge_power: float, capacity: float, initial_soc: float, current_time_index: int) -> List[float]:
+    def optimize(self, prices: List[float], sell_prices: List[float], solars: List[float], loads: List[float], max_charge_power: float, max_discharge_power: float, capacity: float, init_kwh: float, bat_kwh_now: float, current_time_index: int) -> List[float]:
+        """
+        Optimizes the battery charging and discharging schedule based on various input parameters.
+
+        This method uses a battery scheduling algorithm to determine the optimal charging and discharging
+        actions for a battery system over a 24-hour period. It takes into account electricity prices,
+        solar generation, load demand, and battery characteristics to maximize the economic benefit
+        or minimize the cost of electricity usage.
+
+        Args:
+            prices (List[float]): List of electricity buy prices for each time interval.
+            sell_prices (List[float]): List of electricity sell prices for each time interval.
+            solars (List[float]): List of solar generation values for each time interval.
+            loads (List[float]): List of load demand values for each time interval.
+            max_charge_power (float): Maximum charging power of the battery in kW.
+            max_discharge_power (float): Maximum discharging power of the battery in kW.
+            capacity (float): Total capacity of the battery in kWh.
+            init_kwh (float): Initial energy stored in the battery in kWh.
+            bat_kwh_now (float): Current energy stored in the battery in kWh.
+            current_time_index (int): Index of the current time in the input lists.
+
+        Returns:
+            List[float]: A list of battery actions (positive for charging, negative for discharging)
+                        for each time interval over the next 24 hours.
+
+        Note:
+            - The method uses a charge mask to constrain charging to specific time periods.
+            - It employs a battery scheduling algorithm to optimize the charge/discharge schedule.
+            - The returned list represents the optimal battery actions for the next 24 hours,
+            starting from the current time index.
+        """
         # Charge_mast is a list of 0s and 1s, 1 means the battery can be charged at that time
         # This is essential for a non-linear optimization problem, otherwise, the optimizer will not be able to solve the problem
         charge_mask = [0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1,
@@ -538,14 +574,15 @@ class BatterySchedulerManager:
             'R_c': max_charge_power,
             'R_d': max_discharge_power,
             'capacity': capacity,
-            'initial_soc': initial_soc,
+            'init_kwh': init_kwh,
+            'bat_kwh_now': bat_kwh_now,
             'current_time_index': current_time_index,
             'charge_mask': charge_mask,
         }
         scheduler = BatteryScheduler(config)
         x_vals, _ = scheduler.solve()
         # x_vals = adjust_middle_value(x_vals)
-        # import random 
+        # import random
         # rand_file_names = ['battery_sched.pkl', 'battery_sched_2.pkl', 'battery_sched_3.pkl', 'battery_sched_4.pkl', 'battery_sched_5.pkl']
         # pickle.dump((config, x_vals, _, charge_mask), open(random.choice(rand_file_names), 'wb'))
         return x_vals
@@ -571,7 +608,7 @@ class BatterySchedulerManager:
                 # Push all customers' schedule to the AI server
                 await self.prepare_bat_sched_all_users()
                 self.last_bat_sched_time = current_time
-            
+
             # Wait for 1 minute before checking again
             await asyncio.sleep(60)
 
@@ -590,14 +627,18 @@ class BatterySchedulerManager:
 
     async def prep_bat_sched_each_user(self, user_name):
         try:
-            self.logger.info(f"Preparing schedule for {user_name}")
+            self.logger.info("Preparing schedule for %s", user_name)
             plant_id = self.user_manager.get_plant_for_user(user_name)
-            
+
             prices = await self.get_prices(plant_id)
             pvs = await self.get_solar(plant_id)
             loads = await self.get_load(plant_id)
             plant_stats = await self.get_current_plant_stats(plant_id)
-            soc_percentage = sum(device.get('soc', 0) for device in plant_stats.values()) / (len(plant_stats)*100)
+            soc_percentage = sum(device.get(
+                'soc', 0) for device in plant_stats.values()) / (len(plant_stats)*100)
+            bat_capacity = self.user_manager.get_user_profile(
+                user_name).get('capacity', 0)
+            bat_kwh_now = bat_capacity * soc_percentage
             buy_prices = prices['buy']
             sell_prices = prices['sell']
             plant_charge_power = self.user_manager.get_user_profile(
@@ -607,18 +648,21 @@ class BatterySchedulerManager:
             capacity = self.user_manager.get_user_profile(
                 user_name).get('capacity', 0)
             current_time_index = self.get_current_time_index(48)
+            existing_schedule = await self.get_schedule(plant_id)
+            init_kwh = -existing_schedule[0]
             schedule = self.optimize(
-                buy_prices, sell_prices, pvs, loads, plant_charge_power, plant_discharge_power, capacity, soc_percentage, current_time_index)
+                buy_prices, sell_prices, pvs, loads, plant_charge_power, plant_discharge_power, capacity, init_kwh, bat_kwh_now, current_time_index)
 
-            await self.push_schedule_to_AI(plant_id, schedule)
+            await self.push_schedule_to_AI(plant_id, schedule, existing_schedule)
             self.schedule_for_compare[user_name] = self.make_battery_schedule(
                 schedule, buy_prices, sell_prices, loads, pvs)
             self.schedule[user_name] = schedule
         except Exception as e:
-            error_message = f"Error preparing schedule for {user_name}: {e} \n Traceback: {traceback.format_exc()}"
-            logging.error(error_message)
+            error_message = "Error preparing schedule for %s: %s \n Traceback: %s" % (
+                user_name, e, traceback.format_exc())
+            self.logger.error(error_message)
 
-    async def push_schedule_to_AI(self, plant_id, schedule) -> List[float]:
+    async def push_schedule_to_AI(self, plant_id, schedule, existing_schedule) -> List[float]:
         schedule_copy = copy.deepcopy(schedule)
         await self.ai_client.ensure_login("ye.tao@redx.com.au", "1111")
         now = datetime.now(pytz.timezone('Australia/Brisbane'))
@@ -630,10 +674,10 @@ class BatterySchedulerManager:
         schedule_copy = [round(x, 2) for x in schedule_copy]
 
         # Merge the schedule with the existing schedule when pushing the schedule
-        existing_schedule = await self.get_schedule(plant_id)
         if existing_schedule is not None:
             current_time_index = self.get_current_time_index(288)
-            schedule_copy = existing_schedule[:current_time_index] + schedule_copy[current_time_index:]
+            schedule_copy = existing_schedule[:current_time_index] + \
+                schedule_copy[current_time_index:]
 
         # Flip the schedule to match the AI server's format
         schedule_copy = [-x for x in schedule_copy]
@@ -642,24 +686,24 @@ class BatterySchedulerManager:
             "date": date,
             "action_power": schedule_copy,
         }
-        self.logger.info(f"Pushing schedule for {plant_id}: {model_data}")
+        self.logger.info("Pushing schedule for %s: %s", plant_id, model_data)
         response = await self.ai_client.data_api_request("battery_actions/set", model_data)
         if response and ErrorCode(response.get('errorCode')) == ErrorCode.SUCCESS:
             self.logger.info(
-                f"Schedule data pushed successfully for {plant_id}")
+                "Schedule data pushed successfully for %s", plant_id)
         elif response and ErrorCode(response.get('errorCode')) == ErrorCode.ALREADY_EXIST:
             self.logger.info(
-                f"Schedule data already exists for {plant_id}. Overwritting the data..")
+                "Schedule data already exists for %s. Overwritting the data..", plant_id)
             response = await self.ai_client.data_api_request("battery_actions/update", model_data)
             if response and ErrorCode(response.get('errorCode')) == ErrorCode.SUCCESS:
                 self.logger.info(
-                    f"Schedule data overwritten successfully for {plant_id}")
+                    "Schedule data overwritten successfully for %s", plant_id)
             else:
                 raise RuntimeError(
-                    f"Error overwriting schedule for {plant_id}: {response.get('infoText')}")
+                    "Error overwriting schedule for %s: %s" % (plant_id, response.get('infoText')))
         else:
             raise RuntimeError(
-                f"Error pushing schedule for {plant_id}: {response.get('infoText')}")
+                "Error pushing schedule for %s: %s" % (plant_id, response.get('infoText')))
 
     async def get_schedule(self, plant_id) -> List[float]:
         await self.ai_client.ensure_login("ye.tao@redx.com.au", "1111")
@@ -672,13 +716,16 @@ class BatterySchedulerManager:
         }
         response = await self.ai_client.data_api_request("battery_actions/get", model_data)
         if response and ErrorCode(response.get('errorCode')) == ErrorCode.SUCCESS:
-            battery_actions = util.decode_model_data(response.get('data')[0].get('action_power'))
-            battery_actions = [-x for x in battery_actions] # Flip the schedule to match the AI server's format
+            battery_actions = util.decode_model_data(
+                response.get('data')[0].get('action_power'))
+            # Flip the schedule to match the AI server's format
+            battery_actions = [-x for x in battery_actions]
             self.logger.info(
-                f"Schedule data obtained successfully for {plant_id}")
+                "Schedule data obtained successfully for %s", plant_id)
             return battery_actions
         else:
-            self.logger.info(f"Error request schedule for {plant_id}: {response.get('infoText')}")
+            self.logger.info("Error request schedule for %s: %s",
+                             plant_id, response.get('infoText'))
             return None
 
     def get_logs(self):
@@ -695,12 +742,12 @@ class BatterySchedulerManager:
         if sn not in self.sn_list:
             self.sn_list.append(sn)
             self._init_device_profiles(sn)
-            self.logger.info(f"Added device {sn} to the scheduler.")
+            self.logger.info("Added device %s to the scheduler.", sn)
 
     def remove_amber_device(self, sn):
         if sn in self.sn_list:
             self.sn_list.remove(sn)
-            self.logger.info(f"Removed device {sn} from the scheduler.")
+            self.logger.info("Removed device %s from the scheduler.", sn)
 
     def get_current_price(self, retailer='amber', plant_id=None):
         return self.monitor.get_realtime_price(retailer=retailer, plant_id=plant_id)
@@ -711,7 +758,7 @@ class BatterySchedulerManager:
             'nsw': 'Australia/Sydney'
         }
         return self.monitor.get_current_time(state_timezone_map[state])
-    
+
     async def get_current_plant_stats(self, identifier, is_sn=False):
         if is_sn:
             sn = identifier
@@ -728,7 +775,7 @@ class BatterySchedulerManager:
             *[self.monitor.get_realtime_battery_stats(device) for device in devices]
         )
         return stats
-    
+
     async def get_current_battery_stats(self, sn):
         return await self.monitor.get_realtime_battery_stats(sn)
 
@@ -769,7 +816,7 @@ class ShawsbaySchedulerManager:
         current_prices (dict): Current prices for each device.
         sample_interval (int): Interval for sampling data.
 
-    Args:
+        Args:
         scheduler_type (str): Type of scheduler to use (default: 'AIScheduler').
         battery_sn (list): List of battery serial numbers.
         test_mode (bool): Whether to run in test mode (default: False).
@@ -846,8 +893,8 @@ class ShawsbaySchedulerManager:
                 self._process_ai_scheduler()
                 time.sleep(self.sample_interval)
             except Exception as e:
-                logging.error(f"Scheduling error: {e}")
-                logging.error(f"Traceback: {traceback.format_exc()}")
+                self.logger.error("Scheduling error: %s", e)
+                self.logger.error("Traceback: %s", traceback.format_exc())
                 time.sleep(self.sample_interval)
                 # self._make_battery_decision()
 
@@ -859,7 +906,7 @@ class ShawsbaySchedulerManager:
             schedule, load, current_time)
         schedule = self.scheduler.adjust_charge_power(
             schedule, load, current_time)
-        self.logger.info(f"Schedule: {schedule}")
+        self.logger.info("Schedule: %s", schedule)
 
         for sn in self.sn_list:
             battery_schedule = schedule.get(sn, {})
@@ -872,7 +919,7 @@ class ShawsbaySchedulerManager:
                                 kwargs={'json': battery_schedule, 'sn': sn})
                 thread.start()
             except Exception as e:
-                logging.error(f"Error sending battery command: {e}")
+                self.logger.error("Error sending battery command: %s", e)
                 continue
 
         self.last_schedule_ai = copy.deepcopy(schedule)
@@ -1112,9 +1159,9 @@ class HybridAlgo():
                 max_solar = (
                     1-(1.4*rain_info['clouds']+0.6*rain_info['rain'])/(2*100))*max_solar
                 self.logger.info(
-                    f'Weather forecast: rain: {rain_info["rain"]}, clouds: {rain_info["clouds"]}, max_solar: {max_solar}')
+                    "Weather forecast: rain: %s, clouds: %s, max_solar: %s", rain_info["rain"], rain_info["clouds"], max_solar)
             except Exception as e:
-                logging.error(e)
+                self.logger.error("%s", e)
 
         _, gaus_y = gaussian_mixture(interval)
         return gaus_y*max_solar
@@ -1169,7 +1216,7 @@ class HybridAlgo():
                     command = {"command": "Idle"}
 
                 self.logger.info(
-                    f"Using scheduled action for {device_sn}: {command}")
+                    "Using scheduled action for %s: %s", device_sn, command)
                 return command
 
         # If no schedule available or not confident, proceed with the original logic
@@ -1218,8 +1265,9 @@ class HybridAlgo():
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': anti_backflow}
 
-        self.logger.info(f"AmberModel (Sell to Grid): price: {current_buy_price}, sell price: {sell_price}, usage: {current_usage}, "
-                         f"time: {current_time}, command: {command}")
+        self.logger.info("AmberModel (Sell to Grid): price: %s, sell price: %s, usage: %s, "
+                         "time: %s, command: %s", current_buy_price, sell_price, current_usage,
+                         current_time, command)
 
         return command
 
@@ -1270,8 +1318,9 @@ class HybridAlgo():
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': anti_backflow}
 
-        self.logger.info(f"AmberModel (Sell to Grid): price: {current_buy_price}, sell price: {sell_price}, usage: {current_usage}, "
-                         f"time: {current_time}, command: {command}")
+        self.logger.info("AmberModel (Sell to Grid): price: %s, sell price: %s, usage: %s, "
+                         "time: %s, command: %s", current_buy_price, sell_price, current_usage,
+                         current_time, command)
 
         return command
 
@@ -1315,8 +1364,9 @@ class HybridAlgo():
             command = {'command': 'Discharge', 'power': power,
                        'anti_backflow': False}
 
-        self.logger.info(f"AmberModel (Auto-Time): price: {current_buy_price}, usage: {current_usage}, "
-                         f"time: {current_time}, command: {command}")
+        self.logger.info("AmberModel (Auto-Time): price: %s, usage: %s, "
+                         "time: %s, command: %s", current_buy_price, current_usage,
+                         current_time, command)
 
         return command
 
@@ -1382,8 +1432,9 @@ class HybridAlgo():
             command = {'command': 'Discharge', 'power': powerkW,
                        'anti_backflow': anti_backflow}
 
-        self.logger.info(f"AmberModel(Cover Usage) : price: {current_buy_price}, WeightedPrice: {weighted_price}, usage: {current_usagekW}, "
-                         f"time: {current_time}, command: {command}")
+        self.logger.info("AmberModel(Cover Usage) : price: %s, WeightedPrice: %s, usage: %s, "
+                         "time: %s, command: %s", current_buy_price, weighted_price, current_usagekW,
+                         current_time, command)
 
         return command
 
@@ -1512,7 +1563,7 @@ class ShawsbayAlgo():
         except Exception as e:
             demand, price = pickle.load(open('demand_price.pkl', 'rb'))
             self.logger.info(
-                f'Error fetching demand with get_prediction API, use the default demand instead. Error: {e}')
+                "Error fetching demand with get_prediction API, use the default demand instead. Error: %s", e)
 
         interval = int(24*60/len(demand))
 
@@ -1576,9 +1627,9 @@ class ShawsbayAlgo():
                 max_solar = (
                     1-sigma*(1.4*rain_info['clouds']+0.6*rain_info['rain'])/(2*100))*max_solar
                 self.logger.info(
-                    f'Weather forecast: rain: {rain_info["rain"]}, clouds: {rain_info["clouds"]}, max_solar: {max_solar}')
+                    "Weather forecast: rain: %s, clouds: %s, max_solar: %s", rain_info["rain"], rain_info["clouds"], max_solar)
             except Exception as e:
-                logging.error(e)
+                self.logger.error("%s", e)
 
         _, gaus_y = gaussian_mixture(interval)
         return gaus_y*max_solar
@@ -2008,7 +2059,7 @@ class ShawsbayAlgo():
                 for task_type, task_time, task_duration in self.tasks:
                     if not self.allocate_battery(task_time, task_type, task_duration):
                         self.logger.info(
-                            f'task {task_time} {task_type} {task_duration} failed to allocate battery')
+                            "task %s %s %s failed to allocate battery", task_time, task_type, task_duration)
 
                 def unit_to_time(unit, sample_interval):
                     total_minutes = int(unit * sample_interval)
@@ -2059,9 +2110,9 @@ class ShawsbayAlgo():
         current_day = datetime.now(tz=pytz.timezone('Australia/Sydney')).day
         if self.last_scheduled_date != current_day:
             self.logger.info(
-                f'Updating schedule: day {current_day}, time: {datetime.now(tz=pytz.timezone("Australia/Sydney"))}, last_scheduled_date: {self.last_scheduled_date}')
+                "Updating schedule: day %s, time: %s, last_scheduled_date: %s", current_day, datetime.now(tz=pytz.timezone("Australia/Sydney")), self.last_scheduled_date)
             demand, price = self._get_demand_and_price()
-            self.logger.info(f'demand: {demand}')
+            self.logger.info("demand: %s", demand)
             stats = self._get_battery_status()
             self.schedule = self.generate_schedule(
                 demand, price, self.battery_max_capacity_kwh, self.num_batteries, stats, self.price_weight)
