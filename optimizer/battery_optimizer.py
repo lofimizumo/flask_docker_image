@@ -64,6 +64,7 @@ class BatteryScheduler:
         model.addConstr(state_of_charge[self.config.current_time_index] <= self.config.bat_kwh_now, "initial_soc")
         model.addConstr(state_of_charge[self.config.current_time_index] >= self.config.bat_kwh_now, "initial_soc")
         model.addConstrs((state_of_charge[t] == state_of_charge[t-1] + x[t-1]/self.interval_coef for t in range(1, len(T))), "soc_evolution")
+        model.addConstrs((state_of_charge[t] >= 0.10 * self.config.capacity for t in T), "minimum_soc")
         model.addConstrs((x[t] >= -state_of_charge[t-1]*self.interval_coef for t in range(1, len(T))), "discharge_limit")
         model.addConstr(x[0] >= -self.config.capacity, "initial_discharge_limit")
         model.addConstr(state_of_charge[len(T)-1] <= self.config.capacity*0.5, "final_soc")
