@@ -61,8 +61,6 @@ class BatteryScheduler:
         model.addConstrs((g_c[t] == self.config.l[t] - self.config.p[t] + x[t] for t in T), "grid_consumption")
         
         # model.addConstr(state_of_charge[0] <= 0.01, "initial_soc")
-        model.addConstr(state_of_charge[0] <= self.config.init_kwh, "initial_soc")
-        model.addConstr(state_of_charge[0] >= self.config.init_kwh, "initial_soc")
         model.addConstr(state_of_charge[self.config.current_time_index] <= self.config.bat_kwh_now, "initial_soc")
         model.addConstr(state_of_charge[self.config.current_time_index] >= self.config.bat_kwh_now, "initial_soc")
         model.addConstrs((state_of_charge[t] == state_of_charge[t-1] + x[t-1]/self.interval_coef for t in range(1, len(T))), "soc_evolution")
