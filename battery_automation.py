@@ -1219,7 +1219,7 @@ class HybridAlgo():
                     #     adjusted_power_w = excess_solar * device_percentage * 1000
                     #     command = {'command': 'Charge', 'power': adjusted_power_w, 'grid_charge': True} # enable grid_charge in case some devices have extra solar but some don't, force all to follow plan to achieve plant level charge alignment
                     command = {'command': 'Charge', 'power': abs(
-                        scheduled_action), 'grid_charge': is_grid_charge_on}
+                        scheduled_action), 'grid_charge': True}
                 elif scheduled_action < 0:
                     is_anti_backflow_on = battery_action.is_anti_backflow_on
                     command = {'command': 'Discharge', 'power': abs(
