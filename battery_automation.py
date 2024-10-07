@@ -642,7 +642,7 @@ class BatterySchedulerManager:
                 'soc', 0) for device in plant_stats.values()) / (len(plant_stats)*100)
             bat_capacity = self.user_manager.get_user_profile(
                 user_name).get('capacity', 0)
-            bat_kwh_now = bat_capacity * soc_percentage
+            bat_kwh_now = max(bat_capacity * soc_percentage, 0.1*bat_capacity)
             buy_prices = prices['buy']
             sell_prices = prices['sell']
             plant_charge_power = self.user_manager.get_user_profile(
@@ -654,7 +654,7 @@ class BatterySchedulerManager:
             current_time_index = self.get_current_time_index(48)
             existing_schedule = await self.get_schedule(plant_id)
             if existing_schedule is None:
-                init_kwh = 0
+                init_kwh = capacity*0.1
             else:
                 init_kwh = -existing_schedule[0]
             schedule = self.optimize(
@@ -1211,15 +1211,15 @@ class HybridAlgo():
                     is_grid_charge_on = battery_action.is_grid_charge_on
                     # if the scheduled action is grid charge, use the scheduled action
                     # otherwise, absorb the excess solar with the adjusted power
-                    # if is_grid_charge_on:
-                    #     command = {'command': 'Charge', 'power': abs(
-                    #         scheduled_action), 'grid_charge': is_grid_charge_on}
-                    # else:
-                    #     excess_solar = max(0, plant_pvKW - plant_loadKW)
-                    #     adjusted_power_w = excess_solar * device_percentage * 1000
-                    #     command = {'command': 'Charge', 'power': adjusted_power_w, 'grid_charge': True} # enable grid_charge in case some devices have extra solar but some don't, force all to follow plan to achieve plant level charge alignment
-                    command = {'command': 'Charge', 'power': abs(
-                        scheduled_action), 'grid_charge': True}
+                    if is_grid_charge_on:
+                        command = {'command': 'Charge', 'power': abs(
+                            scheduled_action), 'grid_charge': True}
+                    else:
+                        excess_solar = min(max(0, plant_pvKW - plant_loadKW), scheduled_action)
+                        adjusted_power_w = excess_solar * device_percentage * 1000
+                        command = {'command': 'Charge', 'power': adjusted_power_w, 'grid_charge': True} # enable grid_charge in case some devices have extra solar but some don't, force all to follow plan to achieve plant level charge alignment
+                    # command = {'command': 'Charge', 'power': abs(
+                    #     scheduled_action), 'grid_charge': True}
                 elif scheduled_action < 0:
                     is_anti_backflow_on = battery_action.is_anti_backflow_on
                     command = {'command': 'Discharge', 'power': abs(
