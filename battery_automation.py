@@ -188,8 +188,9 @@ class BatterySchedulerManager:
                 self.logger.info("Updating Amber Prices...")
                 self._update_prices('amber')
                 # Amber updates prices every 2 minutes
+                current_time = datetime.now(pytz.timezone('Australia/Brisbane'))
                 delay = self._seconds_to_next_n_minutes(
-                    current_time=datetime.now(pytz.timezone('Australia/Brisbane')), n=2)
+                    current_time=current_time, n=2)
                 await asyncio.sleep(delay)
             except Exception as e:
                 self.logger.error(
@@ -204,7 +205,7 @@ class BatterySchedulerManager:
                 if quality:
                     # Local Volts updates prices every 5 minutes
                     current_time = datetime.now(
-                        pytz.timezone("Australia/Brisbane"))
+                        pytz.timezone('Australia/Brisbane'))
                     delay = self._seconds_to_next_n_minutes(current_time, n=5)
                     # add 30 seconds to make sure the price is updated on Local Volts
                     delay = delay + 30
@@ -281,6 +282,7 @@ class BatterySchedulerManager:
         try:
             self.logger.info("Processing sn: %s", sn)
             plant_id = self.user_manager.get_plant_for_device(sn)
+            time_zone = self.user_manager.get_time_zone(plant_id)
             plant_stats = await self.get_current_plant_stats(sn, is_sn=True)
             bat_stats = await self.get_current_battery_stats(sn)
             current_batP = bat_stats.get('batP', 0) if bat_stats else 0
@@ -335,7 +337,7 @@ class BatterySchedulerManager:
 
             if command != last_command or minute_passed >= 5:
                 if not self.test_mode:
-                    await self.send_battery_command(command=command, sn=sn)
+                    await self.send_battery_command(command=command, sn=sn, time_zone=time_zone)
                 self.last_command_time[sn] = c_datetime
                 self.last_schedule_peakvalley[sn] = command
                 self.logger.info(
@@ -791,9 +793,9 @@ class BatterySchedulerManager:
     async def get_current_battery_stats(self, sn):
         return await self.monitor.get_realtime_battery_stats(sn)
 
-    async def send_battery_command(self, command=None, json=None, sn=None):
+    async def send_battery_command(self, command=None, json=None, sn=None, time_zone='Australia/Brisbane'):
         await self.monitor.send_battery_command(
-            peak_valley_command=command, json=json, sn=sn)
+            peak_valley_command=command, json=json, sn=sn, time_zone=time_zone)
 
 
 class ShawsbaySchedulerManager:
@@ -919,6 +921,7 @@ class ShawsbaySchedulerManager:
         schedule = self.scheduler.adjust_charge_power(
             schedule, load, current_time)
         self.logger.info("Schedule: %s", schedule)
+        time_zone = 'Australia/Sydney'
 
         for sn in self.sn_list:
             battery_schedule = schedule.get(sn, {})
@@ -928,7 +931,7 @@ class ShawsbaySchedulerManager:
                 continue
             try:
                 thread = Thread(target=self.send_battery_command,
-                                kwargs={'json': battery_schedule, 'sn': sn})
+                                kwargs={'json': battery_schedule, 'sn': sn, 'time_zone': time_zone})
                 thread.start()
             except Exception as e:
                 self.logger.error("Error sending battery command: %s", e)
@@ -991,9 +994,9 @@ class ShawsbaySchedulerManager:
     async def get_current_battery_stats(self, sn):
         return await self.monitor.get_realtime_battery_stats(sn)
 
-    async def send_battery_command(self, command=None, json=None, sn=None):
+    async def send_battery_command(self, command=None, json=None, sn=None, time_zone='Australia/Brisbane'):
         await self.monitor.send_battery_command(
-            peak_valley_command=command, json=json, sn=sn)
+            peak_valley_command=command, json=json, sn=sn, time_zone=time_zone)
 
 
 @dataclass

@@ -10,6 +10,7 @@ ai_control = true
 total_bat_discharge_power = 10 # kW
 total_bat_charge_power = 6 # kW
 capacity = 20 # kWh
+time_zone = "Australia/Brisbane"
 devices = [
     { id = "011LOKL140058B", type = 5000, discharge_power = 5 },
     { id = "RX2505ACA10J0A180003", type = 2505, discharge_power = 2.5},
@@ -28,6 +29,7 @@ ai_control = true
 total_bat_discharge_power = 5 # kW
 total_bat_charge_power = 3 # kW
 capacity = 10 # kWh
+time_zone = "Australia/Sydney"
 devices = [
     { id = "011LOKL140104B", type = 5000, discharge_power = 5 },
 ]

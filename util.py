@@ -225,6 +225,10 @@ class UserManager:
     def get_algo_type(self, plant_id: int) -> str:
         user = self.get_user_for_plant(plant_id)
         return self.get_user_profile(user).get('algo_type', 'sell_to_grid')
+    
+    def get_time_zone(self, plant_id: int) -> str:
+        user = self.get_user_for_plant(plant_id)
+        return self.get_user_profile(user).get('time_zone', 'Australia/Brisbane')
 
     def get_device_type(self, sn: str) -> str:
         return self.device_to_type.get(sn, 2505)
@@ -519,9 +523,10 @@ class PriceAndLoadMonitor:
         '''
         if self.test_mode:
             return next(self.sim_time_iter).strftime("%H:%M")
-        local_time = datetime.now(
-            tz=pytz.timezone(time_zone)).strftime("%H:%M")
-        return local_time
+        utc_now = datetime.now(tz=pytz.utc)
+        local_now = utc_now.astimezone(pytz.timezone(time_zone))
+        local_now_str = local_now.strftime("%H:%M")
+        return local_now_str
 
     def get_params(self, sn):
         try:
@@ -613,7 +618,7 @@ class PriceAndLoadMonitor:
 
     # @api_status_check(max_retries=1, delay=60)
     # Device status check is not enabled for now, consider enabling it in the future
-    async def send_battery_command(self, peak_valley_command=None, json=None, sn=None):
+    async def send_battery_command(self, peak_valley_command=None, json=None, sn=None, time_zone='Australia/Brisbane'):
         if self.test_mode:
             return
 
@@ -652,8 +657,7 @@ class PriceAndLoadMonitor:
         def _get_amber_command(command, peak_valley_command, sn):
             from datetime import datetime, timedelta
             data = {}
-            current_time_str = self.get_current_time(
-                time_zone='Australia/Brisbane')
+            current_time_str = self.get_current_time(time_zone=time_zone)
             current_time = datetime.strptime(current_time_str, '%H:%M')
             empty_time = '00:00'
             default_charge2_start_time = '08:00'
@@ -664,8 +668,7 @@ class PriceAndLoadMonitor:
             if command == 'Charge':
                 grid_charge = peak_valley_command.get('grid_charge', False)
                 grid_charge = grid_charge_map[grid_charge]
-                start_time = self.get_current_time(
-                    time_zone='Australia/Brisbane')
+                start_time = self.get_current_time(time_zone=time_zone)
                 end_time = (datetime.strptime(start_time, '%H:%M') +
                             timedelta(minutes=40)).strftime("%H:%M")
                 data = {
@@ -681,8 +684,7 @@ class PriceAndLoadMonitor:
                 }
 
             elif command == 'Discharge':
-                start_time = self.get_current_time(
-                    time_zone='Australia/Brisbane')
+                start_time = self.get_current_time(time_zone=time_zone)
                 end_time = (datetime.strptime(start_time, '%H:%M') +
                             timedelta(minutes=40)).strftime("%H:%M")
                 data = {
